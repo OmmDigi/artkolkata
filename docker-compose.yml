@@ -1,91 +1,85 @@
 version: "3.8"
 
-networks:
-  client_4_custom_network:
-    driver: bridge
-
 services:
-  c4_frontend_1:
-    build:
-      context : 
-        ./frontend
-      args :
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-    container_name: c4_frontend_1
-    ports:
-      - "${FRONTEND_HOST_PORT}:3000"
+  art_kolkata_frontend:
+    build: ./frontend
+    image: art_kolkata_frontend
+    container_name: art_kolkata_frontend
+    expose:
+      - "3000"
     env_file:
-      - ./envs/.frontend.env
+      - ./frontend/.env
     depends_on:
-      - c4_api_1
-      - c4_upload_api_1
+      - art_kolkata_api_1
+      - art_kolkata_upload_api_1
     networks:
-      - client_4_custom_network
+      - art_kolkata_newtork
+      - shared_network
 
-  c4_crm_1:
-    build: 
-      context : 
-        ../admin-panel/crm
-      args : 
-        VITE_API_BASE_URL : ${VITE_API_BASE_URL}
-        VITE_API_UPLOAD_BASE_URL : ${VITE_API_UPLOAD_BASE_URL}
-    container_name: c4_crm_1
-    ports:
-      - "${CRM_HOST_PORT}:80"
+  art_kolkata_crm:
+    build: ./cms
+    container_name: art_kolkata_crm
+    image: art_kolkata_crm
+    expose:
+      - "80"
     env_file:
-      - ./envs/.crm.env
+      - ./cms/.env
     depends_on:
-      - c4_api_1
-      - c4_upload_api_1
+      - art_kolkata_api_1
+      - art_kolkata_upload_api_1
     networks:
-      - client_4_custom_network
+      - art_kolkata_newtork
+      - shared_network
 
-  c4_api_1:
-    build: ../admin-panel/api
-    container_name: c4_api_1
-    ports:
-      - "${API_HOST_PORT}:3000"
+  art_kolkata_api_1:
+    build: ./api
+    container_name: art_kolkata_api_1
+    image: art_kolkata_api_1
+    expose:
+      - "3000"
     env_file:
-      - ./envs/.api.env
-    environment:
-        POSTGRES_URL: ${POSTGRES_CONNECTION_URL}
+      - ./api/.env
     depends_on:
-      - c4_postgres_1
+      - art_kolkata_postgres_1
     volumes:
       - ./logs/api-logs:/app/logs
     networks:
-      - client_4_custom_network
+      - art_kolkata_newtork
+      - shared_network
 
-  c4_upload_api_1:
-    build: ../admin-panel/upload
-    container_name: c4_upload_api_1
-    ports:
-      -  "${UPLOAD_HOST_PORT}:3000"
+  art_kolkata_upload_api_1:
+    build: ./upload
+    container_name: art_kolkata_upload_api_1
+    image: art_kolkata_upload_api_1
+    expose:
+      - "3000"
     env_file:
-      - ./envs/.upload.env
+      - ./upload/.env
     volumes:
       - ./uploaded-files/uploads:/app/uploads
       - ./uploaded-files/private:/app/private
     depends_on:
-      - c4_postgres_1
+      - art_kolkata_postgres_1
     networks:
-      - client_4_custom_network
+      - art_kolkata_newtork
+      - shared_network
 
-  c4_postgres_1:
+  art_kolkata_postgres_1:
     image: postgres:17.4-alpine
-    container_name: c4_postgres_1
+    container_name: art_kolkata_postgres_1
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - client_4_pg_data:/var/lib/postgresql/data
+      - art_kolkata_pg_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_HOST_PORT}:5432"
+      - "5433:5432"
     networks:
-      - client_4_custom_network
+      - art_kolkata_newtork
+      - shared_network
 
- # COMMENT OUT BECAUSE i am uploading this in a vps where nginx is the default server
+  # COMMENT OUT BECAUSE i am uploading this in a vps where nginx is the default server
   # nginx_1:
   #   image: nginx:latest
   #   container_name: nginx_1
@@ -97,13 +91,13 @@ services:
   #     - ./certbot/conf:/etc/letsencrypt
   #     - ./certbot/www:/var/www/certbot
   #   depends_on:
-  #     - c4_frontend_1
-  #     - c4_api_1
-  #     - c4_upload_api_1
-  #     - c4_postgres_1
+  #     - c1_frontend_1
+  #     - c1_api_1
+  #     - c1_upload_api_1
+  #     - art_kolkata_postgres_1
   #   restart: always
   #   networks:
-  #     - client_4_custom_network
+  #     - art_kolkata_newtork
 
   # certbot:
   #   image: certbot/certbot
@@ -120,4 +114,10 @@ services:
   #     - nginx_1
 
 volumes:
-  client_4_pg_data:
+  art_kolkata_pg_data:
+
+networks:
+  art_kolkata_newtork:
+    driver: bridge
+  shared_network:
+    external: true
