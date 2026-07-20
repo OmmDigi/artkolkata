@@ -1,0 +1,11 @@
+.git
+.env*
+.api.env
+.crm.env
+.frontend.env
+.upload.env
+/uploaded-files
+/uploaded-files/*
+/backups
+/backups/*
+logs
