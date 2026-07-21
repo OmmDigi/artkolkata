@@ -32,6 +32,7 @@ export interface IRecipient {
 
 export interface ISubCategory {
   category_id: number | null;
+  category : string | null;
   id: number;
   name: string;
   slug: string;

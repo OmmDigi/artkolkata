@@ -1,9 +1,9 @@
-import type { ICategory, IError, IResponse } from "@/types";
+import type { IError, IResponse, ISubCategory } from "@/types";
 import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 
-const getCategoryList = async (page: number) => {
+const getSubCategoryList = async (page: number) => {
   return (await api.get(`/api/v1/products/sub-category?page=${page}`)).data;
 };
 
@@ -13,11 +13,11 @@ interface IProps {
 
 export const useSubCategory = (props?: IProps) => {
   const { data, isFetching, error, refetch } = useQuery<
-    IResponse<ICategory[]>,
+    IResponse<ISubCategory[]>,
     AxiosError<IError>
   >({
     queryKey: ["get-sub-category-list", props?.page ?? 1],
-    queryFn: () => getCategoryList(props?.page ?? 1),
+    queryFn: () => getSubCategoryList(props?.page ?? 1),
   });
 
   return {

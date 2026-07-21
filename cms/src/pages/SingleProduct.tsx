@@ -8,7 +8,10 @@ import ShopifyVariants from "@/components/ShopifyVariants";
 import { Button } from "@/components/ui/button";
 import { ButtonLoading } from "@/components/ui/button-loading";
 import { Label } from "@/components/ui/label";
-import { DEFAULT_PRODUCT_VARIANT_OPTIONS, PREDEFINED_PRODUCT_TAGS } from "@/constant";
+import {
+  DEFAULT_PRODUCT_VARIANT_OPTIONS,
+  PREDEFINED_PRODUCT_TAGS,
+} from "@/constant";
 import { useCategory } from "@/hooks/useCategory";
 import { useProduct } from "@/hooks/useProduct";
 import { cn } from "@/lib/utils";
@@ -18,17 +21,18 @@ import { createSlug } from "@/utils/createSlug";
 import type { OutputData } from "@editorjs/editorjs";
 import { MoveLeft, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 export default function SingleProduct() {
   const params = useParams();
   const isNewProduct = params?.id == "new";
+  const navigate = useNavigate();
 
   const [productImages, setProductImages] = useState<ImageTypes[]>([
     { image: "", alt_tag: null },
   ]);
 
-  const [hasVarient, setHasVarient] = useState(false);
+  const [hasVarient, setHasVarient] = useState(true);
 
   const [productPrice, setProductPrice] = useState({
     originalPrice: "0.00",
@@ -50,6 +54,8 @@ export default function SingleProduct() {
     productData,
     isProductFetching,
     productError,
+    refetchProduct,
+    dataUpdatedAt,
   } = useProduct({
     enabledFetching: !isNewProduct,
     filter: {
@@ -68,52 +74,37 @@ export default function SingleProduct() {
   const anyImageUploading = useRef<boolean>(false);
 
   useEffect(() => {
-    if (productData[0]?.images) {
-      setProductImages(
-        productData[0].images.map((item) => ({
-          image: item.image,
-          alt_tag: item.alt_tag,
-        })),
-      );
-    }
-
-    if (productData[0]?.options) {
-      varientOptionsValues.current.options = productData[0]?.options;
-    }
-
-    if (productData[0]?.variants) {
-      varientOptionsValues.current.variants = productData[0]?.variants;
-    }
-
-    if (productData[0]?.available_quantity <= 0) {
-      setHasVarient(true);
-    }
-
-    if (productData[0]?.slug) {
-      setProductSlug(productData[0]?.slug);
-    }
-
-    if (productData[0]?.category_id) {
-      setSubCategoryList(
-        categoryData.find((item) => item.id == productData[0].category_id)
-          ?.sub_categories ?? [],
-      );
-    }
-
-    if (productData[0]?.description_json) {
-      editorData.current = productData[0]?.description_json ?? undefined;
-    }
-
-    if (productData[0]?.tags) {
-      setProductTags(Object.keys(productData[0].tags));
-    }
-  }, [isProductFetching]);
-
-  useEffect(() => {
     if (categoryData?.[0]?.sub_categories) {
       setSubCategoryList(categoryData[0].sub_categories);
     }
-  }, [isCategoryFetching]);
+  }, [isCategoryFetching, dataUpdatedAt]);
+
+  useEffect(() => {
+    const product = productData[0];
+
+    if (!product) return;
+
+    console.log("product?.options", product?.options)
+
+    varientOptionsValues.current.options =
+      product?.options ?? DEFAULT_PRODUCT_VARIANT_OPTIONS;
+    varientOptionsValues.current.variants = product?.variants ?? [];
+    editorData.current = product?.description_json ?? undefined;
+
+    console.log("varientOptionsValues.current", varientOptionsValues.current)
+
+    setProductImages(
+      product?.images?.length
+        ? product.images.map((item) => ({
+            image: item.image,
+            alt_tag: item.alt_tag,
+          }))
+        : [{ image: "", alt_tag: null }],
+    );
+    setHasVarient(product.available_quantity <= 0);
+    setProductSlug(product.slug ?? null);
+    setProductTags(Object.keys(product.tags ?? {}));
+  }, [dataUpdatedAt]);
 
   const handleFormSubmit = (formData: FormData) => {
     let payload: Record<string, any> = {};
@@ -165,7 +156,7 @@ export default function SingleProduct() {
         data: payload,
         type: "add",
         onSuccess() {
-          // window.history.pushState({}, "", "/products");
+          navigate("/products");
         },
       });
       return;
@@ -178,7 +169,7 @@ export default function SingleProduct() {
       },
       type: "update",
       onSuccess() {
-        // window.history.pushState({}, "", "/products");
+        refetchProduct();
       },
     });
   };
@@ -224,6 +215,7 @@ export default function SingleProduct() {
           <span>Add product</span>
         </Link>
         <form
+          key={dataUpdatedAt}
           onSubmit={(e) => {
             e.preventDefault();
             handleFormSubmit(new FormData(e.currentTarget));
@@ -457,27 +449,28 @@ export default function SingleProduct() {
                   }}
                 />
 
-                <SelectInput
+                {/* <SelectInput
                   label="Has Variants"
                   options={[
                     {
                       text: "Yes",
                       value: `true`,
                     },
-                    {
-                      text: "No",
-                      value: `false`,
-                    },
+                    // {
+                    //   text: "No",
+                    //   value: `false`,
+                    // },
                   ]}
                   defaultValue={
-                    productData[0]?.available_quantity == 0
-                      ? "true"
-                      : `${hasVarient}`
+                    // productData[0]?.available_quantity == 0
+                    //   ? "true"
+                    //   : `${hasVarient}`
+                    `${hasVarient}`
                   }
                   onValueChange={(value) => {
                     setHasVarient(value == "true");
                   }}
-                />
+                /> */}
 
                 {hasVarient ? null : (
                   <LabelInput
@@ -547,14 +540,14 @@ export default function SingleProduct() {
                             setProductTags((prev) =>
                               isSelected
                                 ? prev.filter((t) => t !== tag)
-                                : [...prev, tag]
+                                : [...prev, tag],
                             )
                           }
                           className={cn(
                             "px-3 py-1 rounded-full text-sm border transition-colors cursor-pointer",
                             isSelected
                               ? "bg-green-600 text-white border-green-600"
-                              : "bg-white text-gray-700 border-gray-300 hover:border-green-600"
+                              : "bg-white text-gray-700 border-gray-300 hover:border-green-600",
                           )}
                         >
                           {tag}

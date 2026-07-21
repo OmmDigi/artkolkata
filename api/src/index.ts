@@ -53,7 +53,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
 if (process.env.NODE_ENV === "development") {
   app.use(
     cors({
-      origin: (_, callback) => {
+      origin: (origin, callback) => {
         callback(null, true); // allow every origin
       },
       credentials: true,

@@ -19,7 +19,7 @@ export default defineConfig({
         secure: false,
       },
       "/uploads": {
-        target: "http://localhost:8081",
+        target: "http://192.168.0.184:8082",
         changeOrigin: true,
         secure: false,
       },

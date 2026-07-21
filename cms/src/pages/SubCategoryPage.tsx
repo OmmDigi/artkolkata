@@ -87,7 +87,7 @@ export default function SubCategoryPage() {
                     </div> */}
                     {item.name}
                   </TableCell>
-                  <TableCell className="text-center">{item.slug}</TableCell>
+                  <TableCell className="text-center">{item.category}</TableCell>
                   <TableCell className="text-center">{item.position ?? 0}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-5">

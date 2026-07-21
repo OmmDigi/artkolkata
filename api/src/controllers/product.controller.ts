@@ -398,6 +398,10 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
 
     const { options, variants } = value;
 
+    console.log(options)
+    console.log(variants)
+    console.log(options[0].values)
+
     if (options && variants) {
       for (let i = 0; i < options.length; i++) {
         const option = options[i];
@@ -911,8 +915,12 @@ export const getSubCategoryList = asyncErrorHandler(async (req, res) => {
   const { rows } = await pool.query(
     `
     SELECT 
-      sc.*
+      sc.*,
+      c.name AS category
     FROM sub_categories sc
+
+    LEFT JOIN categories c
+    ON c.id = sc.category_id
 
     ORDER BY sc.position ASC, sc.id DESC ${TO_STRING}
     `,

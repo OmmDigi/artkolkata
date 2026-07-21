@@ -45,11 +45,11 @@ interface IPropsProductMutParams {
 }
 
 export const useProduct = (props?: IProps) => {
-  const { data, isFetching, error, refetch } = useQuery<
+  const { data, isFetching, error, refetch, dataUpdatedAt } = useQuery<
     IResponse<IProducts[]>,
     AxiosError<IError>
   >({
-    queryKey: ["get-product-list", props?.depandencyArray ?? []],
+    queryKey: ["get-product-list", ...props?.depandencyArray ?? ""],
     queryFn: () =>
       getProductList(
         props?.page ?? 1,
@@ -119,5 +119,6 @@ export const useProduct = (props?: IProps) => {
     refetchProduct: refetch,
     isMuting: isLoading,
     mutateProduct,
+    dataUpdatedAt
   };
 };
