@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Razorpay Payment</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+        background-color: #d9667a;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .payment-container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 40px;
+        max-width: 450px;
+        width: 100%;
+        text-align: center;
+      }
+
+      .payment-icon {
+        width: 80px;
+        height: 80px;
+        /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+        background-color: #d9667a;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 25px;
+        font-size: 40px;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 28px;
+      }
+
+      .order-details {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 25px;
+        margin: 25px 0;
+      }
+
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 12px 0;
+        padding: 8px 0;
+      }
+
+      .detail-label {
+        color: #666;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .detail-value {
+        color: #333;
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .amount {
+        font-size: 32px;
+        /* color: #667eea; */
+        color: #d9667a;
+        font-weight: bold;
+      }
+
+      .divider {
+        height: 1px;
+        background: #e0e0e0;
+        margin: 15px 0;
+      }
+
+      .pay-button {
+        /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
+        background-color: #d9667a;
+        color: white;
+        border: none;
+        padding: 16px 40px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 50px;
+        cursor: pointer;
+        width: 100%;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+        margin-top: 20px;
+      }
+
+      .pay-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        background-color: #b94b5e;
+      }
+
+      .pay-button:active {
+        transform: translateY(0);
+      }
+
+      .secure-badge {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #666;
+        font-size: 12px;
+        margin-top: 20px;
+        gap: 6px;
+      }
+
+      .secure-icon {
+        color: #4caf50;
+      }
+
+      @media (max-width: 500px) {
+        .payment-container {
+          padding: 30px 20px;
+        }
+
+        h1 {
+          font-size: 24px;
+        }
+
+        .amount {
+          font-size: 28px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="payment-container">
+      <div class="payment-icon">💳</div>
+      <h1>Complete Payment</h1>
+      <p style="color: #666; margin-bottom: 10px">
+        Secure payment via Razorpay
+      </p>
+
+      <div class="order-details">
+        <div class="detail-row">
+          <span class="detail-label">Order ID</span>
+          <span class="detail-value"> <%= orderId %> </span>
+        </div>
+        <div class="divider"></div>
+        <div class="detail-row">
+          <span class="detail-label">Amount to Pay</span>
+          <span class="amount">₹<%= (amount / 100).toFixed(2) %></span>
+        </div>
+      </div>
+
+      <button id="pay-btn" class="pay-button" onclick="initiatePayment()">
+        Pay Now
+      </button>
+
+      <div class="secure-badge">
+        <span class="secure-icon">🔒</span>
+        <span>Secured by Razorpay</span>
+      </div>
+    </div>
+
+    <script>
+      const payBtn = document.getElementById("pay-btn");
+      function initiatePayment() {
+        const options = {
+          key: "<%= razorpayKey %>", // Razorpay Key ID
+          amount: "<%= amount %>", // Amount in paise
+          currency: "INR",
+          name: "Your Company Name",
+          description: "Payment for Order #<%= orderId %>",
+          order_id: "<%= orderId %>", // Razorpay Order ID
+          handler: function (response) {
+            // Payment successful
+            alert("Payment Successful!");
+            console.log("Payment ID:", response.razorpay_payment_id);
+            console.log("Order ID:", response.razorpay_order_id);
+            console.log("Signature:", response.razorpay_signature);
+
+            // Send payment details to your server for verification
+            verifyPayment(response);
+          },
+          prefill: {
+            name: "",
+            email: "",
+            contact: "",
+          },
+          theme: {
+            color: "#667eea",
+          },
+          modal: {
+            ondismiss: function () {
+              alert("Payment cancelled");
+            },
+          },
+        };
+
+        const rzp = new Razorpay(options);
+
+        rzp.on("payment.failed", function (response) {
+          alert("Payment Failed: " + response.error.description);
+          console.error("Error:", response.error);
+          payBtn.textContent = "Retry";
+        });
+
+        rzp.open();
+      }
+
+      function verifyPayment(paymentData) {
+        // Send payment data to your backend for verification
+        fetch("<%= verifyPaymentApi %>", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            razorpay_payment_id: paymentData.razorpay_payment_id,
+            razorpay_order_id: paymentData.razorpay_order_id,
+            razorpay_signature: paymentData.razorpay_signature,
+            paymentToken: "<%= paymentToken %>",
+          }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              window.location.href = data.data.paymentResultPage;
+            } else {
+              alert("Payment verification failed");
+              payBtn.textContent = "Retry";
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            alert("Error verifying payment");
+            payBtn.textContent = "Retry";
+          });
+      }
+
+      window.addEventListener("DOMContentLoaded", (ev) => {
+        payBtn.click();
+      });
+    </script>
+  </body>
+</html>

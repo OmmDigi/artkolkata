@@ -1,0 +1,48 @@
+{
+  "name": "groceberry-cms",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "NODE_ENV=production node dist/index.js",
+    "dev": "NODE_ENV=development npx nodemon --legacy-watch src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@editorjs/editorjs": "^2.31.4",
+    "@phonepe-pg/pg-sdk-node": "^2.0.5",
+    "axios": "^1.13.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^16.5.0",
+    "editorjs-html": "^4.0.5",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^8.0.1",
+    "nodemon": "^3.1.10",
+    "pg": "^8.14.1",
+    "razorpay": "^2.9.6",
+    "ts-node": "^10.9.2",
+    "uuid": "^11.1.0",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/cors": "^2.8.17",
+    "@types/crypto-js": "^4.2.2",
+    "@types/ejs": "^3.1.5",
+    "@types/express": "^5.0.1",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.14.1",
+    "@types/nodemailer": "^6.4.17",
+    "@types/pg": "^8.11.12",
+    "typescript": "^5.9.3"
+  }
+}

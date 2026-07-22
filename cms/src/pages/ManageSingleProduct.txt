@@ -1,0 +1,289 @@
+import AddPackageGalleryDialog from "@/components/dialogs/AddPackageGalleryDialog";
+import LabelInput from "@/components/LabelInput";
+import SelectInput from "@/components/SelectInput";
+import { Button } from "@/components/ui/button";
+import { ButtonLoading } from "@/components/ui/button-loading";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useCategory } from "@/hooks/useCategory";
+import { useProduct } from "@/hooks/useProduct";
+import type { ChoosedMediaItem } from "@/types";
+
+import { CirclePlus, Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+
+export default function ManageSingleProduct() {
+  const params = useParams();
+
+  const imagePickingType = useRef<"thumbnail" | "multiple">("thumbnail");
+
+  const [thumbnailImageLink, setThumbnailImageLink] =
+    useState<ChoosedMediaItem | null>(null);
+
+  const [galleryImageList, setGalleryImageList] = useState<ChoosedMediaItem[]>(
+    []
+  );
+
+  const [isPackageGalleryOpen, setIsPackageGalleryOpen] = useState(false);
+
+  const navigate = useNavigate();
+
+  const { isCategoryFetching, categoryData } = useCategory({ page: -1 });
+
+  const { isProductFetching, productData, mutateProduct, isMuting } =
+    useProduct({
+      enabledFetching: params?.id !== undefined && params?.id != "new",
+      filter: {
+        productId:
+          params?.id !== undefined && params?.id != "new"
+            ? parseInt(params.id)
+            : undefined,
+      },
+      depandencyArray: [params?.id],
+    });
+
+  const singleProduct = productData?.[0];
+
+  useEffect(() => {
+    if (singleProduct?.product_gallery) {
+      const thumbnail = singleProduct.product_gallery.find(
+        (item) => item.type === "thumbnail"
+      );
+      if (thumbnail) {
+        setThumbnailImageLink(thumbnail);
+      }
+
+      setGalleryImageList(
+        singleProduct.product_gallery.filter(
+          (item) => item.type !== "thumbnail"
+        )
+      );
+    }
+  }, [isProductFetching]);
+
+  const handleSubmitForm = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (thumbnailImageLink == null) {
+      return alert("Please choose product image");
+    }
+
+    const formData = new FormData(event.currentTarget);
+    const payload: any = {
+      product_gallery: [
+        { media_id: thumbnailImageLink.media_id, type: "thumbnail" },
+        ...galleryImageList.map((item) => ({
+          media_id: item.media_id,
+          type: "gallery-item",
+        })),
+      ],
+    };
+
+    for (const [key, value] of formData) {
+      payload[key] = value;
+    }
+
+    if (params?.id == "new") {
+      mutateProduct({
+        type: "add",
+        data: payload,
+        onSuccess() {
+          navigate(-1);
+        },
+      });
+
+      return;
+    }
+
+    payload["id"] = params?.id;
+
+    mutateProduct({
+      type: "update",
+      data: payload,
+      onSuccess() {
+        navigate(-1);
+      },
+    });
+  };
+
+  return (
+    <div>
+      {isProductFetching ? (
+        <p className="text-center pt-9">Loading single product..</p>
+      ) : (
+        <>
+          <AddPackageGalleryDialog
+            isOpen={isPackageGalleryOpen}
+            setOpen={setIsPackageGalleryOpen}
+            keyName="package_id"
+            onItemsSelected={(selecteditems) => {
+              if (imagePickingType.current === "thumbnail") {
+                setThumbnailImageLink(selecteditems[0]);
+              } else {
+                setGalleryImageList((prev) => [
+                  ...prev,
+                  ...selecteditems.filter(
+                    (item) => !prev.find((i) => i.media_id !== item.media_id)
+                  ),
+                ]);
+              }
+              setIsPackageGalleryOpen(false);
+            }}
+          />
+          <form onSubmit={handleSubmitForm} className="space-y-3.5">
+            <div className="w-full flex items-center justify-center">
+              <button
+                onClick={() => {
+                  imagePickingType.current = "thumbnail";
+                  setIsPackageGalleryOpen(true);
+                }}
+                type="button"
+                className="bg-gray-200 active:scale-95 transition-all duration-300 border-1 border-green-600 aspect-video h-44 flex items-center gap-y-3.5 cursor-pointer justify-center flex-col rounded-2xl overflow-hidden"
+              >
+                {thumbnailImageLink === null ? (
+                  <>
+                    <Plus />
+                    <p className="font-semibold text-sm text-gray-500">
+                      Choose Product Main Image
+                    </p>
+                  </>
+                ) : (
+                  <div className="relative">
+                    <X
+                      onClick={() => {
+                        imagePickingType.current = "thumbnail";
+                        setIsPackageGalleryOpen(true);
+                        setThumbnailImageLink(null);
+                      }}
+                      size={18}
+                      className="absolute top-5 right-5 bg-red-500 text-white rounded-2xl p-0.5 z-10"
+                    />
+                    <img
+                      src={thumbnailImageLink.item_link}
+                      alt="Product main image"
+                      className="size-full z-0"
+                    />
+                  </div>
+                )}
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-2xl">Product Gallery</h2>
+                <Button
+                  onClick={() => {
+                    imagePickingType.current = "multiple";
+                    setIsPackageGalleryOpen(true);
+                  }}
+                  type="button"
+                  className="flex items-center gap-2.5"
+                >
+                  <CirclePlus />
+                  Add More Image
+                </Button>
+              </div>
+
+              <p className="text-sm text-center text-gray-500">
+                No Image Selected
+              </p>
+
+              <ul className="grid grid-cols-4 gap-5">
+                {galleryImageList.map((item) => (
+                  <li className="overflow-hidden rounded-2xl relative">
+                    <X
+                      onClick={() => {
+                        imagePickingType.current = "multiple";
+                        setGalleryImageList((prev) =>
+                          prev.filter(
+                            (galleryitem) =>
+                              galleryitem.media_id != item.media_id
+                          )
+                        );
+                      }}
+                      size={18}
+                      className="absolute cursor-pointer top-5 right-5 bg-red-500 text-white rounded-2xl p-0.5 z-10"
+                    />
+                    <img
+                      src={item.item_link}
+                      alt={item.alt_tag}
+                      className="aspect-video h-36 w-full object-cover"
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="space-y-3.5">
+              <h2 className="font-semibold text-2xl">Basic Details</h2>
+              <div className="grid grid-cols-2 gap-3.5 mt-6">
+                <LabelInput
+                  required
+                  name="title"
+                  label="Product Name"
+                  placeholder="Type product name here"
+                  defaultValue={singleProduct?.title}
+                />
+                <LabelInput
+                  required
+                  name="short_desc"
+                  label="Product Short Description"
+                  placeholder="Type product short description here"
+                  defaultValue={singleProduct?.short_desc}
+                />
+
+                {isCategoryFetching ? (
+                  <Label>Fetching Categories..</Label>
+                ) : (
+                  <SelectInput
+                    required
+                    name="category_id"
+                    label="Choose Category"
+                    placeholder="Choose product category"
+                    options={categoryData.map((item) => ({
+                      text: item.name,
+                      value: item.id.toString(),
+                    }))}
+                    defaultValue={
+                      singleProduct?.category_id.toString() ??
+                      categoryData[0]?.id.toString()
+                    }
+                  />
+                )}
+
+                <SelectInput
+                  required
+                  name="status"
+                  label="Visibility"
+                  placeholder="Choose product visibility"
+                  options={[
+                    { text: "Public", value: "Public" },
+                    { text: "Private", value: "Private" },
+                  ]}
+                  defaultValue={singleProduct?.status ?? "Public"}
+                />
+              </div>
+
+              <div className="grid gap-3">
+                <Label className="font-semibold">Description</Label>
+                <Textarea
+                  name="description"
+                  placeholder="Enter product description here"
+                  className="border border-green-600"
+                  defaultValue={singleProduct?.description}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center">
+              <ButtonLoading loading={isMuting} className="bg-green-600">
+                Save Info
+              </ButtonLoading>
+            </div>
+          </form>
+        </>
+      )}
+    </div>
+  );
+}

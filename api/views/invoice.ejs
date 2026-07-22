@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Order Confirmation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        /* background-color: #f5f5f5; */
+        background-color: white;
+        padding: 20px;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 30px;
+        border-radius: 8px;
+        /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */
+      }
+
+      .header {
+        text-align: left;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .header h1 {
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+
+      .header p {
+        color: #666;
+        font-size: 14px;
+        margin-bottom: 20px;
+      }
+
+      .order-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .info-item {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .info-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #999;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+      }
+
+      .info-value {
+        font-size: 15px;
+        color: #333;
+        font-weight: 500;
+      }
+
+      .payment-note {
+        background-color: #f9f9f9;
+        padding: 12px;
+        border-radius: 4px;
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 30px;
+      }
+
+      .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 20px;
+      }
+
+      .order-details {
+        margin-bottom: 30px;
+      }
+
+      .details-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .details-table thead {
+        border-bottom: 2px solid #e0e0e0;
+      }
+
+      .details-table th {
+        text-align: left;
+        padding: 12px 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #666;
+      }
+
+      .details-table th:last-child {
+        text-align: right;
+      }
+
+      .details-table td {
+        padding: 15px 0;
+        font-size: 14px;
+        color: #333;
+        border-bottom: 1px solid #f0f0f0;
+      }
+
+      .details-table td:last-child {
+        text-align: right;
+      }
+
+      .product-name {
+        color: #d4af37;
+      }
+
+      .summary-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        font-size: 14px;
+      }
+
+      .summary-row.total {
+        font-weight: 600;
+        font-size: 16px;
+        padding-top: 15px;
+        border-top: 2px solid #e0e0e0;
+        margin-top: 10px;
+      }
+
+      .summary-label {
+        color: #666;
+      }
+
+      .summary-value {
+        color: #333;
+      }
+
+      .addresses {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 30px;
+        margin-top: 30px;
+      }
+
+      .address-box {
+        background-color: #fafafa;
+        padding: 20px;
+        border-radius: 6px;
+        border: 1px solid #e0e0e0;
+      }
+
+      .address-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 15px;
+      }
+
+      .address-content {
+        font-size: 14px;
+        color: #666;
+        line-height: 1.8;
+      }
+
+      .address-content div {
+        margin-bottom: 5px;
+      }
+
+      .contact-info {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 10px;
+      }
+
+      @media (min-width: 768px) {
+        /* .addresses {
+          grid-template-columns: 1fr 1fr;
+        } */
+
+        .container {
+          padding: 40px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body {
+          padding: 10px;
+        }
+
+        .container {
+          padding: 20px;
+        }
+
+        .order-info {
+          grid-template-columns: 1fr;
+          gap: 15px;
+        }
+
+        .section-title {
+          font-size: 18px;
+        }
+
+        .details-table th,
+        .details-table td {
+          font-size: 13px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="invoice" class="container">
+      <div class="header">
+        <h1>Chic Store</h1>
+        <p>
+          Thank you for shopping with us. Your account has been charged and your
+          transaction is successful. We will be processing your order soon.
+        </p>
+
+        <div class="order-info">
+          <div class="info-item">
+            <span class="info-label">Order Number</span>
+            <span class="info-value"><%= orderNumber %></span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Date</span>
+            <span class="info-value"><%= orderDate %></span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Total</span>
+            <span class="info-value">₹<%= total %></span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Payment Method</span>
+            <span class="info-value"><%= paymentMethodTxt %></span>
+          </div>
+        </div>
+      </div>
+
+      <% if(paymentMethod === "COD") {%>
+        <div class="payment-note">Pay with cash upon delivery.</div>
+      <% } %>
+
+      <div class="order-details">
+        <h2 class="section-title">Order details</h2>
+
+        <table class="details-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% items.forEach(function(item) { %>
+            <tr>
+              <td>
+                <span class="product-name"><%= item.name %></span> ×<%=
+                item.quantity %>
+              </td>
+              <td>₹<%= item.total %></td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+
+        <div style="margin-top: 20px">
+          <div class="summary-row">
+            <span class="summary-label">Subtotal:</span>
+            <span class="summary-value">₹<%= subtotal %></span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">Gst:</span>
+            <span class="summary-value">5%</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">Shipping:</span>
+            <span class="summary-value"
+              ><%= shipping === 0 ? 'Free shipping' : '₹' + shipping
+              %></span
+            >
+          </div>
+          <div class="summary-row total">
+            <span class="summary-label">Total:</span>
+            <span class="summary-value">₹<%= total %></span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">Payment method:</span>
+            <span class="summary-value"><%= paymentMethodTxt.toUpperCase() %></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="addresses">
+        <!-- <div class="address-box">
+          <h3 class="address-title">Billing address</h3>
+          <div class="address-content">
+            <div><%= billingAddress.name %></div>
+            <div><%= billingAddress.line1 %></div>
+            <div>
+              <%= billingAddress.city %> <%= billingAddress.postalCode %>
+            </div>
+            <div><%= billingAddress.state %></div>
+            <div class="contact-info">📞 <%= billingAddress.phone %></div>
+            <div class="contact-info">✉️ <%= billingAddress.email %></div>
+          </div>
+        </div> -->
+
+        <div class="address-box">
+          <h3 class="address-title">Shipping address</h3>
+          <div class="address-content">
+            <div><%= shippingAddress.name %></div>
+            <div><%= shippingAddress.line1 %></div>
+            <div>
+              <%= shippingAddress.city %> <%= shippingAddress.postalCode %>
+            </div>
+            <div><%= shippingAddress.state %></div>
+            <div class="contact-info">📞 <%= shippingAddress.phone %></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const invoice = document.getElementById("invoice");
+          html2pdf().from(invoice).save("invoice.pdf");
+      });
+    </script>
+  </body>
+</html>
