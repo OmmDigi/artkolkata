@@ -22,11 +22,10 @@ interface Product {
 
 interface ApiCategory {
   id?: string | number;
+  _id?: string;
   name?: string;
   slug?: string;
 }
-
-
 
 interface ApiProduct {
   id?: string | number;
@@ -38,6 +37,9 @@ interface ApiProduct {
   selling_price?: number;
   original_price?: number;
   originalPrice?: number;
+  category?: any;
+  category_slug?: string;
+  category_id?: string | number;
 }
 
 const mapApiProduct = (item: ApiProduct): Product => {
@@ -59,10 +61,6 @@ const mapApiProduct = (item: ApiProduct): Product => {
     originalPrice,
   };
 };
-
-
-
-
 
 function ProductCard({ product }: { product: Product }) {
   const [hoveredImage, setHoveredImage] = useState(false);
@@ -103,17 +101,18 @@ function ProductCard({ product }: { product: Product }) {
         {/* Buttons at bottom corners */}
         <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center opacity-100  transition-opacity duration-300 pointer-events-none">
           <button
-            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${inCart
-              ? "bg-black text-white hover:bg-gray-800"
-              : "bg-white text-black hover:bg-black hover:text-white"
-              }`}
+            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
+              inCart
+                ? "bg-black text-white hover:bg-gray-800"
+                : "bg-white text-black hover:bg-black hover:text-white"
+            }`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               handleAction("cart");
             }}
             aria-label="Add to cart"
-            style={{ width: '38px', height: '38px' }}
+            style={{ width: "38px", height: "38px" }}
           >
             {loadingIcon === "cart" ? (
               <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
@@ -122,17 +121,18 @@ function ProductCard({ product }: { product: Product }) {
             )}
           </button>
           <button
-            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${isInWishlist
-              ? "bg-black text-white hover:bg-gray-800"
-              : "bg-white text-black hover:bg-black hover:text-white"
-              }`}
+            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
+              isInWishlist
+                ? "bg-black text-white hover:bg-gray-800"
+                : "bg-white text-black hover:bg-black hover:text-white"
+            }`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               handleAction("wish");
             }}
             aria-label="Add to wishlist"
-            style={{ width: '38px', height: '38px' }}
+            style={{ width: "38px", height: "38px" }}
           >
             {loadingIcon === "wish" ? (
               <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
@@ -144,9 +144,11 @@ function ProductCard({ product }: { product: Product }) {
       </div>
 
       <Link href={product.href} className="block mt-auto">
-        <h3 className="text-sm font-medium text-black mb-2 group-hover:opacity-80 transition-opacity">
-          {product.name}
-        </h3>
+        <p className="text-sm font-medium text-black mb-2 group-hover:opacity-80 transition-opacity">
+          {product.name?.length > 30
+            ? `${product.name.slice(0, 30)}...`
+            : product.name}
+        </p>
         <div className="flex gap-2 items-center">
           <span className="text-sm font-medium text-black">
             ${Number(product.price ?? 0).toFixed(2)}
@@ -176,26 +178,46 @@ export default function ShopSection() {
   const categories = categoryData?.data || [];
 
   const {
-    data: productsData,
+    data: allProductsData,
     isLoading: isLoadingProducts,
     isError: isErrorProducts,
   } = useQuery({
-    queryKey: ["products-by-categories"],
-    queryFn: async () => {
-      const productPromises = categories.map((category) =>
-        getRequest<{ data: ApiProduct[] }>(
-          `/api/v1/products?category=${category.slug}&limit=8`,
-        ),
-      );
-      const results = await Promise.all(productPromises);
-      return results.map((result, index) => ({
-        category: categories[index],
-        products: result.data?.map(mapApiProduct) || [],
-      }));
-    },
-    enabled: categories.length > 0,
+    queryKey: ["all-products"],
+    queryFn: () => getRequest<{ data: ApiProduct[] }>("/api/v1/products"),
   });
 
+  const allProducts = allProductsData?.data || [];
+
+  const productsData = categories.map((category) => {
+    const categoryProducts = allProducts.filter((product) => {
+      if (product.category_slug && category.slug) {
+        return product.category_slug === category.slug;
+      }
+      if (product.category_id && category.id) {
+        return product.category_id === category.id;
+      }
+
+      const productCategory = product.category;
+      if (!productCategory) return false;
+      
+      const catId = category.id || category._id;
+
+      if (typeof productCategory === 'object') {
+        return (
+          productCategory._id === catId ||
+          productCategory.id === catId ||
+          productCategory.slug === category.slug
+        );
+      }
+      
+      return productCategory === catId || productCategory === category.slug;
+    });
+
+    return {
+      category,
+      products: categoryProducts.slice(0, 8).map(mapApiProduct),
+    };
+  });
 
   const isLoading = isLoadingCategories || isLoadingProducts;
   const isError = isErrorCategories || isErrorProducts;
@@ -228,10 +250,11 @@ export default function ShopSection() {
                 <button
                   key={cols}
                   onClick={() => setGridCols(cols)}
-                  className={`px-4 py-2 rounded-full font-medium text-sm transition-all ${gridCols === cols
-                    ? "bg-black text-white"
-                    : "bg-black/5 text-black hover:bg-black/10"
-                    }`}
+                  className={`px-4 py-2 rounded-full font-medium text-sm transition-all ${
+                    gridCols === cols
+                      ? "bg-black text-white"
+                      : "bg-black/5 text-black hover:bg-black/10"
+                  }`}
                 >
                   <ScrollingText
                     text={`${cols} Cols`}

@@ -15,6 +15,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "../../store/useWishlistStore";
+import { useUserStore, useIsLoggedIn } from "../../store/useUserStore";
 import ShoppingCartSidebar from "@/app/Component/trending/ShoppingCartSidebar";
 import LanguageSelector from "@/app/Component/LanguageSelector";
 
@@ -31,6 +32,29 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery.trim().length >= 3) setDebouncedQuery(searchQuery.trim());
+      else setDebouncedQuery(null);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const {
+    data: searchResults,
+    isLoading: isSearchLoading,
+    isError: isSearchError,
+  } = useQuery({
+    queryKey: ["searchProducts", debouncedQuery],
+    queryFn: () =>
+      getRequest<any>(
+        `/api/v1/products?search=${encodeURIComponent(debouncedQuery!)}&limit=5`,
+      ),
+    enabled: !!debouncedQuery,
+  });
   const [locationLabel, setLocationLabel] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [locationError, setLocationError] = useState("");
@@ -94,6 +118,13 @@ export default function Navbar() {
       ) {
         setIsLocationModalOpen(false);
       }
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(target)
+      ) {
+        setSearchQuery("");
+        setDebouncedQuery(null);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -119,7 +150,8 @@ export default function Navbar() {
     let timeoutId: NodeJS.Timeout;
 
     const type = () => {
-      const currentCategory = categoryData.data[currentCategoryIdx].name || "products";
+      const currentCategory =
+        categoryData.data[currentCategoryIdx].name || "products";
       const fullText = `Search for ${currentCategory}`;
 
       if (isDeleting) {
@@ -137,7 +169,8 @@ export default function Navbar() {
         isDeleting = true;
       } else if (isDeleting && currentCharIdx <= 11) {
         isDeleting = false;
-        currentCategoryIdx = (currentCategoryIdx + 1) % categoryData.data.length;
+        currentCategoryIdx =
+          (currentCategoryIdx + 1) % categoryData.data.length;
         typeSpeed = 500; // pause before typing next
       }
 
@@ -200,13 +233,25 @@ export default function Navbar() {
   };
 
   const { wishlist } = useWishlistStore();
+  const isLoggedIn = useIsLoggedIn();
+  const logout = useUserStore((state) => state.logout);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isAuthenticated = mounted && isLoggedIn;
 
   return (
     <>
       <header className="relative md:sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-200 transition-colors duration-300 ease-in-out">
         {/* Top Ribbon (Mobile Only) */}
         <div className="md:hidden bg-[#cb2b2b] text-white text-[12px] py-[5px] px-[10px] text-center min-h-[28px] max-h-[35px] flex items-center justify-center w-full">
-          <Link href="/product" className="tracking-[1.2px] hover:underline uppercase font-medium">
+          <Link
+            href="/product"
+            className="tracking-[1.2px] hover:underline uppercase font-medium"
+          >
             {ribbonText}
             <span className="animate-pulse">|</span>
           </Link>
@@ -222,15 +267,15 @@ export default function Navbar() {
               <Menu size={24} />
             </button>
 
-            <div className="flex">
+            {/* Mobile Cart Button  and Language button */}
+            {/* <div className="flex">
               <div className="md:hidden z-10 text-gray-700 hover:text-gray-900">
                 <LanguageSelector />
               </div>
-              {/* Mobile Cart Button (Right on Mobile) */}
               <div className="md:hidden z-10 text-gray-700 hover:text-gray-900">
                 <ShoppingCartSidebar variant="amazon" />
               </div>
-            </div>
+            </div> */}
 
             {/* Logo */}
             <div className="flex items-center justify-center absolute inset-0 pointer-events-none md:static md:inset-auto md:justify-start md:pointer-events-auto md:gap-2">
@@ -244,20 +289,23 @@ export default function Navbar() {
                   className="h-12 md:h-16"
                 />
               </Link>
-              <div  onClick={handleLocationButton} className="cursor-pointer hidden lg:flex items-center gap-3 text-sm text-gray-700 pointer-events-auto">
+              <div
+                onClick={handleLocationButton}
+                className="cursor-pointer hidden lg:flex items-center gap-3 text-sm text-gray-700 pointer-events-auto"
+              >
                 <MapPin size={18} className="text-orange-500" />
                 <div className="flex flex-col leading-tight">
                   <span className="text-xs uppercase tracking-wide text-gray-500">
                     Delivering to
                   </span>
                   <div className="flex items-center gap-2">
-                  
                     <button
                       type="button"
-                      
                       className="text-xs text-blue-600 cursor-pointer"
                     >
-                    {locationLabel && postalCode ? `${locationLabel} - ${postalCode}` : "Enter pin code"}
+                      {locationLabel && postalCode
+                        ? `${locationLabel} - ${postalCode}`
+                        : "Enter pin code"}
                     </button>
                   </div>
                 </div>
@@ -270,12 +318,15 @@ export default function Navbar() {
             </div>
 
             {/* Search Bar with Category Dropdown */}
-            <div className="hidden md:flex items-center flex-1 mx-4">
+            <div
+              className="hidden md:flex items-center flex-1 mx-4"
+              ref={searchContainerRef}
+            >
               <div className="relative w-full">
                 <div className="flex items-center border border-gray-300 rounded-md overflow-visible bg-white">
                   {/* Category Dropdown Button */}
-                  <div 
-                    className="relative" 
+                  <div
+                    className="relative"
                     ref={dropdownRef}
                     onMouseEnter={() => setIsDropdownOpen(true)}
                     onMouseLeave={() => setIsDropdownOpen(false)}
@@ -302,9 +353,7 @@ export default function Navbar() {
 
                     {/* Dropdown Menu */}
                     {isDropdownOpen && (
-                      <div
-                        className="absolute top-full left-0 w-72 bg-white border border-gray-200 rounded-md shadow-lg mt-0 max-h-96 overflow-y-auto z-50"
-                      >
+                      <div className="absolute top-full left-0 w-72 bg-white border border-gray-200 rounded-md shadow-lg mt-0 max-h-96 overflow-y-auto z-50">
                         {isLoadingCategories ? (
                           <div className="px-4 py-2 text-gray-500 text-sm">
                             Loading categories...
@@ -313,7 +362,8 @@ export default function Navbar() {
                           <div className="px-4 py-2 text-gray-500 text-sm">
                             Error loading categories
                           </div>
-                        ) : categoryData?.data && categoryData.data.length > 0 ? (
+                        ) : categoryData?.data &&
+                          categoryData.data.length > 0 ? (
                           categoryData?.data?.map((category) => (
                             <Link
                               key={category.id}
@@ -360,10 +410,53 @@ export default function Navbar() {
                     <Search size={18} />
                   </button>
                 </div>
+
+                {/* Search Results Dropdown */}
+                {searchQuery.trim().length >= 3 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-white shadow-lg rounded-md border border-gray-200 z-50 p-2 max-h-96 overflow-y-auto">
+                    {isSearchLoading ? (
+                      <p className="text-gray-600 p-3 text-sm">Searching...</p>
+                    ) : isSearchError ? (
+                      <p className="text-red-600 p-3 text-sm">
+                        Error fetching results.
+                      </p>
+                    ) : searchResults?.data?.length > 0 ? (
+                      searchResults.data.map((item: any) => (
+                        <Link
+                          key={item.id}
+                          href={`/product/${item.slug}`}
+                          onClick={() => {
+                            setSearchQuery("");
+                            setDebouncedQuery(null);
+                          }}
+                          className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
+                        >
+                          <img
+                            src={item?.images?.[0]?.image || item?.image1}
+                            className="w-12 h-12 object-cover rounded border"
+                            alt={item.name}
+                          />
+                          <div>
+                            <p className="font-medium text-gray-800 text-sm">
+                              {item.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              ₹{item.price}
+                            </p>
+                          </div>
+                        </Link>
+                      ))
+                    ) : (
+                      <p className="text-gray-600 p-3 text-sm">
+                        No products found.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="ml-4 flex-shrink-0">
-                <LanguageSelector />
-              </div>
+            </div>
+            <div className="ml-4 flex-shrink-0">
+              <LanguageSelector />
             </div>
 
             {/* Desktop Navigation Links (Moved to Right) */}
@@ -371,25 +464,68 @@ export default function Navbar() {
 
             {/* Right Icons */}
             <div className="hidden md:flex items-center space-x-6 text-gray-700">
-              
               {/* Account Dropdown */}
               <div className="relative transition hover:text-gray-900 cursor-pointer group">
                 <div className="flex flex-col text-sm leading-tight">
-                  <span className="text-[11px] text-gray-500 font-medium">Hello, sign in</span>
+                  <span className="text-[11px] text-gray-500 font-medium">
+                    Hello, sign in
+                  </span>
                   <span className="font-bold flex items-center text-[13px]">
                     Account & Lists
-                    <svg className="w-4 h-4 ml-0.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    <svg
+                      className="w-4 h-4 ml-0.5 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
                   </span>
                 </div>
-                
+
                 {/* Dropdown Menu */}
                 <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <div className="py-2 flex flex-col">
-                    <div className="px-4 py-2 text-sm font-bold border-b border-gray-100">Your Account</div>
-                    <Link href="/account" className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500">Your Account</Link>
-                    <Link href="/account/orders" className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500">Your Orders</Link>
-                    <Link href="/wishlist" className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500">Your Wish List</Link>
-                    <Link href="/shop" className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500">Keep shopping for</Link>
+                    <div className="px-4 py-2 text-sm font-bold border-b border-gray-100">
+                      Your Account
+                    </div>
+                    <Link
+                      href={isAuthenticated ? "/account" : "/account"}
+                      className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
+                    >
+                      Your Account
+                    </Link>
+                    <Link
+                      href={isAuthenticated ? "/account/orders" : "/account"}
+                      className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
+                    >
+                      Your Orders
+                    </Link>
+                    <Link
+                      href="/wishlist"
+                      className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
+                    >
+                      Your Wish List
+                    </Link>
+                    <Link
+                      href="/product"
+                      className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
+                    >
+                      Keep shopping for
+                    </Link>
+                    {isAuthenticated && (
+                      <button
+                        onClick={() => logout()}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
+                      >
+                        Logout
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -405,7 +541,6 @@ export default function Navbar() {
                     {wishlist.length}
                   </span>
                 </div>
-               
               </Link>
 
               {/* Cart */}
@@ -413,7 +548,6 @@ export default function Navbar() {
                 <ShoppingCartSidebar variant="amazon" />
               </div>
             </div>
-
           </div>
 
           {/* Mobile Search Bar */}
@@ -440,10 +574,9 @@ export default function Navbar() {
         />
       )}
 
-
       {/* Mobile Menu Sidebar */}
       <div
-        className={`bg-white fixed top-0 left-0 h-full w-[70%] max-w-sm  z-[60] shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`bg-white fixed top-0 left-0 h-full w-[70%] max-w-sm  z-[60] shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden ${isMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex text-black justify-between items-center p-4 border-b border-gray-200">
           <span className="font-bold text-lg">Menu</span>
@@ -452,17 +585,66 @@ export default function Navbar() {
           </button>
         </div>
         <nav className="flex flex-col p-4 space-y-4 overflow-y-auto">
-          <Link href="/" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2">Home</Link>
-          <Link href="/shop" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2">Shop</Link>
-          <Link href="/blog" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2">Blog</Link>
-          <Link href="/about" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2">About Us</Link>
-          <Link href="/contact" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2">Contact Us</Link>
+          <Link
+            href="/"
+            onClick={() => setIsMenuOpen(false)}
+            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
+          >
+            Home
+          </Link>
+          <Link
+            href="/shop"
+            onClick={() => setIsMenuOpen(false)}
+            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
+          >
+            Shop
+          </Link>
+          <Link
+            href="/blog"
+            onClick={() => setIsMenuOpen(false)}
+            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
+          >
+            Blog
+          </Link>
+          <Link
+            href="/about"
+            onClick={() => setIsMenuOpen(false)}
+            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
+          >
+            About Us
+          </Link>
+          <Link
+            href="/contact"
+            onClick={() => setIsMenuOpen(false)}
+            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
+          >
+            Contact Us
+          </Link>
 
           <div className="pt-4 mt-2">
-            <Link href="/account" onClick={() => setIsMenuOpen(false)} className="flex items-center text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2 mb-4">
+            <Link
+              href={isAuthenticated ? "/account" : "/account"}
+              onClick={() => setIsMenuOpen(false)}
+              className="flex items-center text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2 mb-4"
+            >
               <User size={20} className="mr-3" /> My Account
             </Link>
-            <Link href="/wishlist" onClick={() => setIsMenuOpen(false)} className="flex items-center text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2">
+            {isAuthenticated && (
+              <button
+                onClick={() => {
+                  logout();
+                  setIsMenuOpen(false);
+                }}
+                className="flex items-center w-full text-left text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2 mb-4"
+              >
+                <User size={20} className="mr-3" /> Logout
+              </button>
+            )}
+            <Link
+              href="/wishlist"
+              onClick={() => setIsMenuOpen(false)}
+              className="flex items-center text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
+            >
               <Heart size={20} className="mr-3" />
               Wishlist
               <span className="ml-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">

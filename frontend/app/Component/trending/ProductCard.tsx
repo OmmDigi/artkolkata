@@ -109,7 +109,9 @@ const ProductCard = ({
 
       {/* PRODUCT INFO */}
       <div className="py-2">
-        <p className="  mt-2 text-lg font-semibold ">{name}</p>
+        <p className="  mt-2 text-lg font-semibold ">
+          {name?.length > 30 ? `${name.slice(0, 30)}...` : name}{" "}
+        </p>
         <p className="text-gray-600 text-sm">{price}</p>
       </div>
     </div>
