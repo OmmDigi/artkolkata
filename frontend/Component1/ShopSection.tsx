@@ -199,17 +199,17 @@ export default function ShopSection() {
 
       const productCategory = product.category;
       if (!productCategory) return false;
-      
+
       const catId = category.id || category._id;
 
-      if (typeof productCategory === 'object') {
+      if (typeof productCategory === "object") {
         return (
           productCategory._id === catId ||
           productCategory.id === catId ||
           productCategory.slug === category.slug
         );
       }
-      
+
       return productCategory === catId || productCategory === category.slug;
     });
 
