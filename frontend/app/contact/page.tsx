@@ -8,15 +8,15 @@ export default function page() {
   return (
     <main className="*:font-spartan bg-gray-50 text-black">
       <section className="w-full relative bg-gray-100  overflow-hidden">
-        <Image
+        {/* <Image
           src={"bg-breadcrumb_1920x.jpg"}
           alt="Banner image"
           className="size-full"
           height={1920}
           width={1920}
-        />
+        /> */}
 
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+        <div className=" h-60 w-full  bg-black/50 flex items-center justify-center">
           <div className="container mx-auto px-4 space-y-3.5 flex items-center justify-center flex-col">
             <h3 className="text-3xl text-white font-bold font-open tracking-wide">
               Contact Us
@@ -37,21 +37,22 @@ export default function page() {
           {/* Call Us */}
           <div>
             <h3 className="font-bold text-sm tracking-wider mb-4">CALL US</h3>
-            <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+            {/* <p className="text-gray-600 text-sm mb-4 leading-relaxed">
               Send us a text & an ambassador will respond when available.
-            </p>
-            <p className="font-semibold">1-814-251-9966</p>
+            </p> */}
+            <p className="font-semibold">8621803898</p>
           </div>
 
           {/* Address */}
           <div>
             <h3 className="font-bold text-sm tracking-wider mb-4">ADDRESS</h3>
             <p className="text-gray-600 text-sm leading-relaxed">
-              PO Box 1622 Visvaasang Street
-              <br />
-              West
+              Arabinda Pally, Duttapukur, Kolkata, N. 24 Pgs, 743248, West
+              Bengal
             </p>
-            <p className="text-gray-600 text-sm mt-4">info@example.com</p>
+            <p className="text-gray-600 text-sm mt-4">
+              artkolkata921@gmail.com{" "}
+            </p>
           </div>
 
           {/* We're Open */}
@@ -123,7 +124,7 @@ export default function page() {
         <div className="mb-16">
           <div className="w-full h-96 bg-gray-200 rounded-lg overflow-hidden">
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2886.267890933394!2d-79.37869!3d43.65321!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x882b34d68bf33a9b%3A0x9c19e5e1a926f0d7!2s100%20King%20St%20W%2C%20Toronto%2C%20ON%20M5X%201A9%2C%20Canada!5e0!3m2!1sen!2sus!4v1234567890"
+              src="https://maps.google.com/maps?q=Arabinda%20Pally,%20Duttapukur,%20Kolkata,%20N.%2024%20Pgs,%20743248,%20West%20Bengal&t=&z=14&ie=UTF8&iwloc=&output=embed"
               width="100%"
               height="100%"
               style={{ border: 0 }}

@@ -16,7 +16,9 @@ interface ShoppingCartSidebarProps {
   variant?: "default" | "amazon";
 }
 
-const ShoppingCartSidebar = ({ variant = "default" }: ShoppingCartSidebarProps) => {
+const ShoppingCartSidebar = ({
+  variant = "default",
+}: ShoppingCartSidebarProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const { removeFromCart, updateQuantity, cart } = useCartStore();
 
@@ -64,8 +66,9 @@ const ShoppingCartSidebar = ({ variant = "default" }: ShoppingCartSidebarProps) 
 
       {/* Cart Sidebar */}
       <div
-        className={`fixed top-0 right-0 h-screen w-full max-w-md bg-white shadow-2xl z-51 transform transition-transform duration-300 ease-in-out ${isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+        className={`fixed top-0 right-0 h-screen w-full max-w-md bg-white shadow-2xl z-51 transform transition-transform duration-300 ease-in-out ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
@@ -105,8 +108,14 @@ const ShoppingCartSidebar = ({ variant = "default" }: ShoppingCartSidebarProps) 
                       className="flex-shrink-0"
                     >
                       <img
-                        src={item?.product?.images?.[0]?.image || item?.product?.image1}
-                        alt={item?.product?.images?.[0]?.alt_tag || item?.product?.name}
+                        src={
+                          item?.product?.images?.[0]?.image ||
+                          item?.product?.image1
+                        }
+                        alt={
+                          item?.product?.images?.[0]?.alt_tag ||
+                          item?.product?.name
+                        }
                         className="w-20 h-24 object-cover rounded"
                       />
                     </Link>
@@ -117,7 +126,10 @@ const ShoppingCartSidebar = ({ variant = "default" }: ShoppingCartSidebarProps) 
                         href={`/product/${item?.product?.slug}`}
                         className="text-sm font-medium text-gray-900 hover:text-pink-600 transition-colors block mb-2"
                       >
-                        {item?.product?.name}
+                        {/* {item?.product?.name} */}
+                        {item?.product?.name?.length > 30
+                          ? `${item?.product?.name.slice(0, 30)}...`
+                          : item?.product?.name}{" "}
                       </Link>
                       <p></p>
                       {/* Variations */}
@@ -147,7 +159,9 @@ const ShoppingCartSidebar = ({ variant = "default" }: ShoppingCartSidebarProps) 
                           >
                             −
                           </button>
-                          <span className="text-sm">{item.quantity}</span>
+                          <span className="text-sm text-gray-700">
+                            {item.quantity}
+                          </span>
 
                           <button
                             onClick={() => changeQty(item, 1)}
@@ -224,13 +238,17 @@ const ShoppingCartSidebar = ({ variant = "default" }: ShoppingCartSidebarProps) 
         {variant === "amazon" ? (
           <div className="flex items-center text-gray-800 hover:text-orange-500 transition-colors">
             <div className="relative flex items-end">
-
-              <PiShoppingCartSimpleLight className=" w-6 h-6  md:w-8 md:h-8" strokeWidth={1.5} />
+              <PiShoppingCartSimpleLight
+                className=" w-6 h-6  md:w-8 md:h-8"
+                strokeWidth={1.5}
+              />
               <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[11px] font-bold rounded-full md:w-5 md:h-5 w-4 h-4 flex items-center justify-center shadow-sm">
                 {totalItems}
               </span>
             </div>
-            <span className="hidden md:block font-bold mt-3 ml-1 text-sm">Cart</span>
+            <span className="hidden md:block font-bold mt-3 ml-1 text-sm">
+              Cart
+            </span>
           </div>
         ) : (
           <div className="relative">

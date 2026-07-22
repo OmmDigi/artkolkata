@@ -67,7 +67,7 @@ function ProductCard({ product }: { product: Product }) {
   const [loadingIcon, setLoadingIcon] = useState<"cart" | "wish" | null>(null);
 
   const { wishlist, toggleWishlist } = useWishlistStore();
-  const { addToCart, isInCart } = useCartStore();
+  const { addToCart, removeFromCart, isInCart } = useCartStore();
 
   const isInWishlist = wishlist.some((item) => item.id === product.id);
   const inCart = isInCart(product.id, null);
@@ -77,12 +77,18 @@ function ProductCard({ product }: { product: Product }) {
     setTimeout(() => {
       setLoadingIcon(null);
       if (type === "wish") toggleWishlist(product);
-      if (type === "cart") addToCart(product, null, 1);
+      if (type === "cart") {
+        if (inCart) {
+          removeFromCart(product.id, null);
+        } else {
+          addToCart(product, null, 1);
+        }
+      }
     }, 150);
   };
 
   return (
-    <div className="group relative flex flex-col h-full">
+    <div className="group relative flex flex-col h-full border border-gray-300 p-2">
       <div
         className="relative overflow-hidden rounded-lg hover:scale-105 transition-transform duration-300 bg-[#ececea] 
       aspect-[4/4] mb-4"
@@ -149,7 +155,7 @@ function ProductCard({ product }: { product: Product }) {
             ? `${product.name.slice(0, 30)}...`
             : product.name}
         </p>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center mb-3">
           <span className="text-sm font-medium text-black">
             ${Number(product.price ?? 0).toFixed(2)}
           </span>
@@ -158,6 +164,28 @@ function ProductCard({ product }: { product: Product }) {
           </span>
         </div>
       </Link>
+
+      <button
+        className={`w-full py-2 mt-auto rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+          inCart
+            ? "bg-black text-white hover:bg-gray-800"
+            : "border border-black text-black hover:bg-black hover:text-white"
+        }`}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleAction("cart");
+        }}
+      >
+        {loadingIcon === "cart" ? (
+          <div className="w-[16px] h-[16px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <>
+            <ShoppingCart size={16} />
+            {inCart ? "In Cart" : "Add to Cart"}
+          </>
+        )}
+      </button>
     </div>
   );
 }

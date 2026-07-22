@@ -14,6 +14,7 @@ const ProductPage = () => {
 
   const [selectedOptions, setSelectedOptions] = useState<any>({});
   const [selectedVariant, setSelectedVariant] = useState<any>(null);
+  const [localQuantity, setLocalQuantity] = useState(1);
 
   const [rating, setRating] = useState<number>(1);
   const [comment, setComment] = useState<string>("");
@@ -153,7 +154,7 @@ const ProductPage = () => {
           : fullProduct.images,
       options: selectedOptions,
     };
-    addToCart(itemToAdd, variantId, 1);
+    addToCart(itemToAdd, variantId, localQuantity);
   };
 
   const openModal = (img: string) => {
@@ -189,7 +190,7 @@ const ProductPage = () => {
                   {mainImage && (
                     <img
                       src={mainImage}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                       alt="Product"
                     />
                   )}
@@ -231,7 +232,7 @@ const ProductPage = () => {
                     <button
                       key={index}
                       onClick={() => setMainImage(img.image)}
-                      className={`w-20 h-20  overflow-hidden border-1 ${
+                      className={`w-15 h-15  overflow-hidden border-1 ${
                         mainImage === img.image
                           ? "border-[#000000]"
                           : "border-gray-300 opacity-70"
@@ -239,7 +240,7 @@ const ProductPage = () => {
                     >
                       <img
                         src={img.image}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                         alt=""
                       />
                     </button>
@@ -309,11 +310,11 @@ const ProductPage = () => {
               {/* Quantity + Add to Cart */}
               <div className="flex justify-between">
                 <div>
-                  {itemAlreadyInCart && (
-                    <div className="flex items-center gap-4">
-                      <button
-                        className="px-3 py-2 border rounded-lg"
-                        onClick={() => {
+                  <div className="flex items-center gap-4">
+                    <button
+                      className="px-3 py-2 border rounded-lg"
+                      onClick={() => {
+                        if (itemAlreadyInCart) {
                           if (cartQuantity > 1) {
                             updateQuantity(
                               fullProduct.id,
@@ -321,17 +322,25 @@ const ProductPage = () => {
                               cartQuantity - 1,
                             );
                           }
-                        }}
-                      >
-                        -
-                      </button>
+                        } else {
+                          if (localQuantity > 1) {
+                            setLocalQuantity(localQuantity - 1);
+                          }
+                        }
+                      }}
+                    >
+                      -
+                    </button>
 
-                      <span className="text-xl font-bold">{cartQuantity}</span>
+                    <span className="text-xl font-bold">
+                      {itemAlreadyInCart ? cartQuantity : localQuantity}
+                    </span>
 
-                      <button
-                        className="px-3 py-2 border rounded-lg"
-                        onClick={() => {
-                          const stock = getAvailableStock();
+                    <button
+                      className="px-3 py-2 border rounded-lg"
+                      onClick={() => {
+                        const stock = getAvailableStock();
+                        if (itemAlreadyInCart) {
                           if (cartQuantity < stock) {
                             updateQuantity(
                               fullProduct.id,
@@ -339,12 +348,16 @@ const ProductPage = () => {
                               cartQuantity + 1,
                             );
                           }
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
+                        } else {
+                          if (localQuantity < stock) {
+                            setLocalQuantity(localQuantity + 1);
+                          }
+                        }
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
                 {!fullProduct?.quantity || selectedVariant?.quantity > 0 ? (
                   <button

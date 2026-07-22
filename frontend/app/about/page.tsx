@@ -4,7 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Users, Leaf, Zap } from "lucide-react";
 
-function AnimatedCounter({ end, duration = 2000, suffix = "" }: { end: number, duration?: number, suffix?: string }) {
+function AnimatedCounter({
+  end,
+  duration = 2000,
+  suffix = "",
+}: {
+  end: number;
+  duration?: number;
+  suffix?: string;
+}) {
   const [count, setCount] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -17,7 +25,7 @@ function AnimatedCounter({ end, duration = 2000, suffix = "" }: { end: number, d
           observer.disconnect();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
@@ -25,7 +33,7 @@ function AnimatedCounter({ end, duration = 2000, suffix = "" }: { end: number, d
 
   useEffect(() => {
     if (!isVisible) return;
-    
+
     let startTimestamp: number | null = null;
     const step = (timestamp: number) => {
       if (!startTimestamp) startTimestamp = timestamp;
@@ -40,7 +48,12 @@ function AnimatedCounter({ end, duration = 2000, suffix = "" }: { end: number, d
     window.requestAnimationFrame(step);
   }, [isVisible, end, duration]);
 
-  return <div ref={ref} className="text-5xl font-bold mb-2">{count}{suffix}</div>;
+  return (
+    <div ref={ref} className="text-5xl font-bold mb-2">
+      {count}
+      {suffix}
+    </div>
+  );
 }
 
 export default function AboutPage() {
@@ -169,7 +182,7 @@ export default function AboutPage() {
       </section>
 
       {/* Team Section */}
-      <section className="py-5 md:py-10 px-5">
+      {/* <section className="py-5 md:py-10 px-5">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-black mb-6">
@@ -198,7 +211,7 @@ export default function AboutPage() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Stats Section */}
       <section className="py-5 md:py-10 px-5 bg-black text-white">
