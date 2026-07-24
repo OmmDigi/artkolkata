@@ -593,11 +593,11 @@ export default function Navbar() {
             Home
           </Link>
           <Link
-            href="/shop"
+            href="/product"
             onClick={() => setIsMenuOpen(false)}
             className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
           >
-            Shop
+            Product
           </Link>
           <Link
             href="/blog"

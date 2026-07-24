@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useState } from "react";
 import { Star, ShoppingCart, Heart } from "lucide-react";
@@ -63,6 +64,7 @@ const mapApiProduct = (item: ApiProduct): Product => {
 };
 
 function ProductCard({ product }: { product: Product }) {
+  const router = useRouter();
   const [hoveredImage, setHoveredImage] = useState(false);
   const [loadingIcon, setLoadingIcon] = useState<"cart" | "wish" | null>(null);
 
@@ -109,7 +111,7 @@ function ProductCard({ product }: { product: Product }) {
           <button
             className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
               inCart
-                ? "bg-black text-white hover:bg-gray-800"
+                ? "bg-orange-500 text-white hover:bg-orange-600"
                 : "bg-white text-black hover:bg-black hover:text-white"
             }`}
             onClick={(e) => {
@@ -129,7 +131,7 @@ function ProductCard({ product }: { product: Product }) {
           <button
             className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
               isInWishlist
-                ? "bg-black text-white hover:bg-gray-800"
+                ? "bg-red-500 text-white hover:bg-red-600"
                 : "bg-white text-black hover:bg-black hover:text-white"
             }`}
             onClick={(e) => {
@@ -157,35 +159,58 @@ function ProductCard({ product }: { product: Product }) {
         </p>
         <div className="flex gap-2 items-center mb-3">
           <span className="text-sm font-medium text-black">
-            ${Number(product.price ?? 0).toFixed(2)}
+            {Number(product.price ?? 0).toFixed(2)}
           </span>
           <span className="text-sm text-black/50 line-through">
-            ${Number(product.originalPrice ?? 0).toFixed(2)}
+            {Number(product.originalPrice ?? 0).toFixed(2)}
           </span>
         </div>
       </Link>
 
-      <button
-        className={`w-full py-2 mt-auto rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
-          inCart
-            ? "bg-black text-white hover:bg-gray-800"
-            : "border border-black text-black hover:bg-black hover:text-white"
-        }`}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleAction("cart");
-        }}
-      >
-        {loadingIcon === "cart" ? (
-          <div className="w-[16px] h-[16px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
-        ) : (
-          <>
-            <ShoppingCart size={16} />
-            {inCart ? "In Cart" : "Add to Cart"}
-          </>
-        )}
-      </button>
+      <div className="flex flex-col gap-2 mt-auto">
+        <button
+          className={`w-full py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+            inCart
+              ? "bg-orange-500 text-white hover:bg-orange-600"
+              : "border border-black text-black hover:bg-black hover:text-white"
+          }`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAction("cart");
+          }}
+        >
+          {loadingIcon === "cart" ? (
+            <div className="w-[16px] h-[16px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <ShoppingCart size={16} />
+              {inCart ? "In Cart" : "Add to Cart"}
+            </>
+          )}
+        </button>
+
+        <button
+          className="w-full py-2 rounded-md font-medium text-sm bg-green-600 hover:bg-green-700 text-white transition-colors flex items-center justify-center"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!inCart) {
+              const productObj = {
+                id: product.id,
+                name: product.name,
+                price: Number(product.price ?? 0),
+                slug: product.href.split("/product/")[1],
+                images: [{ image: product.image1 }, { image: product.image2 }],
+              };
+              addToCart(productObj as any, null, 1);
+            }
+            router.push("/checkout");
+          }}
+        >
+          BUY NOW
+        </button>
+      </div>
     </div>
   );
 }
@@ -259,7 +284,7 @@ export default function ShopSection() {
   console.log("productsData", productsData);
 
   return (
-    <section className="w-full bg-white py-3 md:py-10 px-6 md:px-12">
+    <section className="w-full bg-white py-3 md:py-10 px-2 md:px-12">
       <div className="max-w-full mx-auto">
         {/* Component Heading */}
         <div className="text-center mb-1">

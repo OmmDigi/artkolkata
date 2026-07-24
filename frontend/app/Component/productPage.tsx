@@ -29,6 +29,13 @@ const ProductsPage = () => {
   const [expandedFilters, setExpandedFilters] = useState<{
     [key: string]: boolean;
   }>({ category: true });
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setExpandedFilters({ category: false });
+    }
+  }, []);
+
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // selected category/subcategory states (slug or name whichever is present)
@@ -332,7 +339,7 @@ const ProductsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white px-1 md:px-6">
       {/* Breadcrumb */}
       <div className="max-w-7xl mx-auto px-4 py-4">
         <nav className="text-sm text-gray-500">
@@ -349,7 +356,7 @@ const ProductsPage = () => {
       {/* <div className="max-w-7xl mx-auto px-4"> */}
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8">
         {/* Sidebar Filters */}
-        <aside className="w-full lg:w-1/4">
+        <aside className="w-full lg:w-1/6">
           {/* Clear All Button */}
           <button
             onClick={handleClearAll}
@@ -357,40 +364,6 @@ const ProductsPage = () => {
           >
             Clear all
           </button>
-
-          {/* Price Range */}
-          {/* <div className="border-b border-gray-200 py-4">
-              <button
-                onClick={() => toggleFilter("price")}
-                className="flex items-center justify-between w-full text-left mb-4"
-              >
-                <h3 className="text-sm font-medium text-gray-900">
-                  Price range
-                </h3>
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform text-gray-900 ${
-                    expandedFilters["price"] ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-              {expandedFilters["price"] && (
-                <div className="space-y-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={10000}
-                    step={50}
-                    value={maxPrice}
-                    onChange={(e) => setMaxPrice(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#000000] transition-all duration-300 hover:accent-[#000000]"
-                  />
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span className="text-gray-600 text-sm">₹{minPrice}</span>
-                    <span className="text-gray-600 text-sm">₹{maxPrice}</span>
-                  </div>
-                </div>
-              )}
-            </div> */}
 
           {/* Category Filter */}
           <FilterSection
@@ -445,9 +418,9 @@ const ProductsPage = () => {
 
           {/* Products Grid */}
           <div
-            className={`grid gap-6  ${
+            className={`grid gap-4 md:gap-6 ${
               viewMode === "grid"
-                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+                ? "grid-cols-2 md:grid-cols-2 lg:grid-cols-4"
                 : "grid-cols-1"
             }`}
           >

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { ShoppingCart, Heart } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useWishlistStore } from "@/store/useWishlistStore";
 import { useCartStore } from "@/store/useCartStore";
 import Image from "next/image";
@@ -16,10 +17,11 @@ const ProductCard = ({
   price,
   slug,
 }: any) => {
+  const router = useRouter();
   const [loadingIcon, setLoadingIcon] = useState(null);
   const [currentImage, setCurrentImage] = useState(hoverImage);
   const { wishlist, toggleWishlist } = useWishlistStore();
-  const { addToCart, isInCart } = useCartStore();
+  const { addToCart, removeFromCart, isInCart } = useCartStore();
   const inCart = isInCart(product?.id, null);
   const inWishlist = wishlist.some((w) => w?.id === product?.id);
 
@@ -28,13 +30,19 @@ const ProductCard = ({
     setTimeout(() => {
       setLoadingIcon(null);
       if (type === "wish") toggleWishlist(product);
-      if (type === "cart") addToCart(product, null, 1);
+      if (type === "cart") {
+        if (inCart) {
+          removeFromCart(product?.id, null);
+        } else {
+          addToCart(product, null, 1);
+        }
+      }
     }, 100);
   };
 
   return (
     <div
-      className="text-center group text-gray-800"
+      className="group relative flex flex-col h-full border border-gray-300 p-2 bg-white"
       onMouseEnter={() => hoverImage && setCurrentImage(hoverImage)}
       onMouseLeave={() => setCurrentImage(image)}
     >
@@ -80,39 +88,98 @@ const ProductCard = ({
         )}
 
         {/* ICONS */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex justify-between gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <IconButton onClick={() => handleIconClick("cart")} active={inCart}>
+        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center opacity-100 transition-opacity duration-300 pointer-events-none">
+          <button
+            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
+              inCart
+                ? "bg-orange-500 text-white hover:bg-orange-600"
+                : "bg-white text-black hover:bg-black hover:text-white"
+            }`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleIconClick("cart");
+            }}
+            aria-label="Add to cart"
+            style={{ width: "38px", height: "38px" }}
+          >
             {loadingIcon === "cart" ? (
-              <Spinner />
+              <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
             ) : (
-              <ShoppingCart
-                className={`w-3 h-3 md:w-5 md:h-5 ${inCart ? "text-white" : "text-gray-600"}`}
-                size={16}
-              />
+              <ShoppingCart size={18} />
             )}
-          </IconButton>
-          <IconButton
-            onClick={() => handleIconClick("wish")}
-            active={inWishlist}
+          </button>
+          <button
+            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
+              inWishlist
+                ? "bg-red-500 text-white hover:bg-red-600"
+                : "bg-white text-black hover:bg-black hover:text-white"
+            }`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleIconClick("wish");
+            }}
+            aria-label="Add to wishlist"
+            style={{ width: "38px", height: "38px" }}
           >
             {loadingIcon === "wish" ? (
-              <Spinner />
+              <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Heart
-                className={`w-3 h-3 md:w-5 md:h-5 ${inWishlist ? "fill-white text-white" : "text-gray-600"}`}
-                size={16}
-              />
+              <Heart size={18} fill={inWishlist ? "currentColor" : "none"} />
             )}
-          </IconButton>
+          </button>
         </div>
       </div>
 
       {/* PRODUCT INFO */}
-      <div className="py-2">
-        <p className="  mt-2 text-lg font-semibold ">
-          {name?.length > 30 ? `${name.slice(0, 30)}...` : name}{" "}
+      <Link href={`/product/${slug}`} className="block mt-auto text-left">
+        <p className="text-sm font-medium text-black mb-2 mt-2 group-hover:opacity-80 transition-opacity">
+          {name?.length > 30 ? `${name.slice(0, 30)}...` : name}
         </p>
-        <p className="text-gray-600 text-sm">{price}</p>
+        <div className="flex gap-2 items-center mb-3">
+          <span className="text-sm font-medium text-black">
+            {price}
+          </span>
+        </div>
+      </Link>
+
+      <div className="flex flex-col gap-2 mt-auto">
+        <button
+          className={`w-full py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+            inCart
+              ? "bg-orange-500 text-white hover:bg-orange-600"
+              : "border border-black text-black hover:bg-black hover:text-white"
+          }`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleIconClick("cart");
+          }}
+        >
+          {loadingIcon === "cart" ? (
+            <div className="w-[16px] h-[16px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <ShoppingCart size={16} />
+              {inCart ? "In Cart" : "Add to Cart"}
+            </>
+          )}
+        </button>
+
+        <button
+          className="w-full py-2 rounded-md font-medium text-sm bg-green-600 hover:bg-green-700 text-white transition-colors flex items-center justify-center"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!inCart) {
+              addToCart(product, null, 1);
+            }
+            router.push("/checkout");
+          }}
+        >
+          BUY NOW
+        </button>
       </div>
     </div>
   );
