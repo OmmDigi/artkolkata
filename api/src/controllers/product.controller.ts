@@ -244,15 +244,35 @@ export const getProductList = asyncErrorHandler(
     const filterValues: any[] = [];
 
     if (req.query.category) {
-      const key = isNumber(req.query.category) ? "p.category_id" : "c.slug";
+      // const categories = req.query.category.split(",");
+      let keys = new Array();
+      if(Array.isArray(req.query.category)) {
+        req.query.category.forEach(item => {
+          keys.push(item);
+          filterValues.push(item);
+        })
+        keys = [...req.query.category];
+        placeholdernum += keys.length;
+      } else {
+        keys = [req.query.category]
+        filterValues.push(keys[0]);
+      }
+      let placeholders = generatePlaceholders(1, keys.length);
+      const key = isNumber(keys[0]) ? "p.category_id" : "c.slug";
 
       if (filter === "") {
-        filter = `WHERE ${key} = $${placeholdernum++}`;
+        if (keys.length == 0) {
+          filter = `WHERE ${key} = $${placeholdernum++}`;
+        } else {
+          filter = `WHERE ${key} IN ${placeholders}`;
+        }
       } else {
-        filter += ` AND ${key} = $${placeholdernum++}`;
+        if (keys.length == 0) {
+          filter = ` AND ${key} = $${placeholdernum++}`;
+        } else {
+          filter += ` AND ${key} IN ${placeholders}`;
+        }
       }
-
-      filterValues.push(req.query.category);
     }
 
     if (req.query.sub_category) {
