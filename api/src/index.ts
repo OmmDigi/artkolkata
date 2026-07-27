@@ -26,7 +26,7 @@ import nodemailer from "nodemailer";
 
 // Load environment variables based on NODE_ENV
 dotenv.config({
-  path: process.env.NODE_ENV === "development" ? ".env.local" : ".env",
+  path: process.env.NODE_ENV === "production" ? ".env" : ".env.local",
 });
 
 export const email = nodemailer.createTransport(emailConf());
