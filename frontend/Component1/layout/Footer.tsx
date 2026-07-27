@@ -29,12 +29,12 @@ export default function Footer() {
   const quickLinks = [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },
-    { label: "Blog", href: "/blog" },
-    { label: "Shop", href: "/shop" },
-    { label: "Reviews", href: "/#reviews" },
-    { label: "Styles", href: "/#styles" },
+    // { label: "Blog", href: "/blog" },
+    { label: "Product", href: "/product" },
+
     { label: "Privacy Policy", href: "/privacy-policy" },
     { label: "Terms & Conditions", href: "/terms-conditions" },
+    { label: "Returns & Refunds", href: "/returns-refunds" },
   ];
 
   const socialLinks = [
