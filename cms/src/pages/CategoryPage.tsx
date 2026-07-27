@@ -15,6 +15,9 @@ import LoadingHandler from "@/middleware/LoadingHandler";
 import { Loader, Pencil, Plus, Trash } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import type { ICategory } from "@/types";
 
 export default function CategoryPage() {
   const [open, setOpen] = useState(false);
@@ -26,8 +29,38 @@ export default function CategoryPage() {
 
   const { isLoading, mutate } = useDoMutation();
 
+  // separate mutation instance so the visibility toggle does not block the delete button
+  const [togglingId, setTogglingId] = useState(0);
+  const { isLoading: isVisibilityUpdating, mutate: mutateVisibility } =
+    useDoMutation();
+
   const { categoryData, isCategoryFetching, categoryError, refetchCategory } =
     useCategory({ page: currentPage });
+
+  const onVisibilityChange = (item: ICategory, isVisible: boolean) => {
+    const payload: Record<string, string | number | boolean | null> = {
+      id: item.id,
+      name: item.name,
+      slug: item.slug,
+      image: item.image,
+      position: item.position ?? 0,
+      is_visible: isVisible,
+    };
+
+    if (item.alt_tag && item.alt_tag !== "") {
+      payload["alt_tag"] = item.alt_tag;
+    }
+
+    setTogglingId(item.id);
+    mutateVisibility({
+      apiPath: "/api/v1/products/category",
+      method: "put",
+      formData: payload,
+      onSuccess() {
+        refetchCategory();
+      },
+    });
+  };
 
   return (
     <>
@@ -66,6 +99,9 @@ export default function CategoryPage() {
                 </TableHead>
                 <TableHead className="text-white text-center">Slug</TableHead>
                 <TableHead className="text-white text-center">Position</TableHead>
+                <TableHead className="text-white text-center">
+                  Visibility
+                </TableHead>
                 <TableHead className="text-right text-white">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -89,6 +125,22 @@ export default function CategoryPage() {
                   </TableCell>
                   <TableCell className="text-center">{item.slug}</TableCell>
                   <TableCell className="text-center">{item.position ?? 0}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-center gap-2">
+                      <Switch
+                        checked={item.is_visible}
+                        disabled={
+                          isVisibilityUpdating && togglingId === item.id
+                        }
+                        onCheckedChange={(checked) =>
+                          onVisibilityChange(item, checked)
+                        }
+                      />
+                      <Badge variant={item.is_visible ? "default" : "secondary"}>
+                        {item.is_visible ? "Public" : "Private"}
+                      </Badge>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-5">
                       <Pencil

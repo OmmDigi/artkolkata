@@ -6,6 +6,7 @@ export const VAddCategory = Joi.object({
   image: Joi.string().required(),
   alt_tag: Joi.string().optional(),
   position: Joi.number().integer().min(0).optional().default(0),
+  is_visible: Joi.boolean().optional().default(true),
 });
 
 export const VUpdateCategory = Joi.object({
@@ -15,6 +16,7 @@ export const VUpdateCategory = Joi.object({
   image: Joi.string().required(),
   alt_tag: Joi.string().optional(),
   position: Joi.number().integer().min(0).optional().default(0),
+  is_visible: Joi.boolean().optional().default(true),
 });
 
 export const VAddSubCategory = Joi.object({

@@ -432,3 +432,6 @@ ALTER TABLE products DROP COLUMN IF EXISTS tags;
 ALTER TABLE products RENAME COLUMN tags_jsonb TO tags;
 
 CREATE INDEX IF NOT EXISTS idx_products_tags_gin ON products USING GIN (tags);
+-- Category visibility (public / private). Private categories are only visible to admins
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT TRUE;
+CREATE INDEX IF NOT EXISTS idx_categories_is_visible ON categories(is_visible);

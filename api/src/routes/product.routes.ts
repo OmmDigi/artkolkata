@@ -50,9 +50,9 @@ productRoute
   .delete("/recipient/:id", isAuthorizedV2(["1-3"]), deleteRecipient)
 
   .post("/category", isAuthorizedV2(["1-3"]), createNewCategory)
-  .get("/category", getCategoryList)
+  .get("/category", checkUser, getCategoryList)
   .put("/category", isAuthorizedV2(["1-3"]), updateCateogry)
-  .get("/category/:id", getSingleCategory)
+  .get("/category/:id", checkUser, getSingleCategory)
   .delete("/category/:id", isAuthorizedV2(["1-3"]), deleteSingleCategory)
 
   .post("/sub-category", isAuthorizedV2(["1-3"]), createNewSubCategory)

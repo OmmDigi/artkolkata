@@ -19,6 +19,7 @@ export interface ICategory {
   image: string;
   alt_tag: string | null;
   position: number;
+  is_visible: boolean;
   sub_categories: ISubCategory[];
 }
 

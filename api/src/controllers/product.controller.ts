@@ -34,8 +34,15 @@ export const createNewCategory = asyncErrorHandler(async (req, res) => {
 
   try {
     await pool.query(
-      "INSERT INTO categories (name, slug, image, alt_tag, position) VALUES ($1, $2, $3, $4, $5)",
-      [value.name, value.slug, value.image, value.alt_tag ?? null, value.position ?? 0],
+      "INSERT INTO categories (name, slug, image, alt_tag, position, is_visible) VALUES ($1, $2, $3, $4, $5, $6)",
+      [
+        value.name,
+        value.slug,
+        value.image,
+        value.alt_tag ?? null,
+        value.position ?? 0,
+        value.is_visible ?? true,
+      ],
     );
 
     httpResponse(res, 201, "New category successfully created");
@@ -51,12 +58,19 @@ export const createNewCategory = asyncErrorHandler(async (req, res) => {
   }
 });
 
-export const getCategoryList = asyncErrorHandler(async (req, res) => {
-  const { TO_STRING } = parsePagination(req);
+export const getCategoryList = asyncErrorHandler(
+  async (req: CustomRequest, res) => {
+    const { TO_STRING } = parsePagination(req);
 
-  const { rows } = await pool.query(
-    `
-    SELECT 
+    // only admin can see the private (hidden) categories, everyone else gets the public one
+    let filter = "";
+    if (!checkPermission(req.token_info?.permissions ?? null, ["1-3"])) {
+      filter = "WHERE c.is_visible = TRUE";
+    }
+
+    const { rows } = await pool.query(
+      `
+    SELECT
       c.*,
       COALESCE(JSON_AGG(sc) FILTER (WHERE sc.id IS NOT NULL), '[]'::json) AS sub_categories
     FROM categories c
@@ -64,22 +78,33 @@ export const getCategoryList = asyncErrorHandler(async (req, res) => {
     LEFT JOIN sub_categories sc
     ON sc.category_id = c.id
 
+    ${filter}
+
     GROUP BY c.id
 
     ORDER BY c.position ASC, c.id DESC ${TO_STRING}
     `,
-  );
+    );
 
-  httpResponse(res, 200, "Category list", rows);
-});
+    httpResponse(res, 200, "Category list", rows);
+  },
+);
 
 export const updateCateogry = asyncErrorHandler(async (req, res) => {
   const value = doValidate(VUpdateCategory, req.body ?? {});
 
   try {
     await pool.query(
-      "UPDATE categories SET name = $1, slug = $2, image = $3, alt_tag = $4, position = $5 WHERE id = $6",
-      [value.name, value.slug, value.image, value.alt_tag ?? null, value.position ?? 0, value.id],
+      "UPDATE categories SET name = $1, slug = $2, image = $3, alt_tag = $4, position = $5, is_visible = $6 WHERE id = $7",
+      [
+        value.name,
+        value.slug,
+        value.image,
+        value.alt_tag ?? null,
+        value.position ?? 0,
+        value.is_visible ?? true,
+        value.id,
+      ],
     );
 
     httpResponse(res, 200, "Category successfully updated");
@@ -97,43 +122,54 @@ export const updateCateogry = asyncErrorHandler(async (req, res) => {
   }
 });
 
-export const getSingleCategory = asyncErrorHandler(async (req, res) => {
-  let filter = "";
-  let placeholdernum = 1;
-  const filterValues: any[] = [];
+export const getSingleCategory = asyncErrorHandler(
+  async (req: CustomRequest, res) => {
+    let filter = "";
+    let placeholdernum = 1;
+    const filterValues: any[] = [];
 
-  if (req.params.id) {
-    if (filter === "") {
-      filter = `WHERE c.id = $${placeholdernum++}`;
-    } else {
-      filter += ` AND c.id = $${placeholdernum++}`;
+    if (req.params.id) {
+      if (filter === "") {
+        filter = `WHERE c.id = $${placeholdernum++}`;
+      } else {
+        filter += ` AND c.id = $${placeholdernum++}`;
+      }
+
+      filterValues.push(req.params.id.toString());
     }
 
-    filterValues.push(req.params.id.toString());
-  }
+    if (req.query.slug) {
+      if (filter === "") {
+        filter = `WHERE c.slug = $${placeholdernum++}`;
+      } else {
+        filter += ` AND c.slug = $${placeholdernum++}`;
+      }
 
-  if (req.query.slug) {
-    if (filter === "") {
-      filter = `WHERE c.slug = $${placeholdernum++}`;
-    } else {
-      filter += ` AND c.slug = $${placeholdernum++}`;
+      filterValues.push(req.query.slug);
     }
 
-    filterValues.push(req.query.slug);
-  }
+    // a private category can only be fetched by the admin
+    if (!checkPermission(req.token_info?.permissions ?? null, ["1-3"])) {
+      if (filter === "") {
+        filter = `WHERE c.is_visible = TRUE`;
+      } else {
+        filter += ` AND c.is_visible = TRUE`;
+      }
+    }
 
-  const { rows } = await pool.query(
-    `
-    SELECT 
+    const { rows } = await pool.query(
+      `
+    SELECT
      c.*
     FROM categories c
     ${filter}
   `,
-    filterValues,
-  );
+      filterValues,
+    );
 
-  return httpResponse(res, 200, "Single category", rows[0]);
-});
+    return httpResponse(res, 200, "Single category", rows[0]);
+  },
+);
 
 export const deleteSingleCategory = asyncErrorHandler(async (req, res) => {
   await pool.query("DELETE FROM categories WHERE id = $1", [req.params.id]);

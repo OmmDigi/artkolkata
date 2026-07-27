@@ -17,6 +17,8 @@ import type { ICategory, IError, IResponse } from "@/types";
 import type { AxiosError } from "axios";
 import FilePicker from "../FilePicker";
 import LabelInput from "../LabelInput";
+import { Switch } from "../ui/switch";
+import { Label } from "../ui/label";
 interface IProps {
   open: boolean;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -40,12 +42,14 @@ export default function CategoryDialog({
     slug: string;
     alt_tag: string | null;
     position: number;
+    is_visible: boolean;
   }>({
     image: "",
     alt_tag: null,
     name: "",
     slug: "",
     position: 0,
+    is_visible: true,
   });
 
   const { data, error, isFetching } = useQuery<
@@ -64,6 +68,7 @@ export default function CategoryDialog({
       image: "",
       alt_tag: null,
       position: 0,
+      is_visible: true,
     });
   };
 
@@ -75,6 +80,7 @@ export default function CategoryDialog({
         image: data.data.image,
         alt_tag: data.data.alt_tag,
         position: data.data.position ?? 0,
+        is_visible: data.data.is_visible ?? true,
       });
     }
     return () => {
@@ -83,11 +89,12 @@ export default function CategoryDialog({
   }, [category_id, isFetching]);
 
   const onFormSubmit = (data: FormData) => {
-    const payload: Record<string, string | number | null> = {
+    const payload: Record<string, string | number | boolean | null> = {
       name: formData.name,
       slug: formData.slug,
       image: data.get("image")?.toString() ?? "",
       position: formData.position,
+      is_visible: formData.is_visible,
     };
 
     const altTag = data.get("alt_tag")?.toString();
@@ -195,6 +202,24 @@ export default function CategoryDialog({
                   }));
                 }}
               />
+
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="is_visible">Category Visibility</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {formData.is_visible
+                      ? "Public - visible to everyone on the website"
+                      : "Private - only admins can see this category"}
+                  </p>
+                </div>
+                <Switch
+                  id="is_visible"
+                  checked={formData.is_visible}
+                  onCheckedChange={(checked) => {
+                    setFormData((prev) => ({ ...prev, is_visible: checked }));
+                  }}
+                />
+              </div>
             </div>
 
             <DialogFooter>
