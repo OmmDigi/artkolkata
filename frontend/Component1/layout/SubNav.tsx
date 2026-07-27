@@ -49,7 +49,7 @@ export default function SubNav() {
   const navItems = [
     { href: "/", label: "Home" },
     { href: "/product", label: "Product" },
-    { href: "/blog", label: "Blogs" },
+    // { href: "/blog", label: "Blogs" },
     { href: "/about", label: "About" },
     { href: "/contact", label: "Contact" },
   ];
