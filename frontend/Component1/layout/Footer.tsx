@@ -33,6 +33,8 @@ export default function Footer() {
     { label: "Shop", href: "/shop" },
     { label: "Reviews", href: "/#reviews" },
     { label: "Styles", href: "/#styles" },
+    { label: "Privacy Policy", href: "/privacy-policy" },
+    { label: "Terms & Conditions", href: "/terms-conditions" },
   ];
 
   const socialLinks = [
@@ -44,11 +46,15 @@ export default function Footer() {
   ];
 
   const contactLinks = [
-    { label: "test@gmail.com", href: "mailto:test@gmail.com", icon: Mail },
-    { label: "+001 234 567 890", href: "tel:+001234567890", icon: Phone },
     {
-      label: "London, England",
-      href: "https://www.google.com/maps/place/London",
+      label: "Surajsarkar1349@gmail.com",
+      href: "Surajsarkar1349@gmail.com",
+      icon: Mail,
+    },
+    { label: "+91 8282023898", href: "tel:+918282023898", icon: Phone },
+    {
+      label: "Duttapukur, North 24 Parganas, West Bengal – 743248",
+      href: "https://maps.google.com/maps?q=Arabinda%20Pally,%20Duttapukur,%20Kolkata,%20N.%2024%20Pgs,%20743248,%20West%20Bengal&t=&z=14&ie=UTF8&iwloc=&output=embed",
       icon: MapPin,
     },
   ];
@@ -82,7 +88,6 @@ export default function Footer() {
             </Link>
           </div>
           <div className="flex  gap-20 md:gap-30 ">
-
             {/* Quick Links */}
             <div>
               <h5 className="text-lg font-semibold mb-6">Quick Links</h5>

@@ -15,6 +15,11 @@ import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useCartStore } from "@/store/useCartStore";
 import { useWishlistStore } from "@/store/useWishlistStore";
+import {
+  ProductCard,
+  mapApiProduct,
+  ApiProduct,
+} from "@/Component1/ShopSection";
 
 const ProductPage = () => {
   const [mainImage, setMainImage] = useState("");
@@ -136,6 +141,21 @@ const ProductPage = () => {
   }, [selectedOptions]);
 
   const fullProduct = (product as any)?.data;
+
+  const { data: relatedData } = useQuery({
+    queryKey: ["Related-Products", fullProduct?.category_slug],
+    queryFn: () =>
+      getRequest<{ data: ApiProduct[] }>(
+        `/api/v1/products?category=${fullProduct?.category_slug}`,
+      ),
+    enabled: !!fullProduct?.category_slug,
+  });
+
+  const relatedProducts = relatedData?.data || [];
+  const relatedMapped = relatedProducts
+    .filter((p: ApiProduct) => p.slug !== params?.slug)
+    .slice(0, 4)
+    .map(mapApiProduct);
 
   useEffect(() => {
     if (selectedVariant?.images?.length > 0) {
@@ -671,43 +691,21 @@ const ProductPage = () => {
         </div>
 
         {/* Accordion Sections */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Shipping & Returns Section */}
-          <div>
-            <button
-              onClick={() => setExpandedTab(expandedTab === 2 ? null : 2)}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition"
-            >
-              <span className="text-lg font-semibold text-gray-900">
-                Shipping & Returns
-              </span>
-              <ChevronDown
-                className={`w-5 h-5 text-gray-600 transition ${
-                  expandedTab === 2 ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            {expandedTab === 2 && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-4">
-                <p className="text-gray-700">
-                  Free Standard Shipping with any online purchase of $50
-                  (merchandise subtotal excludes store pick up items;
-                  merchandise subtotal is calculated before sales tax, before
-                  gift wrap charges, and after any discounts or coupons). Truck
-                  delivery and shipping surcharges on over-sized or extremely
-                  heavy items will still apply (these charges are indicated on
-                  the appropriate product information pages and will be
-                  displayed in the shipping subtotal of your order). Orders
-                  typically arrive within 3-6 business days. Items shipped
-                  directly from the vendor or to Alaska and Hawaii have longer
-                  delivery lead times. This offer does not apply to Alaska,
-                  Hawaii, Puerto Rico or Business Direct orders.
-                </p>
-              </div>
-            )}
+      </div>
+
+      {/* Related Products Section */}
+      {relatedMapped.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 py-2">
+          <h2 className="text-2xl font-bold text-black mb-6">
+            Related Products
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {relatedMapped.map((prod) => (
+              <ProductCard key={prod.id} product={prod} />
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Image Modal */}
       {isModalOpen && zoomImage && (

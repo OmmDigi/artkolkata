@@ -11,7 +11,7 @@ import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "@/store/useWishlistStore";
 import { useCartStore } from "@/store/useCartStore";
 
-interface Product {
+export interface Product {
   id: any;
   name: string;
   href: string;
@@ -28,7 +28,7 @@ interface ApiCategory {
   slug?: string;
 }
 
-interface ApiProduct {
+export interface ApiProduct {
   id?: string | number;
   _id?: string;
   slug?: string;
@@ -43,7 +43,7 @@ interface ApiProduct {
   category_id?: string | number;
 }
 
-const mapApiProduct = (item: ApiProduct): Product => {
+export const mapApiProduct = (item: ApiProduct): Product => {
   const image1 =
     item.images?.[0]?.image ??
     "https://framerusercontent.com/images/dfydRQ0hineaQjqYigxtJ3UUI.jpg";
@@ -63,7 +63,7 @@ const mapApiProduct = (item: ApiProduct): Product => {
   };
 };
 
-function ProductCard({ product }: { product: Product }) {
+export function ProductCard({ product }: { product: Product }) {
   const router = useRouter();
   const [hoveredImage, setHoveredImage] = useState(false);
   const [loadingIcon, setLoadingIcon] = useState<"cart" | "wish" | null>(null);

@@ -31,16 +31,28 @@ const ProductsPage = () => {
   }>({ category: true });
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setExpandedFilters({ category: false });
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setExpandedFilters((prev) => ({ ...prev, category: false }));
+      } else {
+        setExpandedFilters((prev) => ({ ...prev, category: true }));
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      handleResize();
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
     }
   }, []);
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   // selected category/subcategory states (slug or name whichever is present)
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedSubCategory, setSelectedSubCategory] = useState<string>("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>(
+    [],
+  );
 
   const { wishlist, toggleWishlist } = useWishlistStore();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -67,20 +79,9 @@ const ProductsPage = () => {
     queryFn: () => getRequest(`/api/v1/products/category?limit=-1`),
   });
 
-  let params = new URLSearchParams();
   const buildProductsUrl = () => {
-    if (selectedCategory) {
-      params.set("category", selectedCategory);
-    }
-    if (selectedSubCategory) {
-      params.set("sub_category", selectedSubCategory);
-    }
-    if (!selectedCategory && !selectedSubCategory) {
-      params.set("page", String(currentPage));
-    }
-    if (new URLSearchParams(searchParams.toString())) {
-      params = new URLSearchParams(searchParams.toString());
-    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(currentPage));
     const query = params.toString();
     return `/api/v1/products${query ? `?${query}` : ""}`;
   };
@@ -95,8 +96,8 @@ const ProductsPage = () => {
     queryKey: [
       "all-products",
       currentPage,
-      selectedCategory,
-      selectedSubCategory,
+      selectedCategories,
+      selectedSubCategories,
       searchParams.toString(),
     ],
     queryFn: () => getRequest(buildProductsUrl()),
@@ -126,16 +127,14 @@ const ProductsPage = () => {
     setSortedProducts(filtered);
   }, [products, sortBy]);
 
-  // On mount: read URL search params and set selectedCategory/subCategory accordingly
+  // On mount: read URL search params and set selectedCategories/subCategories accordingly
   useEffect(() => {
-    const cat = searchParams?.get("category") ?? "";
-    const sub = searchParams?.get("sub_category") ?? "";
-    if (cat) setSelectedCategory(cat);
-    if (sub) setSelectedSubCategory(sub);
-    // If URL contains category/sub_category, we should load that data immediately.
-    // Because our query depends on selectedCategory/selectedSubCategory, it will refetch automatically.
+    const cats = searchParams?.getAll("category") ?? [];
+    const subs = searchParams?.getAll("sub_category") ?? [];
+    setSelectedCategories(cats);
+    setSelectedSubCategories(subs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   // Loading / Error UI
   if (isLoading && isLoadingCategory) {
@@ -184,17 +183,22 @@ const ProductsPage = () => {
 
   // When user clicks a category option
   const handleCategorySelect = (option: any) => {
-    const key = getOptionKey(option);
-    // toggle behavior: if clicking same category, unselect
-    const newCategory = selectedCategory === key ? "" : String(key);
-    setSelectedCategory(newCategory);
-    // reset subcategory if category changed/deselected
-    if (selectedCategory !== newCategory) {
-      setSelectedSubCategory("");
+    const key = String(getOptionKey(option));
+    let newCategories = [...selectedCategories];
+
+    if (newCategories.includes(key)) {
+      newCategories = newCategories.filter((c) => c !== key);
+    } else {
+      newCategories.push(key);
     }
+
+    setSelectedCategories(newCategories);
+
     // update URL search params
     const params = new URLSearchParams();
-    if (newCategory) params.set("category", newCategory);
+    newCategories.forEach((c) => params.append("category", c));
+    selectedSubCategories.forEach((s) => params.append("sub_category", s));
+
     router.push(`${window.location.pathname}?${params.toString()}`);
     // set to page 1
     setCurrentPage(1);
@@ -202,20 +206,28 @@ const ProductsPage = () => {
 
   // When user clicks a subcategory option
   const handleSubCategorySelect = (child: any, parentCategory?: any) => {
-    const subKey = getOptionKey(child);
-    const catKey = parentCategory
-      ? getOptionKey(parentCategory)
-      : selectedCategory;
-    // If the parent category isn't selected, set it too.
-    const newCategory = catKey ? String(catKey) : "";
-    const newSub = selectedSubCategory === subKey ? "" : String(subKey);
+    const subKey = String(getOptionKey(child));
+    const catKey = parentCategory ? String(getOptionKey(parentCategory)) : null;
 
-    setSelectedCategory(newCategory);
-    setSelectedSubCategory(newSub);
+    let newCategories = [...selectedCategories];
+    let newSubCategories = [...selectedSubCategories];
+
+    if (catKey && !newCategories.includes(catKey)) {
+      newCategories.push(catKey);
+    }
+
+    if (newSubCategories.includes(subKey)) {
+      newSubCategories = newSubCategories.filter((s) => s !== subKey);
+    } else {
+      newSubCategories.push(subKey);
+    }
+
+    setSelectedCategories(newCategories);
+    setSelectedSubCategories(newSubCategories);
 
     const params = new URLSearchParams();
-    if (newCategory) params.set("category", newCategory);
-    if (newSub) params.set("sub_category", newSub);
+    newCategories.forEach((c) => params.append("category", c));
+    newSubCategories.forEach((s) => params.append("sub_category", s));
 
     router.push(`${window.location.pathname}?${params.toString()}`);
     setCurrentPage(1);
@@ -251,8 +263,9 @@ const ProductsPage = () => {
             {options?.data?.length > 0 &&
               options.data.map((option: any) => {
                 const optKey = getOptionKey(option);
-                const isCategoryChecked =
-                  String(selectedCategory) === String(optKey);
+                const isCategoryChecked = selectedCategories.includes(
+                  String(optKey),
+                );
 
                 return (
                   <li key={optKey}>
@@ -279,8 +292,9 @@ const ProductsPage = () => {
                         <ul className="ml-6 mt-2 space-y-2">
                           {option.sub_categories.map((child: any) => {
                             const childKey = getOptionKey(child);
-                            const isSubChecked =
-                              String(selectedSubCategory) === String(childKey);
+                            const isSubChecked = selectedSubCategories.includes(
+                              String(childKey),
+                            );
 
                             return (
                               <li key={childKey}>
@@ -325,8 +339,8 @@ const ProductsPage = () => {
   const handleClearAll = () => {
     const params = new URLSearchParams(searchParams.toString());
 
-    setSelectedCategory("");
-    setSelectedSubCategory("");
+    setSelectedCategories([]);
+    setSelectedSubCategories([]);
     setSortBy("");
     setCurrentPage(1);
     // setSortedProducts([]);
@@ -346,10 +360,12 @@ const ProductsPage = () => {
           <a href="/" className="hover:text-gray-700">
             Home
           </a>
-          <span className="mx-2">/</span>
-          <span className="text-gray-900">{selectedCategory}</span>
-          {selectedSubCategory && <span className="mx-2">/</span>}
-          <span className="text-gray-900">{selectedSubCategory}</span>
+          {selectedCategories.length > 0 && <span className="mx-2">/</span>}
+          <span className="text-gray-900">{selectedCategories.join(", ")}</span>
+          {selectedSubCategories.length > 0 && <span className="mx-2">/</span>}
+          <span className="text-gray-900">
+            {selectedSubCategories.join(", ")}
+          </span>
         </nav>
       </div>
 
@@ -446,41 +462,42 @@ const ProductsPage = () => {
           </div>
 
           {/* Pagination (only when no category/subcategory filter present) */}
-          {!selectedCategory && !selectedSubCategory && (
-            <nav className="flex justify-center items-center mt-5 gap-2">
-              <button
-                onClick={() => {
-                  scrollToTop();
-                  if (currentPage > 1) {
-                    setCurrentPage((p) => p - 1);
-                  }
-                }}
-                className={`w-10 h-10 flex items-center justify-center border text-gray-800 border-gray-300
+          {selectedCategories.length === 0 &&
+            selectedSubCategories.length === 0 && (
+              <nav className="flex justify-center items-center mt-5 gap-2">
+                <button
+                  onClick={() => {
+                    scrollToTop();
+                    if (currentPage > 1) {
+                      setCurrentPage((p) => p - 1);
+                    }
+                  }}
+                  className={`w-10 h-10 flex items-center justify-center border text-gray-800 border-gray-300
                   hover:border-gray-400 rounded transition-colors
                   ${currentPage === 1 ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                ←
-              </button>
-              <p className="text-gray-800">{currentPage}</p>
-              <button
-                onClick={() => {
-                  if ((products as any)?.data?.length === 10) {
-                    setCurrentPage((p) => p + 1);
-                    scrollToTop();
-                  }
-                }}
-                className={`w-10 h-10 flex items-center justify-center border text-gray-800 border-gray-300
+                >
+                  ←
+                </button>
+                <p className="text-gray-800">{currentPage}</p>
+                <button
+                  onClick={() => {
+                    if ((products as any)?.data?.length === 10) {
+                      setCurrentPage((p) => p + 1);
+                      scrollToTop();
+                    }
+                  }}
+                  className={`w-10 h-10 flex items-center justify-center border text-gray-800 border-gray-300
                   hover:border-gray-400 rounded transition-colors
                   ${
                     (products as any)?.data?.length < 10
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}
-              >
-                →
-              </button>
-            </nav>
-          )}
+                >
+                  →
+                </button>
+              </nav>
+            )}
         </div>
       </div>
       {/* </div> */}

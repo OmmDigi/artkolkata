@@ -1,0 +1,32 @@
+config:
+  target: "https://clexenrentals.com"
+  phases:
+    - duration: 60 # How long the test will run (in seconds)
+      arrivalRate: 5 # How many requests to send per second
+      name: "Sustained Load Phase"
+
+scenarios:
+  - name: "Submit Quote Test"
+    flow:
+      - post:
+          url: "/Submit_quote"
+          formData:
+            _token: "g9j112BacJtP4SgvwqYrmj2wmQlS200SRptObF08"
+            service: "rent"
+            category: "24"
+            sub_category: "55"
+            child_category: "183"
+            company_name: "qwerqwre"
+            first_name: "qwewqt"
+            last_name: "uytr"
+            mobile: "8888888888"
+            email: "sadsa@fsdf.in"
+            country: "95"
+            state: "4117"
+            city: "55134"
+            quantity: "2"
+            start_date: "2026-07-31"
+            duration_type: "Daily"
+            duration_time: "5000"
+            quote_desc: "gfdgfdg"
+            product_name: ""

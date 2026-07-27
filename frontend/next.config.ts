@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/uploads/:path*",
-        destination: `${process.env.UPLOAD_API_BASE_URL}/uploads/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL || "http://localhost:8080"}/uploads/:path*`,
       },
     ];
   },
