@@ -47,8 +47,8 @@ export default function Footer() {
 
   const contactLinks = [
     {
-      label: "Surajsarkar1349@gmail.com",
-      href: "Surajsarkar1349@gmail.com",
+      label: "artkolkata921@gmail.com",
+      href: "artkolkata921@gmail.com",
       icon: Mail,
     },
     { label: "+91 8282023898", href: "tel:+918282023898", icon: Phone },
