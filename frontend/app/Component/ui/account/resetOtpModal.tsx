@@ -26,6 +26,7 @@ interface FormState {
 interface VerifyOtpPayload {
   otp: string;
   email: string;
+  newpassword?: string;
 }
 
 interface OtpResponse {
@@ -129,6 +130,7 @@ const ResetOtpModal: FC<ResetOtpModalProps> = ({ onClose, email }) => {
     verifyOtp({
       otp: otpValue,
       email: email,
+      password: form.password,
     } as any);
   };
 

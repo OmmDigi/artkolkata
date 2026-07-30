@@ -13,12 +13,10 @@ const CheckoutPage = () => {
   const [paymentMethod, setPaymentMethod] = useState("cheque");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showCoupon, setShowCoupon] = useState(false);
-  const [shippingMethod, setShippingMethod] = useState("flat_rate:1");
   const { removeFromCart, updateQuantity, cart } = useCartStore();
 
   const [billingDetails, setBillingDetails] = useState({
-    firstName: "",
-    lastName: "",
+    fullName: "",
     companyName: "",
     country: "",
     streetAddress: "",
@@ -151,8 +149,8 @@ const CheckoutPage = () => {
       : 0;
 
   const afterDiscount = subtotal - discountAmount;
-  const shippingCost = shippingMethod === "free_shipping:2" ? 0 : 10;
-  const vat = 7.15;
+  const shippingCost = 0;
+  const vat = 0;
   const total = afterDiscount + shippingCost + vat;
 
   const countries = [
@@ -201,33 +199,18 @@ const CheckoutPage = () => {
                   Billing Details
                 </h2>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        First Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        name="firstName"
-                        value={billingDetails.firstName}
-                        onChange={handleInputChange}
-                        type="text"
-                        placeholder="First Name"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Last Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        name="lastName"
-                        value={billingDetails.lastName}
-                        onChange={handleInputChange}
-                        type="text"
-                        placeholder="Last Name"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      name="fullName"
+                      value={billingDetails.fullName}
+                      onChange={handleInputChange}
+                      type="text"
+                      placeholder="Full Name"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                    />
                   </div>
 
                   <div>
@@ -480,53 +463,7 @@ const CheckoutPage = () => {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-gray-900">
-                    Shipping
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="shipping"
-                        value="flat_rate:1"
-                        checked={shippingMethod === "flat_rate:1"}
-                        onChange={(e) => setShippingMethod(e.target.value)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm text-gray-700">
-                        Flat rate: ₹10.00
-                      </span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="shipping"
-                        value="free_shipping:2"
-                        checked={shippingMethod === "free_shipping:2"}
-                        onChange={(e) => setShippingMethod(e.target.value)}
-                        className="w-4 h-4"
-                      />
-                      <span className="text-sm text-gray-700">
-                        Free shipping
-                      </span>
-                    </label>
-                  </div>
-                </div>
 
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Shipping Cost</span>
-                  <span className="font-semibold text-gray-900">
-                    ₹{shippingCost.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">VAT</span>
-                  <span className="font-semibold text-gray-900">
-                    ₹{vat.toFixed(2)}
-                  </span>
-                </div>
               </div>
 
               <div className="flex justify-between items-center text-lg">

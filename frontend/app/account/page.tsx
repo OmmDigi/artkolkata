@@ -1,12 +1,20 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SignIn from "../Component/ui/account/signIn";
 import Register from "../Component/ui/account/register";
 import Otp1 from "../Component/ui/account/Otp1";
+import Profile from "../Component/ui/account/Profile";
+import { useIsLoggedIn } from "@/store/useUserStore";
 
 const Account = () => {
   const [activeTab, setActiveTab] = useState(0);
+  const isLoggedIn = useIsLoggedIn();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [pendingOtpEmail, setPendingOtpEmail] = useState("");
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
@@ -40,6 +48,12 @@ const Account = () => {
     "pendingOtpEmail:",
     pendingOtpEmail,
   );
+
+  if (!mounted) return null;
+
+  if (isLoggedIn) {
+    return <Profile />;
+  }
 
   return (
     <div className=" bg-white p-10">
