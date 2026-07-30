@@ -49,17 +49,8 @@ app.use(
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",")
   : ["http://localhost:3000", "http://localhost:3001", "http://localhost:8080"];
-
-if (process.env.NODE_ENV === "development") {
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        callback(null, true); // allow every origin
-      },
-      credentials: true,
-    }),
-  );
-} else {
+  
+if (process.env.NODE_ENV === "production") {
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -68,6 +59,15 @@ if (process.env.NODE_ENV === "development") {
         } else {
           callback(new Error("Not allowed by CORS"));
         }
+      },
+      credentials: true,
+    }),
+  );
+} else {
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        callback(null, true); // allow every origin
       },
       credentials: true,
     }),

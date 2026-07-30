@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Minus } from "lucide-react";
 import { Button } from "./ui/button";
 import LabelInput from "./LabelInput";
@@ -14,12 +14,16 @@ interface IProps {
   varientOptionsValues: { options: Option[]; variants: Variant[] };
   originalPrice: string;
   defaultCompareAtPrice: string;
+  productOptions?: Option[];
+  productVariants?: Variant[];
 }
 
 export default function ShopifyVariants({
   varientOptionsValues,
   originalPrice,
   defaultCompareAtPrice,
+  productOptions,
+  productVariants,
 }: IProps) {
   const params = useParams();
   const isNewProduct = params?.id == "new";
@@ -41,8 +45,25 @@ export default function ShopifyVariants({
   const [nextOptionId, setNextOptionId] = useState(2);
   const [nextValueId, setNextValueId] = useState(3);
 
+  const skipNextGenerate = useRef(false);
+
+  // Resync from fetched product data once it arrives (mount happens before fetch resolves)
+  useEffect(() => {
+    if (!productOptions) return;
+    skipNextGenerate.current = true;
+    setOptions(productOptions);
+    setVariants(productVariants ?? []);
+    varientOptionsValues.options = productOptions;
+    varientOptionsValues.variants = productVariants ?? [];
+  }, [productOptions, productVariants]);
+
   // Generate all variant combinations
   useEffect(() => {
+    if (skipNextGenerate.current) {
+      skipNextGenerate.current = false;
+      return;
+    }
+
     const generateVariants = () => {
       if (
         options.length === 0 ||
@@ -67,30 +88,32 @@ export default function ShopifyVariants({
 
       generate(0, []);
 
-      const newVariants = combinations.map((combo, idx) => {
-        const existing = variants.find(
-          (v) =>
-            v.combination.length === combo.length &&
-            v.combination.every((val, i) => val === combo[i])
-        );
+      setVariants((prevVariants) => {
+        const newVariants = combinations.map((combo, idx) => {
+          const existing = prevVariants.find(
+            (v) =>
+              v.combination.length === combo.length &&
+              v.combination.every((val, i) => val === combo[i])
+          );
 
-        return (
-          existing || {
-            id: Date.now() + idx,
-            combination: combo,
-            isNew: true,
-            price: originalPrice,
-            compareAtPrice: defaultCompareAtPrice,
-            quantity: "10",
-            sku: combo.join(" / "),
-            available: true,
-            images: [],
-          }
-        );
+          return (
+            existing || {
+              id: Date.now() + idx,
+              combination: combo,
+              isNew: true,
+              price: originalPrice,
+              compareAtPrice: defaultCompareAtPrice,
+              quantity: "10",
+              sku: combo.join(" / "),
+              available: true,
+              images: [],
+            }
+          );
+        });
+
+        varientOptionsValues.variants = newVariants;
+        return newVariants;
       });
-
-      varientOptionsValues.variants = newVariants;
-      setVariants(newVariants);
     };
 
     generateVariants();

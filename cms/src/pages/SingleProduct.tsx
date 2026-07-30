@@ -84,14 +84,16 @@ export default function SingleProduct() {
 
     if (!product) return;
 
-    console.log("product?.options", product?.options)
+    // console.log("product?.options", product?.options)
+    // console.log("product?.variants", product?.variants)
 
     varientOptionsValues.current.options =
       product?.options ?? DEFAULT_PRODUCT_VARIANT_OPTIONS;
     varientOptionsValues.current.variants = product?.variants ?? [];
+
     editorData.current = product?.description_json ?? undefined;
 
-    console.log("varientOptionsValues.current", varientOptionsValues.current)
+    // console.log("varientOptionsValues.current", varientOptionsValues.current)
 
     setProductImages(
       product?.images?.length
@@ -104,7 +106,7 @@ export default function SingleProduct() {
     setHasVarient(product.available_quantity <= 0);
     setProductSlug(product.slug ?? null);
     setProductTags(Object.keys(product.tags ?? {}));
-  }, [dataUpdatedAt]);
+  }, [dataUpdatedAt, isProductFetching, ]);
 
   const handleFormSubmit = (formData: FormData) => {
     let payload: Record<string, any> = {};
@@ -490,6 +492,8 @@ export default function SingleProduct() {
                     varientOptionsValues={varientOptionsValues.current}
                     originalPrice={productPrice.originalPrice}
                     defaultCompareAtPrice={productPrice.compairAtPrice}
+                    productOptions={productData[0]?.options}
+                    productVariants={productData[0]?.variants}
                   />
                 </Section>
               ) : null}
