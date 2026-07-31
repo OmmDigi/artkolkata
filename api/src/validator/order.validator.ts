@@ -37,6 +37,36 @@ export const VCreateOrder = Joi.object({
   }),
 });
 
+export const VGetPriceBreakdown = Joi.object({
+  pincode: Joi.string()
+    .length(6)
+    .pattern(/^\d{6}$/)
+    .required()
+    .messages({ "string.pattern.base": "Pincode must be 6 digits" }),
+
+  paymentMethod: Joi.string().valid("ONLINE", "COD").required(),
+
+  product: Joi.object({
+    code: Joi.string().optional(),
+    product_ids: Joi.array()
+      .items(
+        Joi.object({
+          id: Joi.number().required(),
+          quantity: Joi.number().required(),
+        }),
+      )
+      .required(),
+    varient_ids: Joi.array()
+      .items(
+        Joi.object({
+          id: Joi.number().required(),
+          quantity: Joi.number().required(),
+        }),
+      )
+      .required(),
+  }).required(),
+});
+
 export const VUpdateOrderStatus = Joi.object({
   order_id: Joi.number().optional(),
   order_item_id: Joi.when("order_id", {

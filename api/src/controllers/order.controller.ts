@@ -28,6 +28,7 @@ import { parsePagination } from "../utils/parsePagination";
 import {
   VCancelOrder,
   VCreateOrder,
+  VGetPriceBreakdown,
   VReturnOrder,
   VTrackOrder,
   VUpdateOrderStatus,
@@ -325,6 +326,71 @@ export const createOrder = asyncErrorHandler(
     });
   },
 );
+
+// Cart summary preview — subtotal, discount, GST, shipping charge, total.
+// Same math as createOrder's price breakdown, but read-only: no order or
+// Bigship shipment is created. Used by the frontend to show full payment
+// details (shipping, GST, etc.) before the customer places the order.
+export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
+  const value = doValidate<{
+    pincode: string;
+    paymentMethod: "ONLINE" | "COD";
+    product: {
+      code?: string;
+      product_ids: { id: number; quantity: number }[];
+      varient_ids: { id: number; quantity: number }[];
+    };
+  }>(VGetPriceBreakdown, req.body ?? {});
+
+  const { priceAfterDiscount, subTotal, productsInfo, varientsInfo } =
+    await calcluteCartAmounts(
+      value.product.varient_ids,
+      value.product.product_ids,
+      value.product.code,
+    );
+
+  const cartDimensionInputs: IShipmentDimensionInput[] = [];
+  for (const v of value.product.varient_ids) {
+    const info = varientsInfo.find((item) => item.id == v.id);
+    if (info) cartDimensionInputs.push({ ...info, quantity: v.quantity });
+  }
+  for (const p of value.product.product_ids) {
+    const info = productsInfo.find((item) => item.id == p.id);
+    if (info) cartDimensionInputs.push({ ...info, quantity: p.quantity });
+  }
+  const cartWeight = aggregateShipmentDimensions(cartDimensionInputs).weight;
+
+  const serviceability = await BigshipService.checkServiceability(
+    value.pincode,
+    cartWeight,
+    subTotal,
+    value.paymentMethod === "COD",
+  );
+
+  if (!serviceability.success) {
+    throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
+  }
+
+  const storeSettings = await fetchSettingsFromDb();
+  const gstPercentage = storeSettings.gst_percentage;
+  const discountAmount = subTotal - priceAfterDiscount;
+  const baseAmount = priceAfterDiscount !== 0 ? priceAfterDiscount : subTotal;
+  const gstAmount = parseFloat((baseAmount * (gstPercentage / 100)).toFixed(2));
+  const shippingCharge = serviceability.serviceable ? serviceability.shippingCharge ?? 0 : 0;
+  const total = parseFloat((baseAmount + gstAmount + shippingCharge).toFixed(2));
+
+  httpResponse(res, 200, "Price breakdown", {
+    subtotal: subTotal,
+    discount: discountAmount,
+    gst_percentage: gstPercentage,
+    gst_amount: gstAmount,
+    shipping_charge: shippingCharge,
+    total,
+    serviceable: serviceability.serviceable,
+    courier_name: serviceability.courierName ?? null,
+    estimated_days: serviceability.estimatedDays ?? null,
+  });
+});
 
 // ============================================================
 // HELPER — create Bigship order in background after DB commit

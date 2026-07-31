@@ -5,6 +5,7 @@ import {
   doReturn,
   downloadInvoice,
   getOrderList,
+  getPriceBreakdown,
   getSingleOrderInfo,
   trackOrder,
   updateOrderStatus,
@@ -15,6 +16,7 @@ import { isAuthorizedV2 } from "../middleware/isAuthorizedV2";
 export const orderRoutes = Router();
 orderRoutes
   .post("/place-order", isAuthenticated, createOrder)
+  .post("/price-breakdown", getPriceBreakdown)
   .get("/", isAuthorizedV2(["1-5"]), getOrderList)
   .get("/track", trackOrder)
   .post("/return", isAuthenticated, doReturn)

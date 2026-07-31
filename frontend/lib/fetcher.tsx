@@ -7,11 +7,19 @@ const API: AxiosInstance = axios.create({
   headers: {
     "ngrok-skip-browser-warning": "true",
     "Content-Type": "application/json",
-    Authorization:
-      typeof window !== "undefined" && localStorage.getItem("token")
-        ? `Bearer ${localStorage.getItem("token")}`
-        : "",
   },
+});
+
+// Read the token fresh on every request instead of once at module load,
+// so a login/logout after the app has already booted is picked up immediately.
+API.interceptors.request.use((config) => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    delete config.headers.Authorization;
+  }
+  return config;
 });
 
 // Debug: Check base URL during development
