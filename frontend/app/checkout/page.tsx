@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Lock, ShoppingBag, TrashIcon } from "lucide-react";
+import { ChevronDown, Lock, ShoppingBag, TrashIcon, MapPin, CreditCard } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -10,22 +10,20 @@ import { toast } from "react-toastify";
 
 const CheckoutPage = () => {
   const [shipDifferent, setShipDifferent] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("cheque");
+  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "COD">("ONLINE");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showCoupon, setShowCoupon] = useState(false);
   const { removeFromCart, updateQuantity, cart } = useCartStore();
 
-  const [billingDetails, setBillingDetails] = useState({
+  const [shippingDetails, setShippingDetails] = useState({
     fullName: "",
-    companyName: "",
-    country: "",
-    streetAddress: "",
-    apartment: "",
-    city: "",
-    county: "",
-    postcode: "",
-    phone: "",
     email: "ommdigitaldebu@gmail.com",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    country: "India",
   });
 
   const [couponCode, setCouponCode] = useState("");
@@ -118,8 +116,8 @@ const CheckoutPage = () => {
   const handleOrderPlace = async () => {
     if (!agreedToTerms) return;
     const orderData: Record<string, any> = {
-      shippingDetails: billingDetails,
-      paymentMethod: paymentMethod === "cheque" ? "ONLINE" : "COD",
+      shippingDetails,
+      paymentMethod,
     };
 
     if (formData.code !== "") {
@@ -167,10 +165,10 @@ const CheckoutPage = () => {
   ];
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
-    setBillingDetails((prev) => ({ ...prev, [name]: value }));
+    setShippingDetails((prev) => ({ ...prev, [name]: value }));
   };
 
   useEffect(() => {
@@ -191,161 +189,103 @@ const CheckoutPage = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Billing & Shipping */}
+          {/* Left Column - Shipping Details & Payment */}
           <div className="lg:col-span-2 space-y-6">
-            <form className="space-y-6">
-              <div className="bg-white shadow-sm border border-gray-200 p-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Billing Details
-                </h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      name="fullName"
-                      value={billingDetails.fullName}
-                      onChange={handleInputChange}
-                      type="text"
-                      placeholder="Full Name"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Company Name{" "}
-                      <span className="text-gray-500 text-xs">(optional)</span>
-                    </label>
-                    <input
-                      name="companyName"
-                      value={billingDetails.companyName}
-                      onChange={handleInputChange}
-                      type="text"
-                      placeholder="Company Name"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Country / Region <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="country"
-                      value={billingDetails.country}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition bg-white"
-                    >
-                      <option value="">Select a country / region…</option>
-                      {countries.map((country) => (
-                        <option key={country} value={country}>
-                          {country}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Street address <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      name="streetAddress"
-                      value={billingDetails.streetAddress}
-                      onChange={handleInputChange}
-                      type="text"
-                      placeholder="House number and street name"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition mb-3"
-                    />
-                    <input
-                      name="apartment"
-                      value={billingDetails.apartment}
-                      onChange={handleInputChange}
-                      type="text"
-                      placeholder="Apartment, suite, unit, etc. (optional)"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Town / City <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      name="city"
-                      value={billingDetails.city}
-                      onChange={handleInputChange}
-                      type="text"
-                      placeholder="Town / City"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        County{" "}
-                        <span className="text-gray-500 text-xs">
-                          (optional)
-                        </span>
-                      </label>
-                      <input
-                        name="county"
-                        value={billingDetails.county}
-                        onChange={handleInputChange}
-                        type="text"
-                        placeholder="County"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Postcode <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        name="postcode"
-                        value={billingDetails.postcode}
-                        onChange={handleInputChange}
-                        type="text"
-                        placeholder="Postcode"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        name="phone"
-                        value={billingDetails.phone}
-                        onChange={handleInputChange}
-                        type="tel"
-                        placeholder="Phone"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Email Address <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        name="email"
-                        value={billingDetails.email}
-                        onChange={handleInputChange}
-                        type="email"
-                        placeholder="Email Address"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      />
-                    </div>
-                  </div>
-                </div>
+            {/* SHIPPING DETAILS */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <div className="flex items-center mb-6 space-x-3">
+                <MapPin className="text-gray-800" />
+                <h2 className="text-xl font-bold text-gray-900">Shipping Details</h2>
               </div>
-            </form>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Fields */}
+                {["fullName", "email", "phone"].map((name) => (
+                  <div
+                    key={name}
+                    className={name === "fullName" ? "md:col-span-2" : ""}
+                  >
+                    <label className="text-sm font-semibold text-gray-900 mb-2 block capitalize">
+                      {name.replace(/([A-Z])/g, " $1")} <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      name={name}
+                      value={(shippingDetails as any)[name]}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                      placeholder={name === "fullName" ? "Full Name" : name === "email" ? "Email Address" : "Phone Number"}
+                    />
+                  </div>
+                ))}
+
+                {/* Address */}
+                <div className="md:col-span-2 mt-2">
+                  <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                    Address <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    name="address"
+                    value={shippingDetails.address}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                    placeholder="House number, street name, apartment, etc."
+                  />
+                </div>
+
+                {/* City / State / Pincode / Country */}
+                {["city", "state", "pincode", "country"].map((name) => (
+                  <div key={name} className="mt-2">
+                    <label className="block text-sm font-semibold text-gray-900 mb-2 capitalize">
+                      {name} <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      name={name}
+                      disabled={name === "country"}
+                      value={(shippingDetails as any)[name]}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition ${name === "country" ? "bg-gray-100 text-gray-500" : ""}`}
+                      placeholder={`Enter ${name}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* PAYMENT SECTION */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+              <div className="flex items-center mb-6 space-x-3">
+                <CreditCard className="text-gray-800" />
+                <h2 className="text-xl font-bold text-gray-900">Payment Method</h2>
+              </div>
+              <div className="flex flex-col sm:flex-row justify-around gap-4 sm:gap-6">
+                {["ONLINE", "COD"].map((method) => (
+                  <label
+                    key={method}
+                    className={`flex flex-1 items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                      paymentMethod === method
+                        ? "border-gray-900 bg-gray-50 text-gray-900"
+                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment"
+                      value={method}
+                      checked={paymentMethod === method}
+                      onChange={(e) =>
+                        setPaymentMethod(e.target.value as "ONLINE" | "COD")
+                      }
+                      className="hidden"
+                    />
+                    <span className="font-semibold text-lg flex items-center gap-2">
+                      {method === "ONLINE" && "💳 Pay Online"}
+                      {method === "COD" && "💵 Cash on Delivery"}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Right Column - Order Summary */}
@@ -542,43 +482,7 @@ const CheckoutPage = () => {
               </div>
 
               <div className="mt-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-6">
-                  Payment Method
-                </h3>
-                <div className="space-y-4">
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="payment"
-                        value="cheque"
-                        checked={paymentMethod === "cheque"}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-4 h-4"
-                      />
-                      <span className="font-semibold text-gray-900">
-                        Online payments
-                      </span>
-                    </label>
-                  </div>
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="payment"
-                        value="cod"
-                        checked={paymentMethod === "cod"}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-4 h-4"
-                      />
-                      <span className="font-semibold text-gray-900">
-                        Cash on delivery
-                      </span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="mt-6 space-y-4 pt-6 border-t border-gray-200">
+                <div className="space-y-4 pt-6 border-t border-gray-200">
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input
                       type="checkbox"
