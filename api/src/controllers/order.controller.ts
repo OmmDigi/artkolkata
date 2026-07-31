@@ -33,7 +33,11 @@ import {
   VUpdateOrderStatus,
 } from "../validator/order.validator";
 import DelhiveryService from "../services/delhiveryService";
-import ShiprocketService, { ShiprocketOrderItem } from "../services/shiprocketService";
+import BigshipService, { BigshipOrderItem } from "../services/bigshipService";
+import {
+  aggregateShipmentDimensions,
+  IShipmentDimensionInput,
+} from "../utils/aggregateShipmentDimensions";
 import { createPaymentGatewayOrder } from "../services/payment.service";
 import logger from "../utils/logger";
 
@@ -54,31 +58,12 @@ export const createOrder = asyncErrorHandler(
       };
     }>(VCreateOrder, req.body ?? {});
 
-    // Check pincode serviceability via Shiprocket and get shipping charge
-    const serviceability = await ShiprocketService.checkServiceability(
-      value.shippingDetails.pincode,
-      0.5,
-      value.paymentMethod === "COD",
-    );
-
-    if (!serviceability.success) {
-      throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
-    }
-
-    if (!serviceability.serviceable) {
-      throw new ErrorHandler(
-        400,
-        `Delivery not available for pincode ${value.shippingDetails.pincode}`,
-      );
-    }
-
-    const shiprocketShippingCharge = serviceability.shippingCharge ?? 0;
-
+    let bigshipShippingCharge = 0;
     let paymentMethodOrderId: string | null = null;
     let totalFinalAmount = 0;
     let paymentPageUrl: string | null = null;
 
-    // Captured inside transaction for post-transaction Shiprocket order creation
+    // Captured inside transaction for post-transaction Bigship order creation
     let capturedOrderId: number;
     let capturedOrderNumber: string;
     let capturedSubTotal: number;
@@ -147,6 +132,39 @@ export const createOrder = asyncErrorHandler(
       capturedVarientsInfo = varientsInfo as any[];
       capturedSubTotal = subTotal;
 
+      const cartDimensionInputs: IShipmentDimensionInput[] = [];
+      for (const v of value.product.varient_ids) {
+        const info = varientsInfo.find((item) => item.id == v.id);
+        if (info) cartDimensionInputs.push({ ...info, quantity: v.quantity });
+      }
+      for (const p of value.product.product_ids) {
+        const info = productsInfo.find((item) => item.id == p.id);
+        if (info) cartDimensionInputs.push({ ...info, quantity: p.quantity });
+      }
+      const cartWeight = aggregateShipmentDimensions(cartDimensionInputs).weight;
+
+      // Check pincode serviceability via Bigship and get shipping charge
+      const serviceability = await BigshipService.checkServiceability(
+        value.shippingDetails.pincode,
+        cartWeight,
+        subTotal,
+        value.paymentMethod === "COD",
+      );
+      console.log(serviceability)
+
+      if (!serviceability.success) {
+        throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
+      }
+
+      if (!serviceability.serviceable) {
+        throw new ErrorHandler(
+          400,
+          `Delivery not available for pincode ${value.shippingDetails.pincode}`,
+        );
+      }
+
+      bigshipShippingCharge = serviceability.shippingCharge ?? 0;
+
       // now continue with creating order
 
       const shippingAddressSnapshot = {
@@ -163,7 +181,7 @@ export const createOrder = asyncErrorHandler(
       const orderNumber = generateOrderNumber();
 
       const storeSettings = await fetchSettingsFromDb();
-      const shippingCharge = shiprocketShippingCharge;
+      const shippingCharge = bigshipShippingCharge;
       const gstPercentage = storeSettings.gst_percentage;
       const discountAmount = subTotal - priceAfterDiscount;
       const baseAmount = priceAfterDiscount !== 0 ? priceAfterDiscount : subTotal;
@@ -287,9 +305,9 @@ export const createOrder = asyncErrorHandler(
       // }
     });
 
-    // For COD: create Shiprocket order immediately (async, non-blocking)
+    // For COD: create Bigship order immediately (async, non-blocking)
     if (value.paymentMethod === "COD") {
-      createShiprocketOrderAsync({
+      createBigshipOrderAsync({
         orderId: capturedOrderId!,
         orderNumber: capturedOrderNumber!,
         subTotal: capturedSubTotal!,
@@ -300,7 +318,7 @@ export const createOrder = asyncErrorHandler(
         varientsInfo: capturedVarientsInfo,
       });
     }
-    // For ONLINE: Shiprocket order is created after payment confirmed (PhonePe webhook)
+    // For ONLINE: Bigship order is created after payment confirmed (PhonePe webhook)
 
     httpResponse(res, 201, "New order successfully created", {
       gatewayUrl: value.paymentMethod === "ONLINE" ? paymentPageUrl : null,
@@ -309,9 +327,9 @@ export const createOrder = asyncErrorHandler(
 );
 
 // ============================================================
-// HELPER — create Shiprocket order in background after DB commit
+// HELPER — create Bigship order in background after DB commit
 // ============================================================
-interface ShiprocketAsyncParams {
+interface BigshipAsyncParams {
   orderId: number;
   orderNumber: string;
   subTotal: number;
@@ -325,19 +343,20 @@ interface ShiprocketAsyncParams {
   varientsInfo: any[];
 }
 
-async function createShiprocketOrderAsync(params: ShiprocketAsyncParams) {
+async function createBigshipOrderAsync(params: BigshipAsyncParams) {
   try {
-    const items: ShiprocketOrderItem[] = [];
+    const items: BigshipOrderItem[] = [];
+    const dimensionInputs: IShipmentDimensionInput[] = [];
 
     for (const v of params.product.varient_ids) {
       const info = params.varientsInfo.find((x) => x.id == v.id);
       if (info) {
         items.push({
           name:         info.product_name,
-          sku:          info.sku || `VAR-${info.id}`,
           units:        v.quantity,
           sellingPrice: parseFloat(info.price),
         });
+        dimensionInputs.push({ ...info, quantity: v.quantity });
       }
     }
 
@@ -346,17 +365,19 @@ async function createShiprocketOrderAsync(params: ShiprocketAsyncParams) {
       if (info) {
         items.push({
           name:         info.name,
-          sku:          info.sku_id || `PROD-${info.id}`,
           units:        p.quantity,
           sellingPrice: parseFloat(info.price),
         });
+        dimensionInputs.push({ ...info, quantity: p.quantity });
       }
     }
 
-    const addr = params.shippingDetails;
-    const orderDate = new Date().toISOString().split("T")[0];
+    const { weight, length, breadth, height } = aggregateShipmentDimensions(dimensionInputs);
 
-    const result = await ShiprocketService.createOrder({
+    const addr = params.shippingDetails;
+    const orderDate = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+    const result = await BigshipService.createOrder({
       orderNumber:       params.orderNumber,
       orderDate,
       customerName:      addr.fullName,
@@ -368,29 +389,32 @@ async function createShiprocketOrderAsync(params: ShiprocketAsyncParams) {
       customerPincode:   addr.pincode,
       customerCountry:   addr.country || "India",
       paymentMethod:     params.paymentMethod,
-      subTotal:          params.subTotal,
       items,
+      weight,
+      length,
+      breadth,
+      height,
     });
 
-    if (result.success && result.shiprocketOrderId) {
+    if (result.success && result.bigshipOrderId) {
       await pool.query(
-        "UPDATE orders SET shiprocket_order_id = $1, waybill = $2 WHERE order_id = $3",
-        [result.shiprocketOrderId, result.awbCode ?? null, params.orderId],
+        "UPDATE orders SET bigship_order_id = $1, waybill = $2 WHERE order_id = $3",
+        [result.bigshipOrderId, result.awbCode ?? null, params.orderId],
       );
       logger.info({
-        message: "Shiprocket order linked to DB order",
+        message: "Bigship order linked to DB order",
         orderId: params.orderId,
-        shiprocketOrderId: result.shiprocketOrderId,
+        bigshipOrderId: result.bigshipOrderId,
       });
     } else {
       logger.error({
-        message: "Shiprocket order creation failed",
+        message: "Bigship order creation failed",
         orderId: params.orderId,
         error: result.error,
       });
     }
   } catch (err) {
-    logger.error({ message: "createShiprocketOrderAsync threw", error: err });
+    logger.error({ message: "createBigshipOrderAsync threw", error: err });
   }
 }
 
@@ -478,7 +502,7 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         shipping_address,
         price_breakdown,
         payment_method,
-        shiprocket_order_id
+        bigship_order_id
        FROM orders
 
        WHERE order_id = $1
@@ -677,7 +701,7 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
   // if (value.status != ORDER_CANCELLED)
   //   throw new ErrorHandler(403, "Not allowed");
 
-  let shiprocketOrderId: number | null = null;
+  let bigshipWaybill: string | null = null;
 
   await doTransition(async (client) => {
     if (value.order_id) {
@@ -686,7 +710,7 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
         UPDATE orders
           SET order_status = $1
         WHERE order_number = $2 AND (order_status = '${ORDER_PENDING}' OR order_status = '${ORDER_CONFIRMED}' OR order_status = '${ORDER_SHIPPED}')
-        RETURNING order_id, shiprocket_order_id
+        RETURNING order_id, waybill
         `,
         [ORDER_CANCELLED, value.order_id],
       );
@@ -694,7 +718,7 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
       if (rowCount === 0) throw new ErrorHandler(400, "Unable to cancel");
 
       const dbOrderId = rows[0].order_id;
-      shiprocketOrderId = rows[0].shiprocket_order_id ?? null;
+      bigshipWaybill = rows[0].waybill ?? null;
 
       await client.query(
         "UPDATE order_items SET status = $1 WHERE order_id = $2",
@@ -703,13 +727,13 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
     }
   });
 
-  // Cancel on Shiprocket if the shipment was already created
-  if (shiprocketOrderId) {
-    const cancelResponse = await ShiprocketService.cancelOrder([shiprocketOrderId]);
+  // Cancel on Bigship if the shipment was already created
+  if (bigshipWaybill) {
+    const cancelResponse = await BigshipService.cancelOrder(bigshipWaybill);
     if (!cancelResponse.success) {
       logger.error({
-        message: "Shiprocket cancel failed (order already cancelled in DB)",
-        shiprocketOrderId,
+        message: "Bigship cancel failed (order already cancelled in DB)",
+        bigshipWaybill,
         error: cancelResponse.error,
       });
     }
@@ -836,12 +860,81 @@ interface ITrack {
     location: string;
   }[];
 }
+// ============================================================
+// HELPER — pull latest tracking data from Bigship and backfill
+// webhook_data. Bigship has no webhook push in this API version,
+// so trackOrder pulls live and caches it the same way a webhook would.
+// ============================================================
+async function syncBigshipTracking(orderNumber: string) {
+  try {
+    const { rows, rowCount } = await pool.query(
+      "SELECT waybill FROM orders WHERE order_number = $1",
+      [orderNumber],
+    );
+
+    if (rowCount === 0 || !rows[0].waybill) return;
+
+    const waybill: string = rows[0].waybill;
+
+    const result = await BigshipService.trackShipment(waybill);
+    if (!result.success || !result.trackingData) return;
+
+    const events = BigshipService.normalizeTrackingHistory(result.trackingData, waybill);
+    if (events.length === 0) return;
+
+    await pool.query("DELETE FROM webhook_data WHERE waybill = $1", [waybill]);
+
+    for (const event of events) {
+      await pool.query(
+        "INSERT INTO webhook_data (waybill, payload) VALUES ($1, $2)",
+        [waybill, event],
+      );
+    }
+
+    // Latest event drives the order's actual status, same as a webhook push would
+    const latestEvent = events[events.length - 1];
+    const STATUS =
+      SHIPMENT_MAPING[
+        `${latestEvent.Shipment.Status.StatusType}_${latestEvent.Shipment.Status.Status}`
+      ];
+
+    if (!STATUS) return;
+
+    await doTransition(async (client) => {
+      const orderLookup = await client.query(
+        "SELECT order_id FROM orders WHERE waybill = $1",
+        [waybill],
+      );
+
+      if (orderLookup.rowCount === 0) return;
+
+      const orderId = orderLookup.rows[0].order_id;
+
+      await manageStock({ order_status: STATUS, orderid: orderId, client });
+
+      await client.query(
+        "UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2",
+        [STATUS, orderId],
+      );
+
+      await client.query(
+        "UPDATE order_items SET status = $1 WHERE order_id = $2",
+        [STATUS, orderId],
+      );
+    });
+  } catch (err) {
+    logger.error({ message: "syncBigshipTracking failed", orderNumber, error: err });
+  }
+}
+
 export const trackOrder = asyncErrorHandler(async (req, res) => {
   // track order
   const value = doValidate<{ order_number: string }>(
     VTrackOrder,
     req.query ?? {},
   );
+
+  await syncBigshipTracking(value.order_number);
 
   const { rows, rowCount } = await pool.query<ITrack>(
     `

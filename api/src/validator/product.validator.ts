@@ -57,6 +57,11 @@ export const VAddProducts = Joi.object({
   status: Joi.number().required(),
   tags: Joi.array().items(Joi.string()).optional().default([]),
 
+  weight_kg: Joi.number().positive().optional().default(0.5).label("Weight (KG)"),
+  length_cm: Joi.number().positive().optional().default(10).label("Length (CM)"),
+  breadth_cm: Joi.number().positive().optional().default(10).label("Breadth (CM)"),
+  height_cm: Joi.number().positive().optional().default(10).label("Height (CM)"),
+
   images: Joi.array()
     .items(
       Joi.object({
@@ -136,6 +141,11 @@ export const VUpdateProducts = Joi.object({
   meta_description: Joi.string().optional(),
   status: Joi.number().required(),
   tags: Joi.array().items(Joi.string()).optional().default([]),
+
+  weight_kg: Joi.number().positive().optional().default(0.5).label("Weight (KG)"),
+  length_cm: Joi.number().positive().optional().default(10).label("Length (CM)"),
+  breadth_cm: Joi.number().positive().optional().default(10).label("Breadth (CM)"),
+  height_cm: Joi.number().positive().optional().default(10).label("Height (CM)"),
 
   images: Joi.array()
     .items(

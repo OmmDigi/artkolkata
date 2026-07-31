@@ -52,7 +52,7 @@ export const calcluteCartAmounts = async (
         .map((_, index) => `$${index + 1}`)
         .join(",");
       const varients = await client.query<IVarients>(
-        `SELECT 
+        `SELECT
             pv.id,
             pv.product_id,
             pv.sku,
@@ -61,6 +61,10 @@ export const calcluteCartAmounts = async (
             p.name AS product_name,
             p.category_id AS product_category_id,
             p.name AS product_name,
+            p.weight_kg,
+            p.length_cm,
+            p.breadth_cm,
+            p.height_cm,
             COALESCE(JSON_AGG(pvi) FILTER (WHERE pvi.product_variant_id IS NOT NULL), '[]'::json) AS images
            FROM product_variants pv
   
@@ -121,7 +125,7 @@ export const calcluteCartAmounts = async (
         .join(",");
       const products = await client.query<IProducts>(
         `
-          SELECT 
+          SELECT
             p.sku_id,
             p.id,
             p.name,
@@ -129,6 +133,10 @@ export const calcluteCartAmounts = async (
             p.available_quantity,
             p.slug,
             p.category_id,
+            p.weight_kg,
+            p.length_cm,
+            p.breadth_cm,
+            p.height_cm,
             COALESCE(JSON_AGG(pi) FILTER (WHERE pi.id IS NOT NULL), '[]'::json) AS images
           FROM products p
 

@@ -3,10 +3,11 @@ import crypto from "crypto";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { doTransition } from "../utils/doTransition";
 import { httpResponse } from "../utils/httpResponse";
-import { processDelhiveryStatus, processShiprocketStatus } from "../services/webhook.service";
+import { processDelhiveryStatus } from "../services/webhook.service";
 import { getAuthToken } from "../utils/getAuthToken";
 import { pool } from "..";
-import ShiprocketService, { ShiprocketOrderItem } from "../services/shiprocketService";
+import BigshipService, { BigshipOrderItem } from "../services/bigshipService";
+import { aggregateShipmentDimensions } from "../utils/aggregateShipmentDimensions";
 import logger from "../utils/logger";
 
 export const verifyRazorpayPayment = asyncErrorHandler(async (req, res) => {
@@ -183,10 +184,10 @@ export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
     );
   });
 
-  // For successful ONLINE payments: create Shiprocket order
+  // For successful ONLINE payments: create Bigship order
   if (status === "PAID" && dbOrderId) {
-    createShiprocketOrderForOnlinePayment(dbOrderId).catch((err) => {
-      logger.error({ message: "Shiprocket order async failed for ONLINE order", error: err });
+    createBigshipOrderForOnlinePayment(dbOrderId).catch((err) => {
+      logger.error({ message: "Bigship order async failed for ONLINE order", error: err });
     });
   }
 
@@ -195,22 +196,10 @@ export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
   return res.sendStatus(200);
 });
 
-export const handleShiprocketWebhook = asyncErrorHandler(async (req, res) => {
-  const token = getAuthToken(req);
-  if (!token) throw new ErrorHandler(403, "Forbidden");
-  if (token !== process.env.SHIPROCKET_WEBHOOK_SECRET)
-    throw new ErrorHandler(403, "Forbidden");
-
-  // Offload to background — respond immediately
-  processShiprocketStatus(req.body);
-
-  httpResponse(res, 200, "Thank you for your response");
-});
-
 // ============================================================
-// HELPER — create Shiprocket order after ONLINE payment confirmed
+// HELPER — create Bigship order after ONLINE payment confirmed
 // ============================================================
-async function createShiprocketOrderForOnlinePayment(dbOrderId: number) {
+async function createBigshipOrderForOnlinePayment(dbOrderId: number) {
   const orderRes = await pool.query(
     `SELECT o.order_id, o.order_number, o.subtotal, o.shipping_address,
             json_agg(
@@ -232,19 +221,24 @@ async function createShiprocketOrderForOnlinePayment(dbOrderId: number) {
 
   const order  = orderRes.rows[0];
   const addr   = order.shipping_address;
-  const srItems: ShiprocketOrderItem[] = (order.items as any[]).map((item) => {
-    const info = item.variant_info ?? item.product_info;
-    return {
-      name:         info.product_name ?? info.name,
-      sku:          info.sku ?? info.sku_id ?? `ITEM-${dbOrderId}`,
-      units:        item.quantity,
-      sellingPrice: parseFloat(item.price),
-    };
-  });
+  const itemInfos = (order.items as any[]).map((item) => ({
+    item,
+    info: item.variant_info ?? item.product_info,
+  }));
 
-  const result = await ShiprocketService.createOrder({
+  const items: BigshipOrderItem[] = itemInfos.map(({ item, info }) => ({
+    name:         info.product_name ?? info.name,
+    units:        item.quantity,
+    sellingPrice: parseFloat(item.price),
+  }));
+
+  const { weight, length, breadth, height } = aggregateShipmentDimensions(
+    itemInfos.map(({ item, info }) => ({ ...info, quantity: item.quantity })),
+  );
+
+  const result = await BigshipService.createOrder({
     orderNumber:     order.order_number,
-    orderDate:       new Date().toISOString().split("T")[0],
+    orderDate:       new Date().toISOString().slice(0, 19).replace("T", " "),
     customerName:    addr.name,
     customerEmail:   addr.email,
     customerPhone:   addr.phone,
@@ -254,18 +248,21 @@ async function createShiprocketOrderForOnlinePayment(dbOrderId: number) {
     customerPincode: addr.pincode,
     customerCountry: addr.country || "India",
     paymentMethod:   "ONLINE",
-    subTotal:        parseFloat(order.subtotal),
-    items:           srItems,
+    items,
+    weight,
+    length,
+    breadth,
+    height,
   });
 
-  if (result.success && result.shiprocketOrderId) {
+  if (result.success && result.bigshipOrderId) {
     await pool.query(
-      "UPDATE orders SET shiprocket_order_id = $1, waybill = $2 WHERE order_id = $3",
-      [result.shiprocketOrderId, result.awbCode ?? null, dbOrderId],
+      "UPDATE orders SET bigship_order_id = $1, waybill = $2 WHERE order_id = $3",
+      [result.bigshipOrderId, result.awbCode ?? null, dbOrderId],
     );
   } else {
     logger.error({
-      message: "Shiprocket order creation failed for ONLINE payment",
+      message: "Bigship order creation failed for ONLINE payment",
       dbOrderId,
       error: result.error,
     });

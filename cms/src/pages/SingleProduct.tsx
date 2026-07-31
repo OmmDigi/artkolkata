@@ -574,26 +574,41 @@ export default function SingleProduct() {
                 />
               </Section>
 
-              {/* <Section>
+              <Section>
                 <LabelInput
-                  name="shipment_height"
-                  label="Shipment Height (CM) *"
-                  placeholder="100"
+                  required
+                  name="weight_kg"
+                  label="Weight (KG) *"
+                  placeholder="0.5"
                   type="number"
+                  step="0.001"
+                  defaultValue={productData[0]?.weight_kg ?? "0.5"}
                 />
                 <LabelInput
-                  name="shipment_width"
-                  label="Shipment Width (CM) *"
-                  placeholder="100"
-                  type="number"
-                />
-                <LabelInput
-                  name="weight"
-                  label="Weight (GMS)"
+                  required
+                  name="length_cm"
+                  label="Length (CM) *"
                   placeholder="10"
                   type="number"
+                  defaultValue={productData[0]?.length_cm ?? "10"}
                 />
-              </Section> */}
+                <LabelInput
+                  required
+                  name="breadth_cm"
+                  label="Breadth (CM) *"
+                  placeholder="10"
+                  type="number"
+                  defaultValue={productData[0]?.breadth_cm ?? "10"}
+                />
+                <LabelInput
+                  required
+                  name="height_cm"
+                  label="Height (CM) *"
+                  placeholder="10"
+                  type="number"
+                  defaultValue={productData[0]?.height_cm ?? "10"}
+                />
+              </Section>
             </div>
           </div>
 

@@ -3,7 +3,7 @@ import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { httpResponse } from "../utils/httpResponse";
-import ShiprocketService from "../services/shiprocketService";
+import BigshipService from "../services/bigshipService";
 
 const VCheckServiceability = Joi.object({
   pincode: Joi.string()
@@ -12,18 +12,22 @@ const VCheckServiceability = Joi.object({
     .required()
     .messages({ "string.pattern.base": "Pincode must be 6 digits" }),
   weight: Joi.number().positive().optional().default(0.5),
+  invoiceValue: Joi.number().positive().optional().default(500),
   cod: Joi.boolean().optional().default(false),
 });
 
 export const checkServiceability = asyncErrorHandler(async (req, res) => {
-  const value = doValidate<{ pincode: string; weight: number; cod: boolean }>(
-    VCheckServiceability,
-    req.query ?? {},
-  );
+  const value = doValidate<{
+    pincode: string;
+    weight: number;
+    invoiceValue: number;
+    cod: boolean;
+  }>(VCheckServiceability, req.query ?? {});
 
-  const result = await ShiprocketService.checkServiceability(
+  const result = await BigshipService.checkServiceability(
     value.pincode,
     value.weight,
+    value.invoiceValue,
     value.cod,
   );
 

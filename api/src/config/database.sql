@@ -298,20 +298,20 @@ CREATE INDEX IF NOT EXISTS idx_webhook_order_items ON order_items(waybill);
 -- Migrate shipping address from FK to JSONB snapshot so addresses can be freely deleted
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address JSONB;
 
-UPDATE orders o
-SET shipping_address = jsonb_build_object(
-  'name',         a.name,
-  'phone',        a.phone,
-  'email',        a.email,
-  'address_line1',a.address_line1,
-  'city',         a.city,
-  'state',        a.state,
-  'pincode',      a.pincode,
-  'country',      'India'
-)
-FROM addresses a
-WHERE a.address_id = o.shipping_address_id
-  AND o.shipping_address IS NULL;
+-- UPDATE orders o
+-- SET shipping_address = jsonb_build_object(
+--   'name',         a.name,
+--   'phone',        a.phone,
+--   'email',        a.email,
+--   'address_line1',a.address_line1,
+--   'city',         a.city,
+--   'state',        a.state,
+--   'pincode',      a.pincode,
+--   'country',      'India'
+-- )
+-- FROM addresses a
+-- WHERE a.address_id = o.shipping_address_id
+--   AND o.shipping_address IS NULL;
 
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_shipping_address_id_fkey;
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_billing_address_id_fkey;
@@ -389,9 +389,15 @@ ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_breakdown JSONB;
 
--- Shiprocket integration
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS shiprocket_order_id BIGINT;
-CREATE INDEX IF NOT EXISTS idx_orders_shiprocket_order_id ON orders(shiprocket_order_id);
+-- Bigship integration
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS bigship_order_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_orders_bigship_order_id ON orders(bigship_order_id);
+
+-- Physical dimensions, used to calculate real shipping weight/rates via Bigship
+ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(10, 3) DEFAULT 0.5;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS length_cm DECIMAL(10, 2) DEFAULT 10;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS breadth_cm DECIMAL(10, 2) DEFAULT 10;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS height_cm DECIMAL(10, 2) DEFAULT 10;
 
 -- Blog posts
 CREATE TABLE IF NOT EXISTS blogs (

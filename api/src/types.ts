@@ -194,6 +194,10 @@ export interface IVarients {
   available: true;
   product_name: string;
   product_category_id: number;
+  weight_kg: string;
+  length_cm: string;
+  breadth_cm: string;
+  height_cm: string;
 }
 
 export interface IProducts {
@@ -205,6 +209,10 @@ export interface IProducts {
   price: string;
   compare_at_price: string;
   available_quantity: number;
+  weight_kg: string;
+  length_cm: string;
+  breadth_cm: string;
+  height_cm: string;
 }
 
 export interface ICreateShipment {

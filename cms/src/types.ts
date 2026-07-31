@@ -150,6 +150,10 @@ export interface IProducts {
   price: string;
   compare_at_price: string;
   available_quantity: number;
+  weight_kg: string;
+  length_cm: string;
+  breadth_cm: string;
+  height_cm: string;
   meta_title: string | null;
   meta_description: string | null;
   status: number;

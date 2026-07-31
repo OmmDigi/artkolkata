@@ -408,9 +408,9 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
   await doTransition(async (client) => {
     const { rowCount, rows } = await client.query(
       `INSERT INTO products
-        (sku_id, name, description, description_json, category_id, price, compare_at_price, available_quantity, meta_title, meta_description, status, tags, slug, sub_category_id, product_for, position)
+        (sku_id, name, description, description_json, category_id, price, compare_at_price, available_quantity, meta_title, meta_description, status, tags, slug, sub_category_id, product_for, position, weight_kg, length_cm, breadth_cm, height_cm)
        VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        RETURNING id
       `,
       [
@@ -430,6 +430,10 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
         value.sub_category_id ?? null,
         value.product_for,
         value.position ?? 0,
+        value.weight_kg,
+        value.length_cm,
+        value.breadth_cm,
+        value.height_cm,
       ],
     );
     if (rowCount == 0) throw new ErrorHandler(400, "Unable to add product");
@@ -565,8 +569,12 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
         sub_category_id = $13,
         product_for = $14,
         description_json = $15,
-        position = $16
-      WHERE id = $17
+        position = $16,
+        weight_kg = $17,
+        length_cm = $18,
+        breadth_cm = $19,
+        height_cm = $20
+      WHERE id = $21
       `,
       [
         value.sku_id,
@@ -585,6 +593,10 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
         value.product_for,
         value.description_json,
         value.position ?? 0,
+        value.weight_kg,
+        value.length_cm,
+        value.breadth_cm,
+        value.height_cm,
         productId,
       ],
     );
