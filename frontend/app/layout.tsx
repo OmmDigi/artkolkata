@@ -12,6 +12,7 @@ import SubNav from "@/Component1/layout/SubNav";
 import MainWrapper from "./Component/MainWrapper";
 import Footer from "@/Component1/layout/Footer";
 import MobileBottomNav from "@/Component1/layout/MobileBottomNav";
+import FloatingWhatsApp from "@/Component1/FloatingWhatsApp";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -94,6 +95,7 @@ export default function RootLayout({
           <Footer />
           <MobileBottomNav />
           {/* <Footer /> */}
+          <FloatingWhatsApp />
         </QueryClientWrapper>
       </body>
     </html>

@@ -110,11 +110,7 @@ const ProductCard = ({
             )}
           </button>
           <button
-            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
-              inWishlist
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-white text-black hover:bg-black hover:text-white"
-            }`}
+            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center bg-white text-black hover:bg-black hover:text-white`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -126,7 +122,11 @@ const ProductCard = ({
             {loadingIcon === "wish" ? (
               <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Heart size={18} fill={inWishlist ? "currentColor" : "none"} />
+              <Heart
+                size={24}
+                fill={inWishlist ? "red" : "none"}
+                color={inWishlist ? "red" : "currentColor"}
+              />
             )}
           </button>
         </div>
@@ -138,9 +138,7 @@ const ProductCard = ({
           {name?.length > 30 ? `${name.slice(0, 30)}...` : name}
         </p>
         <div className="flex gap-2 items-center mb-3">
-          <span className="text-sm font-medium text-black">
-            {price}
-          </span>
+          <span className="text-sm font-medium text-black">{price}</span>
         </div>
       </Link>
 

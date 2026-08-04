@@ -129,11 +129,9 @@ export function ProductCard({ product }: { product: Product }) {
             )}
           </button>
           <button
-            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
-              isInWishlist
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-white text-black hover:bg-black hover:text-white"
-            }`}
+            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center 
+                 bg-white text-black hover:bg-black hover:text-white
+            `}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -145,7 +143,11 @@ export function ProductCard({ product }: { product: Product }) {
             {loadingIcon === "wish" ? (
               <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Heart size={18} fill={isInWishlist ? "currentColor" : "none"} />
+              <Heart
+                size={24}
+                fill={isInWishlist ? "red" : "none"}
+                color={isInWishlist ? "red" : "currentColor"}
+              />
             )}
           </button>
         </div>
@@ -276,10 +278,10 @@ export default function ShopSection() {
   const isError = isErrorCategories || isErrorProducts;
 
   const getGridColsClass = () => {
-    if (gridCols === 3) return "lg:grid-cols-3";
-    if (gridCols === 4) return "lg:grid-cols-4";
-    if (gridCols === 5) return "lg:grid-cols-5";
-    return "lg:grid-cols-4";
+    if (gridCols === 3) return "lg:min-w-[31%]";
+    if (gridCols === 4) return "lg:min-w-[23%]";
+    if (gridCols === 5) return "lg:min-w-[18%]";
+    return "lg:min-w-[23%]";
   };
   console.log("productsData", productsData);
 
@@ -345,11 +347,11 @@ export default function ShopSection() {
                   </span>
                 </div>
 
-                <div
-                  className={`grid grid-cols-2 md:grid-cols-2 ${getGridColsClass()} gap-4 md:gap-6 lg:gap-8`}
-                >
+                <div className="flex overflow-x-auto gap-4 md:gap-6 lg:gap-8 pb-4 snap-x snap-mandatory scrollbar-hide">
                   {products.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                    <div key={product.id} className={`min-w-[50vw] sm:min-w-[35vw] md:min-w-[30vw] ${getGridColsClass()} snap-start flex-shrink-0`}>
+                      <ProductCard product={product} />
+                    </div>
                   ))}
                 </div>
 

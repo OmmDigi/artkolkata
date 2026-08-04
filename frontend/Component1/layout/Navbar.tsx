@@ -553,7 +553,7 @@ export default function Navbar() {
           {/* Mobile Search Bar */}
           <div className="md:hidden pb-3 pt-1">
             <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-500 h-4 w-4" />
               <input
                 type="text"
                 placeholder={placeholderText}

@@ -699,9 +699,11 @@ const ProductPage = () => {
           <h2 className="text-2xl font-bold text-black mb-6">
             Related Products
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="flex overflow-x-auto gap-4 md:gap-6 pb-4 snap-x snap-mandatory scrollbar-hide">
             {relatedMapped.map((prod) => (
-              <ProductCard key={prod.id} product={prod} />
+              <div key={prod.id} className="min-w-[50vw] sm:min-w-[30vw] md:min-w-[25vw] lg:min-w-[20vw] snap-start flex-shrink-0">
+                <ProductCard product={prod} />
+              </div>
             ))}
           </div>
         </div>
