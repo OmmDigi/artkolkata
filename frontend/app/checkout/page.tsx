@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Lock, ShoppingBag, TrashIcon, MapPin, CreditCard } from "lucide-react";
+import {
+  ChevronDown,
+  Lock,
+  ShoppingBag,
+  TrashIcon,
+  MapPin,
+  CreditCard,
+} from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -10,7 +17,9 @@ import { toast } from "react-toastify";
 
 const CheckoutPage = () => {
   const [shipDifferent, setShipDifferent] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "COD">("ONLINE");
+  const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "COD">(
+    "ONLINE",
+  );
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showCoupon, setShowCoupon] = useState(false);
   const { removeFromCart, updateQuantity, cart } = useCartStore();
@@ -147,7 +156,9 @@ const CheckoutPage = () => {
   const priceBreakdown = priceBreakdownResponse?.data;
   const isPincodeReady = debouncedPincode.length === 6;
   const isNotServiceable =
-    isPincodeReady && !isCalculatingPrice && priceBreakdown?.serviceable === false;
+    isPincodeReady &&
+    !isCalculatingPrice &&
+    priceBreakdown?.serviceable === false;
 
   const applyCoupon = async () => {
     if (!couponCode) return;
@@ -204,7 +215,8 @@ const CheckoutPage = () => {
   const gstAmount = priceBreakdown?.gst_amount ?? 0;
   const shippingCost = priceBreakdown?.shipping_charge ?? 0;
   const total =
-    priceBreakdown?.total ?? subtotal - discountAmount + shippingCost + gstAmount;
+    priceBreakdown?.total ??
+    subtotal - discountAmount + shippingCost + gstAmount;
 
   const countries = [
     "United Kingdom (UK)",
@@ -220,7 +232,9 @@ const CheckoutPage = () => {
   ];
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) => {
     const { name, value } = e.target;
     setShippingDetails((prev) => ({ ...prev, [name]: value }));
@@ -250,7 +264,9 @@ const CheckoutPage = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <div className="flex items-center mb-6 space-x-3">
                 <MapPin className="text-gray-800" />
-                <h2 className="text-xl font-bold text-gray-900">Shipping Details</h2>
+                <h2 className="text-xl font-bold text-gray-900">
+                  Shipping Details
+                </h2>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
@@ -261,14 +277,21 @@ const CheckoutPage = () => {
                     className={name === "fullName" ? "md:col-span-2" : ""}
                   >
                     <label className="text-sm font-semibold text-gray-900 mb-2 block capitalize">
-                      {name.replace(/([A-Z])/g, " $1")} <span className="text-red-500">*</span>
+                      {name.replace(/([A-Z])/g, " $1")}{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       name={name}
                       value={(shippingDetails as any)[name]}
                       onChange={handleInputChange}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      placeholder={name === "fullName" ? "Full Name" : name === "email" ? "Email Address" : "Phone Number"}
+                      placeholder={
+                        name === "fullName"
+                          ? "Full Name"
+                          : name === "email"
+                            ? "Email Address"
+                            : "Phone Number"
+                      }
                     />
                   </div>
                 ))}
@@ -311,7 +334,9 @@ const CheckoutPage = () => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
               <div className="flex items-center mb-6 space-x-3">
                 <CreditCard className="text-gray-800" />
-                <h2 className="text-xl font-bold text-gray-900">Payment Method</h2>
+                <h2 className="text-xl font-bold text-gray-900">
+                  Payment Method
+                </h2>
               </div>
               <div className="flex flex-col sm:flex-row justify-around gap-4 sm:gap-6">
                 {["ONLINE", "COD"].map((method) => (
@@ -463,7 +488,9 @@ const CheckoutPage = () => {
                   {!isPincodeReady ? (
                     <span className="text-xs text-gray-400">Enter pincode</span>
                   ) : isCalculatingPrice ? (
-                    <span className="text-xs text-gray-400">Calculating...</span>
+                    <span className="text-xs text-gray-400">
+                      Calculating...
+                    </span>
                   ) : (
                     <span className="font-semibold text-gray-900">
                       ₹{shippingCost.toFixed(2)}
@@ -473,7 +500,9 @@ const CheckoutPage = () => {
 
                 {gstAmount > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">GST ({gstPercentage}%)</span>
+                    <span className="text-gray-600">
+                      GST ({gstPercentage}%)
+                    </span>
                     <span className="font-semibold text-gray-900">
                       ₹{gstAmount.toFixed(2)}
                     </span>
@@ -500,7 +529,7 @@ const CheckoutPage = () => {
                 </span>
               </div>
 
-              <div
+              {/* <div
                 className="border-t border-gray-200 pt-4 relative"
                 ref={couponRef}
               >
@@ -566,7 +595,7 @@ const CheckoutPage = () => {
                     )}
                   </div>
                 )}
-              </div>
+              </div> */}
 
               <div className="mt-8">
                 <div className="space-y-4 pt-6 border-t border-gray-200">
@@ -593,7 +622,10 @@ const CheckoutPage = () => {
                       isNotServiceable
                     }
                     className={`w-full py-3 px-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 transition ${
-                      agreedToTerms && !isPlacingOrder && !isCalculatingPrice && !isNotServiceable
+                      agreedToTerms &&
+                      !isPlacingOrder &&
+                      !isCalculatingPrice &&
+                      !isNotServiceable
                         ? "bg-gray-900 text-white hover:bg-gray-800"
                         : "bg-gray-300 text-gray-600 cursor-not-allowed"
                     }`}
