@@ -421,7 +421,7 @@ const ProductsPage = () => {
                         key={option.value}
                         role="button"
                         onClick={() => applySorting(option)}
-                        className="px-4 py-2 text-sm hover:bg-gray-100 text-gray-800 cursor-pointer"
+                        className="px-2 py-2 text-sm hover:bg-gray-100 text-gray-800 cursor-pointer"
                       >
                         {option.label}
                       </div>
@@ -434,7 +434,7 @@ const ProductsPage = () => {
 
           {/* Products Grid */}
           <div
-            className={`grid gap-4 md:gap-6 ${
+            className={`grid gap-4 md:gap-3 ${
               viewMode === "grid"
                 ? "grid-cols-2 md:grid-cols-2 lg:grid-cols-4"
                 : "grid-cols-1"
