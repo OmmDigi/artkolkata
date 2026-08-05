@@ -501,7 +501,9 @@ export default function Navbar() {
                       Your Account
                     </Link>
                     <Link
-                      href={isAuthenticated ? "/account/orders" : "/account"}
+                      href={
+                        isAuthenticated ? "/account?tab=orders" : "/account"
+                      }
                       className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
                     >
                       Your Orders
