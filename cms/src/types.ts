@@ -124,7 +124,14 @@ export interface Option {
   values: OptionValue[];
 }
 
-export type ImageTypes = { image: string; alt_tag: string | null };
+export type MediaType = "image" | "video";
+
+// `image` holds the url of the media, for a video item it holds the video link
+export type ImageTypes = {
+  image: string;
+  alt_tag: string | null;
+  type: MediaType;
+};
 
 export interface Variant {
   id: number;
@@ -168,6 +175,8 @@ export interface IProducts {
     product_id: number;
     image: string;
     alt_tag: string | null;
+    position: number;
+    type: MediaType;
   }[];
 }
 

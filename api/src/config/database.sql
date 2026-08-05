@@ -116,6 +116,10 @@ CREATE TABLE IF NOT EXISTS product_variant_images (
 
 ALTER TABLE product_variant_images ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;
 
+-- media kind of the row, "image" for uploaded images and "video" for video links (the url stays in the image column)
+ALTER TABLE product_variant_images ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'image';
+UPDATE product_variant_images SET type = 'image' WHERE type IS NULL;
+
 -- Variant option values (junction table)
 CREATE TABLE IF NOT EXISTS variant_option_values (
     id SERIAL PRIMARY KEY,
@@ -134,6 +138,10 @@ CREATE TABLE IF NOT EXISTS product_images (
 );
 
 ALTER TABLE product_images ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;
+
+-- media kind of the row, "image" for uploaded images and "video" for video links (the url stays in the image column)
+ALTER TABLE product_images ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'image';
+UPDATE product_images SET type = 'image' WHERE type IS NULL;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_product_options_product_id ON product_options(product_id);

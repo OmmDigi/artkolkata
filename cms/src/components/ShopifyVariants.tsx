@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import LabelInput from "./LabelInput";
 import type { ImageTypes, Option, Variant } from "@/types";
 import { DEFAULT_PRODUCT_VARIANT_OPTIONS } from "@/constant";
-import FilePicker from "./FilePicker";
+import MediaManager from "./MediaManager";
 import { Checkbox } from "./ui/checkbox";
 import { useParams } from "react-router-dom";
 // import { Switch } from "./ui/switch";
@@ -41,7 +41,6 @@ export default function ShopifyVariants({
   });
 
   const [expandedVariant, setExpandedVariant] = useState<number | null>(null);
-  const [expandedVariantIndex, setExpandedVariantIndex] = useState<number>(0);
   const [nextOptionId, setNextOptionId] = useState(2);
   const [nextValueId, setNextValueId] = useState(3);
 
@@ -207,36 +206,6 @@ export default function ShopifyVariants({
   //   setVariants(variants.map((v) => ({ ...v, [field]: value })));
   // };
 
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-
-  const handleDragStart = (index: number) => {
-    setDragIndex(index);
-  };
-
-  const handleDragOver = (
-    e: React.DragEvent<HTMLDivElement>,
-    hoverIndex: number
-  ) => {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === hoverIndex) return;
-
-    if (expandedVariant !== null) {
-      const updated = [...variants[expandedVariantIndex].images];
-      const [moved] = updated.splice(dragIndex, 1);
-      updated.splice(hoverIndex, 0, moved);
-      setDragIndex(hoverIndex);
-
-      setVariants((prev) => {
-        prev[expandedVariantIndex].images = updated;
-        return prev;
-      });
-    }
-  };
-
-  const handleDragEnd = () => {
-    setDragIndex(null);
-  };
-
   return (
     <>
       <div className="flex items-center justify-between mb-4">
@@ -360,7 +329,7 @@ export default function ShopifyVariants({
             </div>
 
             <div className="space-y-2">
-              {variants.map((variant, index) => (
+              {variants.map((variant) => (
                 <div
                   key={variant.id}
                   className="border border-gray-200 rounded-lg overflow-hidden"
@@ -368,7 +337,6 @@ export default function ShopifyVariants({
                   <div
                     className="flex items-center justify-between p-4 hover:bg-gray-50 cursor-pointer"
                     onClick={() => {
-                      setExpandedVariantIndex(index);
                       setExpandedVariant(
                         expandedVariant === variant.id ? null : variant.id
                       );
@@ -525,87 +493,14 @@ export default function ShopifyVariants({
                       </div>
 
                       <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-3.5">
-                        <div className="flex items-center justify-between w-full">
-                          <h2 className="font-semibold text-lg">Images</h2>
-                          <Button
-                            onClick={() => {
-                              updateVariant(variant.id, "images", [
-                                ...variant.images,
-                                { image: "", alt_tag: null },
-                              ]);
-                            }}
-                            type="button"
-                          >
-                            +
-                          </Button>
-                        </div>
-
-                        {variant?.images?.length == 0 ? null : (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-y-2.5">
-                            {variant.images.map(
-                              (varientImage, varientImageIndex) => (
-                                <div
-                                  key={varientImageIndex}
-                                  draggable
-                                  onDragStart={() =>
-                                    handleDragStart(varientImageIndex)
-                                  }
-                                  onDragOver={(e) =>
-                                    handleDragOver(e, varientImageIndex)
-                                  }
-                                  onDragEnd={handleDragEnd}
-                                  className={`flex items-center justify-center flex-col ${
-                                    varientImageIndex == dragIndex
-                                      ? "opacity-10"
-                                      : ""
-                                  }`}
-                                >
-                                  <FilePicker
-                                    name={`image-${varientImageIndex + 1}`}
-                                    className="w-36 !h-24 aspect-auto text-xs cursor-grab"
-                                    fileLink={
-                                      varientImage.image == ""
-                                        ? undefined
-                                        : varientImage.image
-                                    }
-                                    accept="image/*"
-                                    onUploaded={(image) => {
-                                      const currentVarientImages =
-                                        variant.images;
-                                      currentVarientImages[varientImageIndex] =
-                                        {
-                                          image: image?.downloadUrl ?? "",
-                                          alt_tag: null,
-                                        };
-                                      updateVariant(
-                                        variant.id,
-                                        "images",
-                                        currentVarientImages
-                                      );
-                                    }}
-                                  />
-
-                                  <button
-                                    onClick={() => {
-                                      updateVariant(
-                                        variant.id,
-                                        "images",
-                                        variant.images.filter(
-                                          (_, cIndex) =>
-                                            cIndex !== varientImageIndex
-                                        )
-                                      );
-                                    }}
-                                    type="button"
-                                    className="text-red-500 cursor-pointer underline text-sm"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              )
-                            )}
-                          </div>
-                        )}
+                        <MediaManager
+                          title="Media"
+                          items={variant.images}
+                          onChange={(images) =>
+                            updateVariant(variant.id, "images", images)
+                          }
+                          gridClassName="grid grid-cols-1 md:grid-cols-3 gap-y-2.5"
+                        />
                       </div>
                     </div>
                   )}
