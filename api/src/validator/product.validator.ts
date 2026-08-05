@@ -68,6 +68,11 @@ export const VAddProducts = Joi.object({
         image: Joi.string().required().label("Image url"),
         alt_tag: Joi.string().optional().label("Image alt tag").allow(null),
         position: Joi.number().optional().label("Image position"),
+        type: Joi.string()
+          .valid("image", "video")
+          .optional()
+          .default("image")
+          .label("Media type"),
       }),
     )
     .required()
@@ -105,6 +110,11 @@ export const VAddProducts = Joi.object({
               .label("Varient Image alt tag")
               .allow(null),
             position: Joi.number().optional().label("Image position"),
+            type: Joi.string()
+              .valid("image", "video")
+              .optional()
+              .default("image")
+              .label("Varient media type"),
           }),
         )
         .label("Varient images"),
@@ -153,6 +163,11 @@ export const VUpdateProducts = Joi.object({
         image: Joi.string().required().label("Image url"),
         alt_tag: Joi.string().optional().label("Image alt tag").allow(null),
         position: Joi.number().optional().label("Image position"),
+        type: Joi.string()
+          .valid("image", "video")
+          .optional()
+          .default("image")
+          .label("Media type"),
       }),
     )
     .required()
@@ -190,6 +205,11 @@ export const VUpdateProducts = Joi.object({
               .label("Varient Image alt tag")
               .allow(null),
             position: Joi.number().optional().label("Image position"),
+            type: Joi.string()
+              .valid("image", "video")
+              .optional()
+              .default("image")
+              .label("Varient media type"),
           }),
         )
         .label("Varient images"),

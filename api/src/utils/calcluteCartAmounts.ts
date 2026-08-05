@@ -65,7 +65,7 @@ export const calcluteCartAmounts = async (
             p.length_cm,
             p.breadth_cm,
             p.height_cm,
-            COALESCE(JSON_AGG(pvi) FILTER (WHERE pvi.product_variant_id IS NOT NULL), '[]'::json) AS images
+            COALESCE(JSON_AGG(pvi ORDER BY pvi.position ASC) FILTER (WHERE pvi.product_variant_id IS NOT NULL AND COALESCE(pvi.type, 'image') = 'image'), '[]'::json) AS images
            FROM product_variants pv
   
            LEFT JOIN products p

@@ -620,9 +620,11 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
                      'image',   image,
                      'alt_tag', alt_tag 
                     )    
-                  FROM product_images 
+                  FROM product_images
 
                   WHERE product_id = (oi.variant_info->>'product_id')::int
+                  AND COALESCE(type, 'image') = 'image'
+                  ORDER BY position ASC
                   LIMIT 1
                 )
               )

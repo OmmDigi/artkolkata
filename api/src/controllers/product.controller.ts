@@ -440,15 +440,16 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
 
     const productId = rows[0].id;
 
-    // 2. insert multiple images of the inserted product
-    const imagePlaceholder = generatePlaceholders(value.images.length, 4);
+    // 2. insert multiple images/videos of the inserted product
+    const imagePlaceholder = generatePlaceholders(value.images.length, 5);
     await client.query(
-      `INSERT INTO product_images (image, alt_tag, product_id, position) VALUES ${imagePlaceholder}`,
+      `INSERT INTO product_images (image, alt_tag, product_id, position, type) VALUES ${imagePlaceholder}`,
       value.images.flatMap((image: any) => [
         image.image,
         image.alt_tag,
         productId,
         image.position,
+        image.type ?? "image",
       ]),
     );
 
@@ -504,19 +505,20 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
         );
         const variantId = variantResult.rows[0].id;
 
-        // Add varient images
+        // Add varient images/videos
         if (variant.images?.length != 0) {
           const variantPlaceholder = generatePlaceholders(
             variant.images.length,
-            4,
+            5,
           );
           await client.query(
-            `INSERT INTO product_variant_images (product_variant_id, image, alt_tag, position) VALUES ${variantPlaceholder}`,
+            `INSERT INTO product_variant_images (product_variant_id, image, alt_tag, position, type) VALUES ${variantPlaceholder}`,
             variant.images.flatMap((image: any) => [
               variantId,
               image.image,
               image.alt_tag,
               image.position,
+              image.type ?? "image",
             ]),
           );
         }
@@ -614,15 +616,16 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
       productId,
     ]);
 
-    // 2. insert multiple images of the inserted product
-    const imagePlaceholder = generatePlaceholders(value.images.length, 4);
+    // 2. insert multiple images/videos of the inserted product
+    const imagePlaceholder = generatePlaceholders(value.images.length, 5);
     await client.query(
-      `INSERT INTO product_images (image, alt_tag, product_id, position) VALUES ${imagePlaceholder}`,
+      `INSERT INTO product_images (image, alt_tag, product_id, position, type) VALUES ${imagePlaceholder}`,
       value.images.flatMap((image: any) => [
         image.image,
         image.alt_tag,
         productId,
         image.position ?? 0,
+        image.type ?? "image",
       ]),
     );
 
@@ -711,7 +714,7 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
           varientIds.push(variantId);
         }
 
-        // Add varient images
+        // Add varient images/videos
         if (variant.images?.length != 0) {
           await client.query(
             "DELETE FROM product_variant_images WHERE product_variant_id = $1",
@@ -719,15 +722,16 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
           );
           const variantPlaceholder = generatePlaceholders(
             variant.images.length,
-            4,
+            5,
           );
           await client.query(
-            `INSERT INTO product_variant_images (product_variant_id, image, alt_tag, position) VALUES ${variantPlaceholder}`,
+            `INSERT INTO product_variant_images (product_variant_id, image, alt_tag, position, type) VALUES ${variantPlaceholder}`,
             variant.images.flatMap((image: any) => [
               variantId,
               image.image,
               image.alt_tag,
               image.position,
+              image.type ?? "image",
             ]),
           );
         }
@@ -831,8 +835,8 @@ export const copyProduct = asyncErrorHandler(async (req, res) => {
     // 2️⃣ Copy product images
     await client.query(
       `
-    INSERT INTO product_images (image, alt_tag, product_id, position)
-    SELECT image, alt_tag, $2, position
+    INSERT INTO product_images (image, alt_tag, product_id, position, type)
+    SELECT image, alt_tag, $2, position, type
     FROM product_images
     WHERE product_id = $1
     `,
@@ -923,7 +927,7 @@ export const copyProduct = asyncErrorHandler(async (req, res) => {
 
     // 7️⃣ Copy variant images
     const oldVariantImages = await client.query(
-      `SELECT product_variant_id, image, alt_tag, position
+      `SELECT product_variant_id, image, alt_tag, position, type
      FROM product_variant_images
      WHERE product_variant_id = ANY($1::int[])`,
       [[...variantMap.keys()]],
@@ -932,13 +936,14 @@ export const copyProduct = asyncErrorHandler(async (req, res) => {
     for (const img of oldVariantImages.rows) {
       await client.query(
         `INSERT INTO product_variant_images
-       (product_variant_id, image, alt_tag, position)
-       VALUES ($1, $2, $3, $4)`,
+       (product_variant_id, image, alt_tag, position, type)
+       VALUES ($1, $2, $3, $4, $5)`,
         [
           variantMap.get(img.product_variant_id),
           img.image,
           img.alt_tag,
           img.position,
+          img.type ?? "image",
         ],
       );
     }

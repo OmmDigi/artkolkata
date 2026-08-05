@@ -1,11 +1,10 @@
 import Editor from "@/components/Editor";
-import FilePicker from "@/components/FilePicker";
 import LabelInput from "@/components/LabelInput";
 import LabelTextArea from "@/components/LabelTextArea";
+import MediaManager from "@/components/MediaManager";
 import Section from "@/components/Section";
 import SelectInput from "@/components/SelectInput";
 import ShopifyVariants from "@/components/ShopifyVariants";
-import { Button } from "@/components/ui/button";
 import { ButtonLoading } from "@/components/ui/button-loading";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,7 +18,7 @@ import LoadingHandler from "@/middleware/LoadingHandler";
 import type { ImageTypes, ISubCategory, Option, Variant } from "@/types";
 import { createSlug } from "@/utils/createSlug";
 import type { OutputData } from "@editorjs/editorjs";
-import { MoveLeft, Plus } from "lucide-react";
+import { MoveLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -29,7 +28,7 @@ export default function SingleProduct() {
   const navigate = useNavigate();
 
   const [productImages, setProductImages] = useState<ImageTypes[]>([
-    { image: "", alt_tag: null },
+    { image: "", alt_tag: null, type: "image" },
   ]);
 
   const [hasVarient, setHasVarient] = useState(true);
@@ -100,8 +99,9 @@ export default function SingleProduct() {
         ? product.images.map((item) => ({
             image: item.image,
             alt_tag: item.alt_tag,
+            type: item.type ?? "image",
           }))
-        : [{ image: "", alt_tag: null }],
+        : [{ image: "", alt_tag: null, type: "image" }],
     );
     setHasVarient(product.available_quantity <= 0);
     setProductSlug(product.slug ?? null);
@@ -125,13 +125,14 @@ export default function SingleProduct() {
     }
 
     const imagesToAdd = productImages
-      .filter((item) => item.image != "")
+      .filter((item) => item.image.trim() != "")
       .map((item, index) => ({
-        image: item.image,
+        image: item.image.trim(),
         alt_tag: item.alt_tag,
         position: index,
+        type: item.type,
       }));
-    if (imagesToAdd.length === 0) {
+    if (imagesToAdd.some((item) => item.type === "image") === false) {
       return alert("Please choose at lest one product image");
     }
 
@@ -142,10 +143,14 @@ export default function SingleProduct() {
       payload["variants"] = varientOptionsValues.current.variants.map(
         (item) => ({
           ...item,
-          images: item.images.map((image, index) => ({
-            ...image,
-            position: index,
-          })),
+          images: item.images
+            .filter((image) => image.image.trim() != "")
+            .map((image, index) => ({
+              ...image,
+              image: image.image.trim(),
+              type: image.type ?? "image",
+              position: index,
+            })),
         }),
       );
     }
@@ -174,32 +179,6 @@ export default function SingleProduct() {
         refetchProduct();
       },
     });
-  };
-
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-
-  const handleDragStart = (index: number) => {
-    setDragIndex(index);
-  };
-
-  const handleDragOver = (
-    e: React.DragEvent<HTMLDivElement>,
-    hoverIndex: number,
-  ) => {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === hoverIndex) return;
-
-    setProductImages((prev) => {
-      const updated = [...prev];
-      const [moved] = updated.splice(dragIndex, 1);
-      updated.splice(hoverIndex, 0, moved);
-      setDragIndex(hoverIndex);
-      return updated;
-    });
-  };
-
-  const handleDragEnd = () => {
-    setDragIndex(null);
   };
 
   return (
@@ -293,81 +272,19 @@ export default function SingleProduct() {
                   defaultValue={productData[0]?.description}
                 /> */}
 
-                {/* Choose Multiple Product Images Section */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-semibold text-xl">Product Image</h2>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        setProductImages((prev) => [
-                          ...prev,
-                          { image: "", alt_tag: null },
-                        ]);
-                      }}
-                    >
-                      <Plus />
-                      Add More Image
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
-                    {productImages.map((item, index) => (
-                      <div
-                        draggable
-                        onDragStart={() => handleDragStart(index)}
-                        onDragOver={(e) => handleDragOver(e, index)}
-                        onDragEnd={handleDragEnd}
-                        key={index}
-                        className={`flex items-center justify-center flex-col ${
-                          index == dragIndex ? "opacity-5" : ""
-                        }`}
-                      >
-                        <FilePicker
-                          name={`image-${index + 1}`}
-                          className="w-36 h-24! aspect-auto text-xs cursor-grab!"
-                          fileLink={item.image == "" ? undefined : item.image}
-                          accept="image/*"
-                          onUploadStart={() => {
-                            anyImageUploading.current = true;
-                          }}
-                          onUploaded={(image) => {
-                            anyImageUploading.current = false;
-                            setProductImages((prev) => {
-                              prev[index].image = image?.downloadUrl ?? "";
-                              // add alt tag if you want to add
-                              return prev;
-                            });
-                          }}
-                          onRemoved={() => {
-                            setProductImages((prev) => {
-                              prev[index].image = "";
-                              // add alt tag if you want to add
-                              return prev;
-                            });
-                          }}
-                        />
-
-                        <button
-                          disabled={index === 0}
-                          onClick={() => {
-                            setProductImages((prev) =>
-                              prev.filter((_, cIndex) => cIndex !== index),
-                            );
-                          }}
-                          type="button"
-                          className={cn(
-                            index === 0
-                              ? "opacity-30"
-                              : "opacity-100 cursor-pointer",
-                            "text-red-500 underline text-sm",
-                          )}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                {/* Choose Multiple Product Images / Video Links Section */}
+                <MediaManager
+                  title="Product Media"
+                  items={productImages}
+                  onChange={setProductImages}
+                  lockFirstItem
+                  onUploadStart={() => {
+                    anyImageUploading.current = true;
+                  }}
+                  onUploaded={() => {
+                    anyImageUploading.current = false;
+                  }}
+                />
 
                 {isCategoryFetching ? (
                   <Label>Category Fetching..</Label>

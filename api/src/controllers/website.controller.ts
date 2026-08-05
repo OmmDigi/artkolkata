@@ -53,11 +53,11 @@ export const getEnquiry = asyncErrorHandler(async (req, res) => {
       SELECT
         p.id,
         p.name,
-        JSON_AGG(pi.*) AS product_images
+        JSON_AGG(pi.* ORDER BY pi.position ASC) AS product_images
       FROM products AS p
 
       LEFT JOIN product_images pi
-      ON pi.product_id = p.id
+      ON pi.product_id = p.id AND COALESCE(pi.type, 'image') = 'image'
 
       GROUP BY p.id
     )

@@ -111,7 +111,9 @@ export const getSingleProduct = async (productIdSlug: any, userRole : Role) => {
         COALESCE(JSON_AGG(
           JSON_BUILD_OBJECT(
             'image', pvi.image,
-            'alt_tag', pvi.alt_tag
+            'alt_tag', pvi.alt_tag,
+            'position', pvi.position,
+            'type', COALESCE(pvi.type, 'image')
           )
           ORDER BY pvi.position ASC
         ) FILTER (WHERE pvi.image IS NOT NULL), '[]'::json) AS vareient_images
