@@ -23,7 +23,7 @@ export default function PrivacyPolicy() {
             Address: Duttapukur, North 24 Parganas, West Bengal – 743248, India
           </p>
           <p>Email: artkolkata921@gmail.com</p>
-          <p>Phone: +91 8282023898</p>
+          <p>Phone: +91 8621803898</p>
         </section>
 
         <section>
@@ -132,7 +132,7 @@ export default function PrivacyPolicy() {
           <p className="font-semibold">ART KOLKATA</p>
           <p>Duttapukur, North 24 Parganas, West Bengal – 743248</p>
           <p>Email: artkolkata921@gmail.com</p>
-          <p>Phone: +91 8282023898</p>
+          <p>Phone: +91 8621803898</p>
         </section>
       </div>
     </main>

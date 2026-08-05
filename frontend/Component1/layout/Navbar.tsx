@@ -245,7 +245,7 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="relative md:sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-200 transition-colors duration-300 ease-in-out">
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-200 transition-colors duration-300 ease-in-out shadow-sm">
         {/* Top Ribbon (Mobile Only) */}
         <div className="md:hidden bg-[#cb2b2b] text-white text-[12px] py-[5px] px-[10px] text-center min-h-[28px] max-h-[35px] flex items-center justify-center w-full">
           <Link
@@ -549,19 +549,18 @@ export default function Navbar() {
               </div>
             </div>
           </div>
-
-          {/* Mobile Search Bar */}
-          <div className="md:hidden pb-3 pt-1">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-500 h-4 w-4" />
-              <input
-                type="text"
-                placeholder={placeholderText}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-400 rounded-full text-sm text-black focus:outline-none focus:border-gray-500"
-              />
-            </div>
+        </div>
+        {/* Mobile Search Bar */}
+        <div className="md:hidden w-full px-4 pb-3 pt-1">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-500 h-4 w-4" />
+            <input
+              type="text"
+              placeholder={placeholderText}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-400 rounded-full text-sm text-black focus:outline-none focus:border-gray-500"
+            />
           </div>
         </div>
       </header>

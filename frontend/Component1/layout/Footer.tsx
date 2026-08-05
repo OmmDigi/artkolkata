@@ -38,11 +38,36 @@ export default function Footer() {
   ];
 
   const socialLinks = [
-    { label: "Instagram", href: "https://instagram.com", icon: Instagram },
-    { label: "Dribbble", href: "https://dribbble.com", icon: Dribbble },
-    { label: "Facebook", href: "https://facebook.com", icon: Facebook },
-    { label: "Twitter", href: "https://x.com", icon: Twitter },
-    { label: "Youtube", href: "https://youtube.com", icon: Youtube },
+    {
+      label: "Instagram",
+      href: "https://instagram.com",
+      icon: Instagram,
+      color: "text-[#E4405F]",
+    },
+    {
+      label: "Dribbble",
+      href: "https://dribbble.com",
+      icon: Dribbble,
+      color: "text-[#EA4C89]",
+    },
+    {
+      label: "Facebook",
+      href: "https://facebook.com",
+      icon: Facebook,
+      color: "text-[#1877F2]",
+    },
+    {
+      label: "Twitter",
+      href: "https://x.com",
+      icon: Twitter,
+      color: "text-[#1DA1F2]",
+    },
+    {
+      label: "Youtube",
+      href: "https://youtube.com",
+      icon: Youtube,
+      color: "text-[#FF0000]",
+    },
   ];
 
   const contactLinks = [
@@ -51,7 +76,7 @@ export default function Footer() {
       href: "artkolkata921@gmail.com",
       icon: Mail,
     },
-    { label: "+91 8282023898", href: "tel:+918282023898", icon: Phone },
+    { label: "+91 8621803898", href: "tel:+918621803898", icon: Phone },
     {
       label: "Duttapukur, North 24 Parganas, West Bengal – 743248",
       href: "https://maps.google.com/maps?q=Arabinda%20Pally,%20Duttapukur,%20Kolkata,%20N.%2024%20Pgs,%20743248,%20West%20Bengal&t=&z=14&ie=UTF8&iwloc=&output=embed",
@@ -116,10 +141,10 @@ export default function Footer() {
                       href={link.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-gray-400 hover:text-white text-sm transition-colors flex items-center gap-2"
+                      className="hover:opacity-80 text-sm transition-opacity flex items-center gap-2"
                     >
-                      <Icon className="w-4 h-4" />
-                      {link.label}
+                      <Icon className={`w-4 h-4 ${link.color}`} />
+                      <span className="text-gray-300">{link.label}</span>
                     </a>
                   );
                 })}
@@ -160,7 +185,7 @@ export default function Footer() {
             ART KOLKATA
           </Link>
           <p className="text-gray-400 text-sm text-center md:text-right">
-            © 2024 ART KOLKATA. All rights reserved.
+            © 2026 ART KOLKATA. All rights reserved.
           </p>
         </div>
       </div>

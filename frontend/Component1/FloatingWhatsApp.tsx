@@ -4,7 +4,7 @@ import React from "react";
 import { FaWhatsapp } from "react-icons/fa";
 
 const FloatingWhatsApp = () => {
-  const phoneNumber = "918282023898";
+  const phoneNumber = "918621803898";
   const message = encodeURIComponent("Hello! I have a query.");
 
   return (

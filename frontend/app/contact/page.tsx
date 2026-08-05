@@ -1,6 +1,16 @@
 import ContactUsForm from "@/Component1/ContactUsForm";
 import PromoSection from "@/Component1/PromoSection";
-import { Facebook, Instagram, Twitter, Youtube } from "lucide-react";
+import {
+  Mail,
+  Phone,
+  MapPin,
+  Search,
+  Facebook,
+  Twitter,
+  Instagram,
+  Youtube,
+  Dribbble,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -63,7 +73,7 @@ export default function page() {
             <p className="text-gray-600 text-sm mb-4 leading-relaxed">
               Our store has re-opened for shopping, exchanges
             </p>
-            <p className="font-semibold">Every day 11am to 7pm</p>
+            <p className="font-semibold">Every day 10am to 6pm</p>
           </div>
 
           {/* Social Media */}
@@ -74,45 +84,31 @@ export default function page() {
             <div className="flex justify-center gap-4">
               <a
                 href="#"
-                className="text-gray-600 hover:text-black transition-colors"
+                className="text-[#1877F2] hover:opacity-80 transition-opacity"
               >
                 <Facebook size={20} />
               </a>
               <a
                 href="#"
-                className="text-gray-600 hover:text-black transition-colors"
+                className="text-[#1DA1F2] hover:opacity-80 transition-opacity"
               >
                 <Twitter size={20} />
               </a>
               <a
                 href="#"
-                className="text-gray-600 hover:text-black transition-colors"
+                className="text-[#EA4C89] hover:opacity-80 transition-opacity"
               >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                  <line x1="9" y1="9" x2="9.01" y2="9" />
-                  <line x1="15" y1="9" x2="15.01" y2="9" />
-                </svg>
+                <Dribbble size={20} />
               </a>
               <a
                 href="#"
-                className="text-gray-600 hover:text-black transition-colors"
+                className="text-[#FF0000] hover:opacity-80 transition-opacity"
               >
                 <Youtube size={20} />
               </a>
               <a
                 href="#"
-                className="text-gray-600 hover:text-black transition-colors"
+                className="text-[#E4405F] hover:opacity-80 transition-opacity"
               >
                 <Instagram size={20} />
               </a>

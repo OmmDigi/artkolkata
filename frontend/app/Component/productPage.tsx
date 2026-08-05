@@ -372,7 +372,7 @@ const ProductsPage = () => {
       {/* <div className="max-w-7xl mx-auto px-4"> */}
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8">
         {/* Sidebar Filters */}
-        <aside className="w-full lg:w-1/6">
+        <aside className="w-full lg:w-1/8">
           {/* Clear All Button */}
           <button
             onClick={handleClearAll}
