@@ -21,11 +21,11 @@ export const SIDEBAR_OPTIONS = {
           title: "Products",
           url: "/products",
         },
-        // {
-        //   id: "1-4",
-        //   title: "Coupons",
-        //   url: "/discount",
-        // },
+        {
+          id: "1-4",
+          title: "Coupons",
+          url: "/discount",
+        },
         {
           id: "1-5",
           title: "Orders",
@@ -67,14 +67,14 @@ export const SIDEBAR_OPTIONS = {
           url: "/staff",
         },
         {
-          id: "1-13",
-          title: "Settings",
-          url: "/settings",
-        },
-        {
           id: "1-14",
           title: "Blogs",
           url: "/blogs",
+        },
+        {
+          id: "1-13",
+          title: "Settings",
+          url: "/settings",
         },
       ],
     },

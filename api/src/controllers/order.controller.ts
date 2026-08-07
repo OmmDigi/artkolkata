@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { CustomRequest, IShippingAddress, ITokenInfo } from "../types";
 import { calcluteCartAmounts } from "../utils/calcluteCartAmounts";
+import { calculateAutoDiscount } from "../utils/calculateAutoDiscount";
 import { doTransition } from "../utils/doTransition";
 import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
@@ -121,7 +122,7 @@ export const createOrder = asyncErrorHandler(
 
       if (!tokenInfo) throw new ErrorHandler(400, "User info is required!");
 
-      const { priceAfterDiscount, subTotal, productsInfo, varientsInfo } =
+      const { priceAfterDiscount, couponDiscount, subTotal, productsInfo, varientsInfo } =
         await calcluteCartAmounts(
           value.product.varient_ids,
           value.product.product_ids,
@@ -184,29 +185,43 @@ export const createOrder = asyncErrorHandler(
       const storeSettings = await fetchSettingsFromDb();
       const shippingCharge = bigshipShippingCharge;
       const gstPercentage = storeSettings.gst_percentage;
-      const discountAmount = subTotal - priceAfterDiscount;
-      const baseAmount = priceAfterDiscount !== 0 ? priceAfterDiscount : subTotal;
+      // order value rule (e.g. "spend ₹2000, get 10% off") — applied on top of
+      // the coupon, on the same client so it reads the rules inside the transaction
+      const autoDiscount = await calculateAutoDiscount(
+        priceAfterDiscount,
+        !!value.product.code,
+        client,
+      );
+
+      const baseAmount = parseFloat((priceAfterDiscount - autoDiscount.amount).toFixed(2));
+      const discountAmount = parseFloat((couponDiscount + autoDiscount.amount).toFixed(2));
       const gstAmount = parseFloat((baseAmount * (gstPercentage / 100)).toFixed(2));
       totalFinalAmount = parseFloat((baseAmount + gstAmount + shippingCharge).toFixed(2));
 
       const priceBreakdown = {
-        subtotal:        subTotal,
-        discount:        discountAmount,
-        gst_percentage:  gstPercentage,
-        gst_amount:      gstAmount,
-        shipping_charge: shippingCharge,
-        total:           totalFinalAmount,
+        subtotal:           subTotal,
+        discount:           discountAmount,
+        coupon_discount:    couponDiscount,
+        auto_discount:      autoDiscount.amount,
+        auto_discount_rule: autoDiscount.rule,
+        gst_percentage:     gstPercentage,
+        gst_amount:         gstAmount,
+        shipping_charge:    shippingCharge,
+        total:              totalFinalAmount,
       };
 
       const orderInfo = await client.query(
         `INSERT INTO orders
-            (user_id, order_number, subtotal, discount, shipping_charge, total_amount, coupon_code, shipping_address, price_breakdown, payment_method)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING order_id`,
+            (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, total_amount, coupon_code, shipping_address, price_breakdown, payment_method)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING order_id`,
         [
           tokenInfo.id,
           orderNumber,
           subTotal,
           discountAmount,
+          couponDiscount,
+          autoDiscount.amount,
+          autoDiscount.rule?.id ?? null,
           shippingCharge,
           totalFinalAmount,
           value.product.code,
@@ -342,7 +357,7 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     };
   }>(VGetPriceBreakdown, req.body ?? {});
 
-  const { priceAfterDiscount, subTotal, productsInfo, varientsInfo } =
+  const { priceAfterDiscount, couponDiscount, subTotal, productsInfo, varientsInfo } =
     await calcluteCartAmounts(
       value.product.varient_ids,
       value.product.product_ids,
@@ -373,8 +388,14 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
 
   const storeSettings = await fetchSettingsFromDb();
   const gstPercentage = storeSettings.gst_percentage;
-  const discountAmount = subTotal - priceAfterDiscount;
-  const baseAmount = priceAfterDiscount !== 0 ? priceAfterDiscount : subTotal;
+  // same rule createOrder will apply, so the cart preview and the placed order match
+  const autoDiscount = await calculateAutoDiscount(
+    priceAfterDiscount,
+    !!value.product.code,
+  );
+
+  const baseAmount = parseFloat((priceAfterDiscount - autoDiscount.amount).toFixed(2));
+  const discountAmount = parseFloat((couponDiscount + autoDiscount.amount).toFixed(2));
   const gstAmount = parseFloat((baseAmount * (gstPercentage / 100)).toFixed(2));
   const shippingCharge = serviceability.serviceable ? serviceability.shippingCharge ?? 0 : 0;
   const total = parseFloat((baseAmount + gstAmount + shippingCharge).toFixed(2));
@@ -382,6 +403,10 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Price breakdown", {
     subtotal: subTotal,
     discount: discountAmount,
+    coupon_discount: couponDiscount,
+    auto_discount: autoDiscount.amount,
+    // { id, title, type, value, min_order_amount } — lets the cart label the row
+    auto_discount_rule: autoDiscount.rule,
     gst_percentage: gstPercentage,
     gst_amount: gstAmount,
     shipping_charge: shippingCharge,

@@ -10,12 +10,16 @@ export const calcluteCartAmounts = async (
   client?: PoolClient
 ) => {
   let priceAfterDiscount = 0;
+  let couponDiscount = 0;
   let subTotal = 0;
 
   let varientsInfo: IVarients[] = [];
   let productsInfo: IProducts[] = [];
 
   await doTransition(async (client) => {
+    // cart value the coupon is allowed to discount. same as subTotal for a
+    // normal coupon, only the matching items when the coupon targets categories
+    let eligibleAmount = 0;
     let discountCategoryList: string[] = [];
     let minAmountToSelect: string = "0";
     let discountType = "";
@@ -106,7 +110,7 @@ export const calcluteCartAmounts = async (
         subTotal += (parseFloat(varient.price) * userRequireQuanity);
 
         if (discountCategoryList.length == 0) {
-          priceAfterDiscount += (parseFloat(varient.price) * userRequireQuanity);
+          eligibleAmount += (parseFloat(varient.price) * userRequireQuanity);
           continue;
         }
 
@@ -114,7 +118,7 @@ export const calcluteCartAmounts = async (
           (disCat) => disCat == varient.product_category_id.toString()
         );
         if (result != undefined) {
-          priceAfterDiscount += (parseFloat(varient.price) * userRequireQuanity);
+          eligibleAmount += (parseFloat(varient.price) * userRequireQuanity);
         }
       }
     }
@@ -176,7 +180,7 @@ export const calcluteCartAmounts = async (
         subTotal += (parseFloat(product.price) * userRequireQuanity);
 
         if (discountCategoryList.length == 0) {
-          priceAfterDiscount += (parseFloat(product.price) * userRequireQuanity);
+          eligibleAmount += (parseFloat(product.price) * userRequireQuanity);
           continue;
         }
 
@@ -184,15 +188,23 @@ export const calcluteCartAmounts = async (
           (disCat) => disCat == product.category_id.toString()
         );
         if (result != undefined) {
-          priceAfterDiscount += (parseFloat(product.price) * userRequireQuanity);
+          eligibleAmount += (parseFloat(product.price) * userRequireQuanity);
         }
       }
     }
 
     if (discount_code) {
+      // a category coupon with nothing matching in the cart discounts nothing
+      if (discountCategoryList.length !== 0 && eligibleAmount === 0) {
+        throw new ErrorHandler(
+          400,
+          "This coupon is not valid for the products in your cart"
+        );
+      }
+
       // if the total varient price is < discount minium price throw error
       const discountMinPrice = parseFloat(minAmountToSelect);
-      if (priceAfterDiscount < discountMinPrice) {
+      if (eligibleAmount < discountMinPrice) {
         throw new ErrorHandler(
           400,
           `You have to purchase product of minimum ₹${discountMinPrice}`
@@ -200,19 +212,29 @@ export const calcluteCartAmounts = async (
       }
 
       // now check if the discount is percentage base of not if yes give percentage amount
+      const value = parseFloat(discountTypeValue);
+      const discountValue = Number.isFinite(value) ? value : 0;
+
       if (discountType === "percentage") {
-        const amountToCut =
-          (parseInt(discountTypeValue) / 100) * priceAfterDiscount;
-        priceAfterDiscount -= amountToCut;
+        couponDiscount = (discountValue / 100) * eligibleAmount;
       } else {
-        priceAfterDiscount -= parseFloat(discountTypeValue);
+        couponDiscount = discountValue;
       }
+
+      // the coupon only ever eats into the items it applies to, the rest of the
+      // cart is still charged in full
+      couponDiscount = parseFloat(
+        Math.min(Math.max(couponDiscount, 0), eligibleAmount).toFixed(2)
+      );
     }
+
+    priceAfterDiscount = parseFloat((subTotal - couponDiscount).toFixed(2));
   }, client);
 
   return {
     subTotal,
     priceAfterDiscount,
+    couponDiscount,
     varientsInfo,
     productsInfo,
   };

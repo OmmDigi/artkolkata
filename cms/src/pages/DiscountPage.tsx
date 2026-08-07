@@ -1,5 +1,7 @@
+import AutoDiscountRules from "@/components/discount/AutoDiscountRules";
 import { PaginationComp } from "@/components/PaginationComp";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -22,6 +24,29 @@ const getDiscountList = async (page: number) => {
 };
 
 export default function DiscountPage() {
+  return (
+    <main className="space-y-4">
+      <h2 className="font-semibold text-2xl">Discounts</h2>
+
+      <Tabs defaultValue="coupons">
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="coupons">Coupon Codes</TabsTrigger>
+          <TabsTrigger value="auto">Automatic Discounts</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="coupons">
+          <CouponsTab />
+        </TabsContent>
+
+        <TabsContent value="auto">
+          <AutoDiscountRules />
+        </TabsContent>
+      </Tabs>
+    </main>
+  );
+}
+
+function CouponsTab() {
   const { isLoading, mutate } = useDoMutation();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,8 +63,7 @@ export default function DiscountPage() {
 
   return (
     <main className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-2xl">Coupons</h2>
+      <div className="flex items-center justify-end">
         <Link to="/discount/new">
           <Button variant="own" className="flex items-center gap-1.5">
             <Plus />

@@ -449,3 +449,65 @@ CREATE INDEX IF NOT EXISTS idx_products_tags_gin ON products USING GIN (tags);
 -- Category visibility (public / private). Private categories are only visible to admins
 ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS idx_categories_is_visible ON categories(is_visible);
+
+-- Site info (logo, contact emails/phones, addresses) stored as JSONB text values
+-- inside the existing key/value store_settings table.
+INSERT INTO store_settings (key, value) VALUES
+  ('site_logo',       '""'),
+  ('site_logo_alt',   '""'),
+  ('contact_emails',  '[]'),
+  ('contact_phones',  '[]'),
+  ('site_addresses',  '[]')
+ON CONFLICT (key) DO NOTHING;
+
+-- Website banners
+CREATE TABLE IF NOT EXISTS site_banners (
+    id SERIAL PRIMARY KEY,
+    image_url TEXT NOT NULL,
+    alt_text TEXT,
+    link_url TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_banners_position ON site_banners(position);
+CREATE INDEX IF NOT EXISTS idx_site_banners_is_active ON site_banners(is_active);
+
+-- Automatic (no coupon code) order value discounts.
+-- e.g. "spend ₹2000 or more, get 10% off (max ₹500)".
+CREATE TABLE IF NOT EXISTS auto_discount_rules (
+    id SERIAL PRIMARY KEY,
+
+    title VARCHAR(255) NOT NULL,
+
+    -- cart value (after any coupon) the order must reach for this rule to fire
+    min_order_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+
+    type VARCHAR(20) NOT NULL,             -- 'percentage' | 'fixed_amount'
+    value NUMERIC(10,2) NOT NULL,          -- percentage (0-100) or rupee amount
+    max_discount_amount NUMERIC(10,2),     -- cap for percentage rules, NULL = uncapped
+
+    -- when false the rule is skipped for orders that already used a coupon code
+    stackable_with_coupon BOOLEAN NOT NULL DEFAULT FALSE,
+
+    status VARCHAR(20) NOT NULL DEFAULT 'active', -- 'active' | 'disabled'
+
+    -- higher priority wins when several slabs match; ties break on the bigger slab
+    priority INTEGER NOT NULL DEFAULT 0,
+
+    starts_at TIMESTAMPTZ,                 -- NULL = no start boundary
+    ends_at TIMESTAMPTZ,                   -- NULL = never expires
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_discount_rules_lookup
+ON auto_discount_rules(status, min_order_amount);
+
+-- Split of the discount column so reports can tell coupon vs automatic discount apart
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS auto_discount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS auto_discount_rule_id INTEGER;
