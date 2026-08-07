@@ -335,45 +335,43 @@ export default function ShopSection() {
 
         {!isLoading && !isError && (
           <div>
-            {productsData
-              ?.filter((data) => data.products.length > 0)
-              .map(({ category, products }) => (
-                <div key={category.id} className="mb-12">
-                  <div className=" hidden md:inline-flex items-center gap-2 bg-white border border-black rounded-full px-4 py-2 mb-6">
-                    <Star size={16} className="fill-black" />
-                    <span className="text-sm font-medium text-black">
-                      <ScrollingText
-                        text={`${category.name}`}
-                        className="text-lg font-semibold"
-                      />
-                    </span>
-                  </div>
-
-                  <div className="flex overflow-x-auto gap-4 md:gap-6 lg:gap-8 pb-4 snap-x snap-mandatory scrollbar-hide">
-                    {products.map((product) => (
-                      <div
-                        key={product.id}
-                        className={`min-w-[50vw] sm:min-w-[35vw] md:min-w-[30vw] ${getGridColsClass()} snap-start flex-shrink-0`}
-                      >
-                        <ProductCard product={product} />
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Show All Products Button */}
-                  <div className="mt-6 text-center">
-                    <Link
-                      href={`/product?category=${category.slug}`}
-                      className="inline-block px-6 py-3 bg-black text-white rounded-full font-medium text-sm hover:bg-black/90 transition-colors"
-                    >
-                      <ScrollingText
-                        text={`Show all ${category.name} products`}
-                        className="text-sm font-semibold"
-                      />
-                    </Link>
-                  </div>
+            {productsData?.slice(0, 4).map(({ category, products }) => (
+              <div key={category.id} className="mb-12">
+                <div className=" hidden md:inline-flex items-center gap-2 bg-white border border-black rounded-full px-4 py-2 mb-6">
+                  <Star size={16} className="fill-black" />
+                  <span className="text-sm font-medium text-black">
+                    <ScrollingText
+                      text={`${category.name}`}
+                      className="text-lg font-semibold"
+                    />
+                  </span>
                 </div>
-              ))}
+
+                <div className="flex overflow-x-auto gap-4 md:gap-6 lg:gap-8 pb-4 snap-x snap-mandatory scrollbar-hide">
+                  {products.map((product) => (
+                    <div
+                      key={product.id}
+                      className={`min-w-[50vw] sm:min-w-[35vw] md:min-w-[30vw] ${getGridColsClass()} snap-start flex-shrink-0`}
+                    >
+                      <ProductCard product={product} />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Show All Products Button */}
+                <div className="mt-6 text-center">
+                  <Link
+                    href={`/product?category=${category.slug}`}
+                    className="inline-block px-6 py-3 bg-black text-white rounded-full font-medium text-sm hover:bg-black/90 transition-colors"
+                  >
+                    <ScrollingText
+                      text={`Show all ${category.name} products`}
+                      className="text-sm font-semibold"
+                    />
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

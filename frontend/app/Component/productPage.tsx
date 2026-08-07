@@ -23,6 +23,7 @@ interface SortOption {
 const ProductsPage = () => {
   // paging + filter + sort states
   const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(50);
   const [sortBy, setSortBy] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [sortedProducts, setSortedProducts] = useState<Product[]>([]);
@@ -82,6 +83,7 @@ const ProductsPage = () => {
   const buildProductsUrl = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(currentPage));
+    params.set("limit", String(limit));
     const query = params.toString();
     return `/api/v1/products${query ? `?${query}` : ""}`;
   };
@@ -96,6 +98,7 @@ const ProductsPage = () => {
     queryKey: [
       "all-products",
       currentPage,
+      limit,
       selectedCategories,
       selectedSubCategories,
       searchParams.toString(),
@@ -399,8 +402,25 @@ const ProductsPage = () => {
               results
             </p>
 
-            {/* Sort Dropdown */}
-            <div className="flex justify-end">
+            {/* Limit and Sort Controls */}
+            <div className="flex justify-end gap-3">
+              {/* Limit Select */}
+              <div className="relative">
+                <select 
+                  value={limit} 
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-300 h-full"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={20}>20 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+              </div>
+
+              {/* Sort Dropdown */}
               <div ref={dropdownRef} className="relative w-56">
                 <button
                   onClick={() => setShowSortMenu(!showSortMenu)}
@@ -481,7 +501,7 @@ const ProductsPage = () => {
                 <p className="text-gray-800">{currentPage}</p>
                 <button
                   onClick={() => {
-                    if ((products as any)?.data?.length === 10) {
+                    if ((products as any)?.data?.length === limit) {
                       setCurrentPage((p) => p + 1);
                       scrollToTop();
                     }
@@ -489,7 +509,7 @@ const ProductsPage = () => {
                   className={`w-10 h-10 flex items-center justify-center border text-gray-800 border-gray-300
                   hover:border-gray-400 rounded transition-colors
                   ${
-                    (products as any)?.data?.length < 10
+                    (products as any)?.data?.length < limit
                       ? "opacity-50 cursor-not-allowed"
                       : ""
                   }`}

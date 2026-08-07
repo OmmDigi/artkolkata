@@ -118,7 +118,7 @@ const SignIn: FC<SignInProps> = ({
               onChange={handleChange}
               placeholder="name@example.com"
               className="w-full px-3 py-3 ring-1 ring-gray-300 text-gray-800 rounded-lg shadow-sm
-              focus:ring-2 focus:ring-[#000000] outline-none"
+              focus:ring-2 focus:ring-[#02F8C5] outline-none"
               required
             />
           </div>
@@ -135,7 +135,7 @@ const SignIn: FC<SignInProps> = ({
               onChange={handleChange}
               placeholder="••••••••"
               className="w-full px-3 py-3 ring-1 ring-gray-300  text-gray-800 rounded-lg shadow-sm
-              focus:ring-2 focus:ring-[#000000] outline-none"
+              focus:ring-2 focus:ring-[#02F8C5] outline-none"
               required
             />
           </div>
@@ -143,7 +143,7 @@ const SignIn: FC<SignInProps> = ({
           <button
             type="submit"
             disabled={isPending}
-            className={`w-full bg-[#000000]  text-white font-semibold py-3 rounded-xl shadow-md transition-all
+            className={`w-full bg-[#02F8C5]  text-black font-semibold py-3 rounded-xl shadow-md transition-all
               ${isPending ? "opacity-70 cursor-not-allowed" : ""}`}
           >
             {isPending ? "Signing In..." : "Sign In →"}

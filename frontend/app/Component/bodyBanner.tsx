@@ -64,7 +64,7 @@ const BodyBanner: React.FC<BannerProps> = ({
             <Link
               href={buttonLink}
               className="inline-block px-12 py-3 bg-transparent border-2 text-white 
-              font-semibold  hover:bg-gray-900 hover:border-black transition-colors duration-300 shadow-lg"
+              font-semibold  hover:bg-[#02F8C5] hover:border-black transition-colors duration-300 shadow-lg"
             >
               {buttonText}
             </Link>

@@ -15,13 +15,11 @@ export default function Profile() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const {
-    data: GetUserOrderList,
-    isLoading: loadingGetUserOrderList,
-  } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => getRequest<any>("api/v1/users/orders"),
-  });
+  const { data: GetUserOrderList, isLoading: loadingGetUserOrderList } =
+    useQuery({
+      queryKey: ["orders"],
+      queryFn: () => getRequest<any>("api/v1/users/orders"),
+    });
 
   const {
     data: orderStatus,
@@ -31,7 +29,7 @@ export default function Profile() {
     queryKey: ["orderStatus", selectedOrder?.order_number],
     queryFn: () =>
       getRequest<any>(
-        `api/v1/orders/track?order_number=${selectedOrder.order_number}`
+        `api/v1/orders/track?order_number=${selectedOrder.order_number}`,
       ),
     enabled: !!selectedOrder?.order_number,
   });
@@ -97,7 +95,7 @@ export default function Profile() {
 
   const downloadIvoice = (id: number) => {
     window.open(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}api/v1/orders/invoice/${id}`
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}api/v1/orders/invoice/${id}`,
     );
   };
 
@@ -117,7 +115,7 @@ export default function Profile() {
                 onClick={() => handleTabChange("orders")}
                 className={`w-full flex items-center gap-3 px-4 py-3 transition ${
                   activeTab === "orders" || activeTab === "tracking"
-                    ? "bg-gray-900 text-white"
+                    ? "bg-[#02F8C5] text-black"
                     : "hover:bg-gray-50 text-gray-700"
                 }`}
               >
@@ -184,7 +182,7 @@ export default function Profile() {
                                 setActiveTab("tracking");
                                 mutateOrderStatus();
                               }}
-                              className="px-3 py-1 text-sm bg-gray-900 hover:bg-gray-800 text-white transition"
+                              className="px-3 py-1 text-sm bg-[#02F8C5]   text-white transition"
                             >
                               Track Order
                             </button>
@@ -205,14 +203,17 @@ export default function Profile() {
                                     {item.product_name}
                                   </p>
                                   <p className="text-xs text-gray-500">
-                                    Variant: <span className="uppercase">{item.sku}</span>
+                                    Variant:{" "}
+                                    <span className="uppercase">
+                                      {item.sku}
+                                    </span>
                                   </p>
                                   <p className="text-xs text-gray-500">
                                     Qty: {item.quantity}
                                   </p>
                                 </div>
                               </div>
-                            )
+                            ),
                           )}
                         </div>
 
@@ -288,7 +289,7 @@ export default function Profile() {
                                    !selectedOrder?.is_cancelable ||
                                    cancleMutating
                                      ? "bg-gray-300 cursor-not-allowed"
-                                     : "bg-gray-900 hover:bg-gray-800"
+                                     : "bg-[#02F8C5]  "
                                  }
                          `}
                     >
@@ -305,7 +306,7 @@ export default function Profile() {
                                    !selectedOrder?.is_returnable ||
                                    returnMutating
                                      ? "bg-gray-300 cursor-not-allowed"
-                                     : "bg-gray-900 hover:bg-gray-800"
+                                     : "bg-[#02F8C5]  "
                                  }
                          `}
                     >
@@ -324,7 +325,7 @@ export default function Profile() {
                                    !selectedOrder?.is_replaceable ||
                                    replaceMutating
                                      ? "bg-gray-300 cursor-not-allowed"
-                                     : "bg-gray-900 hover:bg-gray-800"
+                                     : "bg-[#02F8C5]  "
                                  }
                          `}
                     >
@@ -339,12 +340,15 @@ export default function Profile() {
                 {/* Tracking Steps */}
                 <div className="relative pl-2 md:pl-4">
                   {orderStatus?.data?.map((step: any, idx: number) => (
-                    <div key={idx} className="flex gap-6 mb-8 last:mb-0 relative">
+                    <div
+                      key={idx}
+                      className="flex gap-6 mb-8 last:mb-0 relative"
+                    >
                       <div className="flex flex-col items-center z-10">
                         <div
                           className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                             step.completed
-                              ? "bg-gray-900 text-white"
+                              ? "bg-[#02F8C5] text-black"
                               : "bg-gray-200 text-gray-500"
                           }`}
                         >
@@ -354,7 +358,7 @@ export default function Profile() {
                       {idx < orderStatus?.data?.length - 1 && (
                         <div
                           className={`absolute left-4 top-8 bottom-[-2rem] w-0.5 ${
-                            step.completed ? "bg-gray-900" : "bg-gray-200"
+                            step.completed ? "bg-[#02F8C5]" : "bg-gray-200"
                           }`}
                           style={{ transform: "translateX(-50%)" }}
                         />
@@ -367,7 +371,9 @@ export default function Profile() {
                         >
                           {step.status}
                         </h4>
-                        <p className="text-sm text-gray-500 mt-1">{step.date}</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {step.date}
+                        </p>
                         {step.location && (
                           <p className="text-sm text-gray-500">
                             {step.location}

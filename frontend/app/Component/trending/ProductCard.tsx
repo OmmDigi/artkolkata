@@ -187,7 +187,7 @@ const IconButton = ({ children, onClick, active }: any) => (
   <button
     onClick={onClick}
     className={`w-10 h-10 rounded-full flex items-center justify-center shadow transition-all duration-300 hover:-translate-y-1 ${
-      active ? "bg-black hover:bg-gray-800" : "bg-white hover:bg-gray-200"
+      active ? "bg-black  " : "bg-white hover:bg-gray-200"
     }`}
   >
     {children}

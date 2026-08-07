@@ -1,3 +1,5 @@
+"use client";
+
 import ContactUsForm from "@/Component1/ContactUsForm";
 import PromoSection from "@/Component1/PromoSection";
 import {
@@ -13,8 +15,20 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
 
 export default function page() {
+  const { data: siteInfo } = useSiteInfo();
+  
+  const primaryPhone = siteInfo?.contact_phones?.find(p => p.is_primary) ?? siteInfo?.contact_phones?.[0];
+  const phoneText = primaryPhone?.value || "8621803898";
+  
+  const primaryAddress = siteInfo?.site_addresses?.find(a => a.is_primary) ?? siteInfo?.site_addresses?.[0];
+  const addressText = primaryAddress ? formatAddress(primaryAddress) : "Arabinda Pally, Duttapukur, Kolkata, N. 24 Pgs, 743248, West Bengal";
+  
+  const primaryEmail = siteInfo?.contact_emails?.find(e => e.is_primary) ?? siteInfo?.contact_emails?.[0];
+  const emailText = primaryEmail?.value || "artkolkata921@gmail.com";
+
   return (
     <main className="*:font-spartan bg-gray-50 text-black">
       <section className="w-full relative bg-gray-100  overflow-hidden">
@@ -50,18 +64,17 @@ export default function page() {
             {/* <p className="text-gray-600 text-sm mb-4 leading-relaxed">
               Send us a text & an ambassador will respond when available.
             </p> */}
-            <p className="font-semibold">8621803898</p>
+            <p className="font-semibold">{phoneText}</p>
           </div>
 
           {/* Address */}
           <div>
             <h3 className="font-bold text-sm tracking-wider mb-4">ADDRESS</h3>
             <p className="text-gray-600 text-sm leading-relaxed">
-              Arabinda Pally, Duttapukur, Kolkata, N. 24 Pgs, 743248, West
-              Bengal
+              {addressText}
             </p>
             <p className="text-gray-600 text-sm mt-4">
-              artkolkata921@gmail.com{" "}
+              {emailText}
             </p>
           </div>
 
@@ -83,31 +96,20 @@ export default function page() {
             </h3>
             <div className="flex justify-center gap-4">
               <a
-                href="#"
+                href="https://www.facebook.com/sujansarkar1349/"
                 className="text-[#1877F2] hover:opacity-80 transition-opacity"
               >
                 <Facebook size={20} />
               </a>
+
               <a
-                href="#"
-                className="text-[#1DA1F2] hover:opacity-80 transition-opacity"
-              >
-                <Twitter size={20} />
-              </a>
-              <a
-                href="#"
-                className="text-[#EA4C89] hover:opacity-80 transition-opacity"
-              >
-                <Dribbble size={20} />
-              </a>
-              <a
-                href="#"
+                href="https://www.youtube.com/channel/UC96zR5UuNfReQHaoHwMax9g"
                 className="text-[#FF0000] hover:opacity-80 transition-opacity"
               >
                 <Youtube size={20} />
               </a>
               <a
-                href="#"
+                href="https://www.instagram.com/art_kolkata1349/"
                 className="text-[#E4405F] hover:opacity-80 transition-opacity"
               >
                 <Instagram size={20} />
@@ -140,7 +142,7 @@ export default function page() {
       </div>
 
       {/* Features Section */}
-      <PromoSection />
+      {/* <PromoSection /> */}
     </main>
   );
 }

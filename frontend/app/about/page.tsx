@@ -165,7 +165,7 @@ export default function AboutPage() {
                   key={index}
                   className="bg-white rounded-2xl p-8 hover:shadow-2xl transition-all duration-300 group"
                 >
-                  <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mb-6 group-hover:bg-gray-800 transition-colors">
+                  <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center mb-6 group-  transition-colors">
                     <Icon className="w-8 h-8 text-white" />
                   </div>
                   <h3 className="text-2xl font-bold text-black mb-4">
@@ -250,7 +250,7 @@ export default function AboutPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/product"
-              className="group inline-flex items-center justify-center gap-2 bg-black hover:bg-gray-900 text-white rounded-full px-10 py-4 font-medium transition-all duration-300"
+              className="group inline-flex items-center justify-center gap-2 bg-black hover:bg-[#02F8C5] text-black rounded-full px-10 py-4 font-medium transition-all duration-300"
             >
               See all collections
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />

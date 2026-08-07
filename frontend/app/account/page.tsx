@@ -67,7 +67,7 @@ const Account = () => {
           onClick={() => setActiveTab(0)}
           className={`px-10 py-3  shadow-md transition  ${
             activeTab === 0
-              ? "bg-[#000000] text-white  shadow-lg"
+              ? "bg-[#02F8C5] text-black  shadow-lg"
               : "bg-white text-gray-700 hover:bg-gray-100"
           }`}
         >
@@ -78,7 +78,7 @@ const Account = () => {
           onClick={() => setActiveTab(1)}
           className={`px-10 py-3  shadow-md transition ${
             activeTab === 1
-              ? "bg-[#000000] text-white  shadow-lg"
+              ? "bg-[#02F8C5] text-black  shadow-lg"
               : "bg-white text-gray-700 hover:bg-gray-100"
           }`}
         >

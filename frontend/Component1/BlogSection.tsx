@@ -60,7 +60,7 @@ export default function BlogSection() {
 
           <Link
             href="/blog"
-            className="group inline-flex items-center justify-center gap-2 bg-black hover:bg-gray-900 text-white rounded-full px-8 py-4 font-medium transition-all duration-300 shrink-0"
+            className="group inline-flex items-center justify-center gap-2 bg-black hover:bg-[#02F8C5] text-black rounded-full px-8 py-4 font-medium transition-all duration-300 shrink-0"
           >
             Read all blogs
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />

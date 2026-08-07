@@ -455,9 +455,9 @@ const CheckoutPage = () => {
                           </div>
                           <button
                             onClick={() => deleteItem(item)}
-                            className="flex-shrink-0 self-start p-2 hover:bg-gray-100 rounded transition-colors text-gray-400 hover:text-gray-600"
+                            className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-600 cursor-pointer"
                           >
-                            <TrashIcon />
+                            <TrashIcon className="text-lg" />
                           </button>
                         </div>
                       ))}
@@ -529,7 +529,7 @@ const CheckoutPage = () => {
                 </span>
               </div>
 
-              {/* <div
+              <div
                 className="border-t border-gray-200 pt-4 relative"
                 ref={couponRef}
               >
@@ -558,11 +558,21 @@ const CheckoutPage = () => {
                         type="button"
                         onClick={applyCoupon}
                         disabled={isApplyingCoupon}
-                        className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition font-medium"
+                        className="px-4 py-2 bg-gray-900 text-white rounded-lg   transition font-medium"
                       >
                         {isApplyingCoupon ? "..." : "Apply"}
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCouponList(!showCouponList);
+                        setAppliedCoupon(false);
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium text-left underline"
+                    >
+                      {showCouponList ? "Hide coupons" : "Show all coupons"}
+                    </button>
 
                     {showCouponList && availableCoupons?.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
@@ -595,7 +605,7 @@ const CheckoutPage = () => {
                     )}
                   </div>
                 )}
-              </div> */}
+              </div>
 
               <div className="mt-8">
                 <div className="space-y-4 pt-6 border-t border-gray-200">
@@ -621,12 +631,12 @@ const CheckoutPage = () => {
                       isCalculatingPrice ||
                       isNotServiceable
                     }
-                    className={`w-full py-3 px-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 transition ${
+                    className={`w-full py-3 px-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 transition cursor-pointer ${
                       agreedToTerms &&
                       !isPlacingOrder &&
                       !isCalculatingPrice &&
                       !isNotServiceable
-                        ? "bg-gray-900 text-white hover:bg-gray-800"
+                        ? "bg-[#02F8C5] text-black  "
                         : "bg-gray-300 text-gray-600 cursor-not-allowed"
                     }`}
                   >

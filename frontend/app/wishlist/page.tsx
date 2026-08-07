@@ -53,7 +53,7 @@ const WishlistPage = () => {
       </div>
 
       <Link href={"/product"}>
-        <button className="px-8 py-3 bg-gray-900 text-white text-sm font-medium rounded hover:bg-gray-800 transition-colors">
+        <button className="px-8 py-3 bg-[#02F8C5] text-black text-sm font-medium rounded   transition-colors">
           Start Shopping
         </button>
       </Link>
@@ -111,9 +111,21 @@ const WishlistPage = () => {
                       </button>
                     </td>
                     <td className="py-6 pr-4">
-                      <Link href={item.href || item.url || (item.slug ? `/product/${item.slug}` : "/product")} className="block">
+                      <Link
+                        href={
+                          item.href ||
+                          item.url ||
+                          (item.slug ? `/product/${item.slug}` : "/product")
+                        }
+                        className="block"
+                      >
                         <img
-                          src={item.image1 || item.image || item.images?.[0]?.image || "https://framerusercontent.com/images/dfydRQ0hineaQjqYigxtJ3UUI.jpg"}
+                          src={
+                            item.image1 ||
+                            item.image ||
+                            item.images?.[0]?.image ||
+                            "https://framerusercontent.com/images/dfydRQ0hineaQjqYigxtJ3UUI.jpg"
+                          }
                           alt={item.name || "Product Image"}
                           className="w-24 h-30 object-cover rounded hover:opacity-80 transition-opacity"
                         />
@@ -122,14 +134,21 @@ const WishlistPage = () => {
                     <td className="py-6 pr-4">
                       <div className="space-y-2">
                         <Link
-                          href={item.href || item.url || (item.slug ? `/product/${item.slug}` : "/product")}
+                          href={
+                            item.href ||
+                            item.url ||
+                            (item.slug ? `/product/${item.slug}` : "/product")
+                          }
                           className="text-base font-medium text-gray-900 hover:text-pink-600 transition-colors block"
                         >
                           {item.name || "Product Name"}
                         </Link>
                         <div className="flex items-center gap-1">
                           <span className="text-gray-900 text-lg font-medium">
-                            ₹{Number(item.selling_price ?? item.price ?? 0).toFixed(2)}
+                            ₹
+                            {Number(
+                              item.selling_price ?? item.price ?? 0,
+                            ).toFixed(2)}
                           </span>
                         </div>
                         <div className="text-sm text-gray-500">
@@ -142,7 +161,7 @@ const WishlistPage = () => {
                         {item.inStock ? (
                           <button
                             onClick={() => addToCart(item as any)}
-                            className="px-6 py-2 bg-[#000000] hover:bg-gray-800 text-white text-sm font-medium rounded transition-colors border-dotted border-2 w-[90%]"
+                            className="px-6 py-2 bg-[#000000]   text-white text-sm font-medium rounded transition-colors border-dotted border-2 w-[90%]"
                           >
                             Add to cart
                           </button>

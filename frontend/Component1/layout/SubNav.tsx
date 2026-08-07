@@ -78,9 +78,7 @@ export default function SubNav() {
 
   return (
     <nav
-      className={`hidden md:block sticky top-15 shadow-2xl bg-gray-800 border-t border-gray-700 transition-all duration-300 z-40 ${
-        show ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
-      }`}
+      className={`hidden md:block sticky top-15 shadow-2xl bg-gray-800 border-t border-gray-700 transition-all duration-300 z-40`}
       aria-label="Sub navigation"
     >
       <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -154,7 +152,7 @@ export default function SubNav() {
                   router.push(`/product?category=${category.slug}`);
                   setIsSubNavMenuOpen(false);
                 }}
-                className="w-full flex items-center gap-0 p-1 hover:bg-gray-50 transition rounded-md border border-transparent hover:border-gray-200 text-left"
+                className="w-full flex items-center gap-0 p-1 hover:bg-gray-200 transition rounded-md border border-transparent hover:border-gray-200 text-left"
               >
                 {category.image ? (
                   <img

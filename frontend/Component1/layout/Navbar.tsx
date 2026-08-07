@@ -18,6 +18,7 @@ import { useWishlistStore } from "../../store/useWishlistStore";
 import { useUserStore, useIsLoggedIn } from "../../store/useUserStore";
 import ShoppingCartSidebar from "@/app/Component/trending/ShoppingCartSidebar";
 import LanguageSelector from "@/app/Component/LanguageSelector";
+import { useSiteInfo } from "@/hooks/useSiteSettings";
 
 interface ApiCategory {
   id?: string | number;
@@ -67,6 +68,8 @@ export default function Navbar() {
 
   const [placeholderText, setPlaceholderText] = useState("Search products...");
   const [ribbonText, setRibbonText] = useState("");
+
+  const { data: siteInfo } = useSiteInfo();
 
   useEffect(() => {
     const fullText = "End of Summer Sale is Live";
@@ -284,9 +287,9 @@ export default function Navbar() {
                 className="text-2xl font-bold text-gray-900 transition pointer-events-auto"
               >
                 <img
-                  src="/Art-Kolkata-Logo.png"
-                  alt="Art Kolkata Logo"
-                  className="h-12 md:h-16"
+                  src={siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}
+                  alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
+                  className="h-12 md:h-16 object-contain"
                 />
               </Link>
               <div
@@ -563,6 +566,48 @@ export default function Navbar() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-400 rounded-full text-sm text-black focus:outline-none focus:border-gray-500"
             />
+            {/* Mobile Search Results Dropdown */}
+            {searchQuery.trim().length >= 3 && (
+              <div className="absolute top-full left-0 mt-1 w-full bg-white shadow-lg rounded-md border border-gray-200 z-50 p-2 max-h-96 overflow-y-auto">
+                {isSearchLoading ? (
+                  <p className="text-gray-600 p-3 text-sm">Searching...</p>
+                ) : isSearchError ? (
+                  <p className="text-red-600 p-3 text-sm">
+                    Error fetching results.
+                  </p>
+                ) : searchResults?.data?.length > 0 ? (
+                  searchResults.data.map((item: any) => (
+                    <Link
+                      key={item.id}
+                      href={`/product/${item.slug}`}
+                      onClick={() => {
+                        setSearchQuery("");
+                        setDebouncedQuery(null);
+                      }}
+                      className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
+                    >
+                      <img
+                        src={item?.images?.[0]?.image || item?.image1}
+                        className="w-12 h-12 object-cover rounded border"
+                        alt={item.name}
+                      />
+                      <div>
+                        <p className="font-medium text-gray-800 text-sm">
+                          {item.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          ₹{item.price}
+                        </p>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-gray-600 p-3 text-sm">
+                    No products found.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </header>

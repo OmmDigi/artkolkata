@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ShoppingBag, ShoppingCart } from "lucide-react";
+import { X, ShoppingBag, ShoppingCart, TrashIcon } from "lucide-react";
 import Link from "next/link";
 import { useCartStore } from "@/store/useCartStore";
 import { PiShoppingCartSimpleLight } from "react-icons/pi";
@@ -40,19 +40,6 @@ const ShoppingCartSidebar = ({
   );
 
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  const TrashIcon = () => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 17 19"
-      width="17"
-      className="fill-current"
-    >
-      <g fillRule="nonzero">
-        <path d="M16.227 3.03h-5l-.433-1.87c-.086-.37-.394-.63-.749-.63h-3.09c-.355 0-.664.26-.75.632L5.771 3.03H.773c-.427 0-.773.373-.773.833v.834c0 .46.346.833.773.833h15.454c.427 0 .773-.373.773-.833v-.834c0-.46-.346-.833-.773-.833ZM15 6.53H3v9.75a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 15 16.28V6.53Z" />
-      </g>
-    </svg>
-  );
 
   const portalContent = (
     <>
@@ -180,10 +167,9 @@ const ShoppingCartSidebar = ({
                     {/* Remove Button */}
                     <button
                       onClick={() => deleteItem(item)}
-                      className="flex-shrink-0 self-start p-2 hover:bg-gray-100 rounded transition-colors text-gray-400 hover:text-gray-600"
-                      aria-label="Remove item"
+                      className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-600 cursor-pointer"
                     >
-                      <TrashIcon />
+                      <TrashIcon className="text-lg" />
                     </button>
                   </div>
                 ))}
@@ -201,7 +187,7 @@ const ShoppingCartSidebar = ({
                   <span className="font-medium text-gray-900">
                     ₹{subtotal.toFixed(2)}
                   </span>
-                  <span className="text-xs text-gray-500">(ex. VAT)</span>
+                  {/* <span className="text-xs text-gray-500">(ex. VAT)</span> */}
                 </div>
               </div>
 
@@ -216,7 +202,7 @@ const ShoppingCartSidebar = ({
                 <Link
                   href="/checkout"
                   onClick={() => setIsOpen(false)}
-                  className="block w-full py-3 px-4 bg-gray-900 text-white text-center text-sm font-medium rounded hover:bg-gray-800 transition-colors"
+                  className="block w-full py-3 px-4 bg-[#02F8C5] text-black text-center text-sm font-medium rounded   transition-colors"
                 >
                   Checkout
                 </Link>

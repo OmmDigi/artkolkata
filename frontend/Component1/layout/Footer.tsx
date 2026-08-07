@@ -6,16 +6,17 @@ import {
   Phone,
   MapPin,
   Instagram,
-  Dribbble,
   Facebook,
   Twitter,
   Youtube,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
 
 export default function Footer() {
   const [email, setEmail] = useState("");
   const [subscribeStatus, setSubscribeStatus] = useState("");
+  const { data: siteInfo } = useSiteInfo();
 
   const handleSubscribe = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -40,49 +41,56 @@ export default function Footer() {
   const socialLinks = [
     {
       label: "Instagram",
-      href: "https://instagram.com",
+      href: "https://www.instagram.com/art_kolkata1349/",
       icon: Instagram,
       color: "text-[#E4405F]",
     },
-    {
-      label: "Dribbble",
-      href: "https://dribbble.com",
-      icon: Dribbble,
-      color: "text-[#EA4C89]",
-    },
+
     {
       label: "Facebook",
-      href: "https://facebook.com",
+      href: " https://www.facebook.com/sujansarkar1349/",
       icon: Facebook,
       color: "text-[#1877F2]",
     },
-    {
-      label: "Twitter",
-      href: "https://x.com",
-      icon: Twitter,
-      color: "text-[#1DA1F2]",
-    },
+    // {
+    //   label: "Twitter",
+    //   href: "https://x.com",
+    //   icon: Twitter,
+    //   color: "text-[#1DA1F2]",
+    // },
     {
       label: "Youtube",
-      href: "https://youtube.com",
+      href: "https://www.youtube.com/channel/UC96zR5UuNfReQHaoHwMax9g",
       icon: Youtube,
       color: "text-[#FF0000]",
     },
   ];
 
-  const contactLinks = [
-    {
-      label: "artkolkata921@gmail.com",
-      href: "artkolkata921@gmail.com",
-      icon: Mail,
-    },
-    { label: "+91 8621803898", href: "tel:+918621803898", icon: Phone },
-    {
+  const contactLinks = [];
+  if (siteInfo?.contact_emails?.length) {
+    const primaryEmail = siteInfo.contact_emails.find((e) => e.is_primary) ?? siteInfo.contact_emails[0];
+    if (primaryEmail) contactLinks.push({ label: primaryEmail.value, href: `mailto:${primaryEmail.value}`, icon: Mail });
+  } else {
+    contactLinks.push({ label: "artkolkata921@gmail.com", href: "mailto:artkolkata921@gmail.com", icon: Mail });
+  }
+
+  if (siteInfo?.contact_phones?.length) {
+    const primaryPhone = siteInfo.contact_phones.find((p) => p.is_primary) ?? siteInfo.contact_phones[0];
+    if (primaryPhone) contactLinks.push({ label: primaryPhone.value, href: `tel:${primaryPhone.value.replace(/\s/g, "")}`, icon: Phone });
+  } else {
+    contactLinks.push({ label: "+91 8621803898", href: "tel:+918621803898", icon: Phone });
+  }
+
+  if (siteInfo?.site_addresses?.length) {
+    const primaryAddress = siteInfo.site_addresses.find((a) => a.is_primary) ?? siteInfo.site_addresses[0];
+    if (primaryAddress) contactLinks.push({ label: formatAddress(primaryAddress), href: primaryAddress.map_url || "#", icon: MapPin });
+  } else {
+    contactLinks.push({
       label: "Duttapukur, North 24 Parganas, West Bengal – 743248",
       href: "https://maps.google.com/maps?q=Arabinda%20Pally,%20Duttapukur,%20Kolkata,%20N.%2024%20Pgs,%20743248,%20West%20Bengal&t=&z=14&ie=UTF8&iwloc=&output=embed",
       icon: MapPin,
-    },
-  ];
+    });
+  }
 
   return (
     <footer className="bg-black text-white py-3 md:py-5">
@@ -96,9 +104,9 @@ export default function Footer() {
               className="text-2xl font-bold text-gray-900 transition"
             >
               <img
-                src="/Art-Kolkata-Logo.png"
-                alt="Art Kolkata Logo"
-                className="h-16 brightness-0 invert"
+                src={siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}
+                alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
+                className="h-16 brightness-0 invert object-contain"
               />
             </Link>
             <p className="text-gray-400 text-sm leading-relaxed mb-6">
@@ -167,7 +175,7 @@ export default function Footer() {
                     className="flex items-center gap-3 p-3 rounded-full border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all group"
                   >
                     <div className="w-5 h-5 flex items-center justify-center">
-                      <Icon className="w-4 h-4 text-white" />
+                      <Icon className="w-4 h-4 text-orange-600" />
                     </div>
                     <span className="text-gray-400 group-hover:text-white text-sm transition-colors">
                       {link.label}

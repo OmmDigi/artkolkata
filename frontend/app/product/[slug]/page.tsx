@@ -9,6 +9,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Play,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -680,6 +681,7 @@ const ProductPage = () => {
                             <div className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
                           ) : (
                             <Heart
+                              className="text-gray-700"
                               size={24}
                               fill={inWishlist ? "red" : "none"}
                               color={inWishlist ? "red" : "currentColor"}
@@ -714,18 +716,36 @@ const ProductPage = () => {
                 <div className="flex justify-center mt-4 gap-2 items-center h-4">
                   {(() => {
                     const images = currentImages;
-                    return images?.map((_: any, idx: number) => (
-                      <button
-                        key={idx}
-                        onClick={() => setMobileImageIndex(idx)}
-                        className={`rounded-full transition-all ${
-                          mobileImageIndex === idx
-                            ? "bg-black w-3 h-3"
-                            : "bg-gray-300 w-2 h-2"
-                        }`}
-                        aria-label={`Go to slide ${idx + 1}`}
-                      />
-                    ));
+                    return images?.map((img: any, idx: number) => {
+                      if (img?.type === "video") {
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => setMobileImageIndex(idx)}
+                            className={`flex items-center justify-center rounded-full transition-all ${
+                              mobileImageIndex === idx
+                                ? "bg-black text-white w-4 h-4"
+                                : "bg-gray-300 text-gray-500 w-3 h-3"
+                            }`}
+                            aria-label={`Go to video ${idx + 1}`}
+                          >
+                            <Play size={10} fill="currentColor" />
+                          </button>
+                        );
+                      }
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setMobileImageIndex(idx)}
+                          className={`rounded-full transition-all ${
+                            mobileImageIndex === idx
+                              ? "bg-black w-3 h-3"
+                              : "bg-gray-300 w-2 h-2"
+                          }`}
+                          aria-label={`Go to slide ${idx + 1}`}
+                        />
+                      );
+                    });
                   })()}
                 </div>
               </div>
@@ -757,19 +777,59 @@ const ProductPage = () => {
               </h4>
 
               {/* Price */}
-              <div className="flex items-center gap-3">
-                <span className="text-3xl font-bold text-[#000000]">
-                  ₹{selectedVariant?.price || fullProduct?.price}
-                </span>
+              <div className="flex flex-col gap-1">
+                {(() => {
+                  const currentPrice = Number(
+                    selectedVariant?.price || fullProduct?.price || 0,
+                  );
+                  const comparePrice = Number(
+                    selectedVariant?.compareAtPrice ||
+                      fullProduct?.compare_at_price ||
+                      0,
+                  );
+                  const discountPercentage =
+                    comparePrice > currentPrice
+                      ? Math.round(
+                          ((comparePrice - currentPrice) / comparePrice) * 100,
+                        )
+                      : 0;
 
-                {fullProduct?.compare_at_price && (
-                  <span className="line-through text-gray-400 text-lg">
-                    ₹
-                    {selectedVariant?.compareAtPrice ||
-                      fullProduct?.compare_at_price}
-                  </span>
-                )}
-                <div className="flex items-center gap-1">
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-3">
+                        {discountPercentage > 0 && (
+                          <span className="text-3xl text-[#cc0c39] font-light">
+                            -{discountPercentage}%
+                          </span>
+                        )}
+                        <span className="text-3xl font-medium text-gray-900">
+                          <span className="text-lg align-top relative top-1">
+                            ₹
+                          </span>
+                          {currentPrice.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+
+                      {comparePrice > 0 && comparePrice > currentPrice && (
+                        <div className="text-sm text-gray-500 font-medium mt-1">
+                          M.R.P.:{" "}
+                          <span className="line-through">
+                            ₹{comparePrice.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="text-sm text-gray-800 font-medium">
+                        Inclusive of all taxes
+                      </div>
+                      <div className="text-sm text-green-700 font-semibold mt-1 bg-green-50 w-fit px-2 py-1 rounded">
+                        5% additional discount for above 1 lakh
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex items-center gap-1 mt-2">
                   <span className="text-amber-500">★</span>
                   <span className="text-sm text-gray-600">
                     {parseFloat(fullProduct?.rating ?? "0.0").toFixed(1)} (
@@ -790,7 +850,9 @@ const ProductPage = () => {
                       {opt.values.map((val: any) => (
                         <button
                           key={val.id}
-                          onClick={() => handleSelectOption(opt.name, val.value)}
+                          onClick={() =>
+                            handleSelectOption(opt.name, val.value)
+                          }
                           className={`px-4 py-2 rounded-lg border font-semibold ${
                             selectedOptions[opt.name] === val.value
                               ? "border-[#000000] text-[#000000]"
@@ -915,122 +977,44 @@ const ProductPage = () => {
               </div>
 
               {/* Feature Icons */}
-              <div
-                className="product-info__block-item"
-                data-block-id="feature_icons_LEBJhw"
-                data-block-type="feature-icons"
-              >
-                <div className="flex flex-col gap-[5px] my-5">
-                  <div className="flex items-center gap-2 p-2 bg-[#d3d3d3] text-[#6b6b6b]">
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      fill="none"
-                      strokeWidth="1.5"
-                      width="16"
-                      className="icon icon-picto-box"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        clipRule="evenodd"
-                        d="M.75 5.25 12 9.75l11.25-4.5L12 .75.75 5.25Z"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        clipRule="evenodd"
-                        d="M.75 5.25v13.5L12 23.25V9.75L.75 5.25v0Zm22.5 0v13.5L12 23.25V9.75l11.25-4.5v0Z"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        d="m18.187 7.275-11.25-4.5M20.625 16.5l-1.875.75"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                    <p className="m-0 text-[14px]">
-                      Free shipping on domestic orders above Rs. 1,999
-                    </p>
+              <div className="flex overflow-x-auto gap-4 py-4 scrollbar-hide my-4 border-y border-gray-200">
+                <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
+                  <div className="h-[35px] flex items-center justify-center w-full">
+                    <img
+                      src="/icons/icon-cod.png"
+                      className="h-[35px] w-[35px] object-contain mx-auto"
+                      alt="Pay on Delivery"
+                    />
                   </div>
+                  <span className="text-xs text-blue-600 hover:text-red-500 hover:underline cursor-pointer leading-tight w-full">
+                    Pay on Delivery
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-2 p-2 bg-[#d3d3d3] text-[#6b6b6b]">
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      fill="none"
-                      strokeWidth="1.5"
-                      width="16"
-                      className="icon icon-picto-delivery-truck"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M23.25 13.5V6a1.5 1.5 0 0 0-1.5-1.5h-12A1.5 1.5 0 0 0 8.25 6v6m0 0V6h-3a4.5 4.5 0 0 0-4.5 4.5v6a1.5 1.5 0 0 0 1.5 1.5H3"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        d="M.75 12h3a1.5 1.5 0 0 0 1.5-1.5V6"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        clipRule="evenodd"
-                        d="M7.5 19.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Zm12 0a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        d="M12 18h3"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                    <p className="m-0 text-[14px]">Easy Return and Exchange.</p>
+                <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
+                  <div className="h-[35px] flex items-center justify-center w-full">
+                    <img
+                      src="/icons/icon-free-shipping.png"
+                      className="h-[35px] w-[35px] object-contain mx-auto"
+                      alt="Free Delivery"
+                    />
                   </div>
+                  <span className="text-xs text-blue-600 hover:text-red-500 hover:underline cursor-pointer leading-tight w-full">
+                    Free Delivery
+                  </span>
+                </div>
 
-                  <div className="flex items-center gap-2 p-2 bg-[#d3d3d3] text-[#6b6b6b]">
-                    <svg
-                      aria-hidden="true"
-                      focusable="false"
-                      fill="none"
-                      strokeWidth="1.5"
-                      width="16"
-                      className="icon icon-picto-money"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M4.5 7.875a.375.375 0 1 1 0 .75.375.375 0 0 1 0-.75m15 7.5a.375.375 0 1 1 0 .75.375.375 0 0 1 0-.75"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        clipRule="evenodd"
-                        d="M.75 6a1.5 1.5 0 0 1 1.5-1.5h19.5a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H2.25A1.5 1.5 0 0 1 .75 18V6Z"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                      <path
-                        clipRule="evenodd"
-                        d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      ></path>
-                    </svg>
-                    <p className="m-0 text-[14px]">
-                      Cash on delivery is available
-                    </p>
+                <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
+                  <div className="h-[35px] flex items-center justify-center w-full">
+                    <img
+                      src="/icons/icon-secure-payment.png"
+                      className="h-[35px] w-[35px] object-contain mx-auto"
+                      alt="Secure transaction"
+                    />
                   </div>
+                  <span className="text-xs text-blue-600 hover:text-red-500 hover:underline cursor-pointer leading-tight w-full">
+                    Secure transaction
+                  </span>
                 </div>
               </div>
             </div>
@@ -1061,9 +1045,7 @@ const ProductPage = () => {
 
       {/* Reviews section  */}
       <div className="max-w-7xl mx-auto px-4 pb-8">
-        <h2 className="text-2xl font-bold text-black mb-6">
-          Product Reviews
-        </h2>
+        <h2 className="text-2xl font-bold text-black mb-6">Product Reviews</h2>
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="lg:w-1/3 h-auto bg-white p-5 rounded-lg border border-gray-200">
             <h2 className="text-lg font-bold mb-3 text-gray-800">
@@ -1103,7 +1085,7 @@ const ProductPage = () => {
               disabled={!isLoggedIn}
               onClick={handleSubmitReview}
               className={`w-full py-2 ${
-                isLoggedIn ? "bg-black hover:bg-gray-800" : "bg-gray-300"
+                isLoggedIn ? "bg-black  " : "bg-gray-300"
               } text-white rounded font-medium text-sm transition-colors cursor-pointer`}
             >
               Submit Review

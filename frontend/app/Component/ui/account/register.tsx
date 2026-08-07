@@ -142,7 +142,7 @@ const Register = ({ onSignupSuccess }: any) => {
         <button
           type="submit"
           disabled={isLoading}
-          className={`w-full bg-[#000000] font-semibold text-white py-3 rounded-xl shadow-md 
+          className={`w-full bg-[#02F8C5] font-semibold text-black py-3 rounded-xl shadow-md 
           ${isLoading && "opacity-70 cursor-not-allowed"}`}
         >
           {isLoading ? "Creating Account..." : "Create Account →"}
