@@ -460,11 +460,7 @@ const CheckoutPage = () => {
                           </div>
                           <button
                             onClick={() => deleteItem(item)}
-<<<<<<< HEAD
                             className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-800 text-red-600 cursor-pointer"
-=======
-                            className="flex-shrink-0 self-start p-2 hover:bg-gray-100 rounded transition-colors text-gray-400 hover:text-gray-600"
->>>>>>> 0ae94bf72f577294be1c41b36bcd9b9166cb3edf
                           >
                             <TrashIcon />
                           </button>
@@ -485,7 +481,9 @@ const CheckoutPage = () => {
 
                 {couponDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>{autoDiscount > 0 ? "Coupon discount" : "Discount"}</span>
+                    <span>
+                      {autoDiscount > 0 ? "Coupon discount" : "Discount"}
+                    </span>
                     <span className="font-semibold">
                       -₹{couponDiscountAmount.toFixed(2)}
                     </span>
