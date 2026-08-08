@@ -11,7 +11,7 @@ export const VCreateDiscount = Joi.object({
 
   min_amount_to_select: Joi.number()
     .required()
-    .label("Minium amount to purchase"),
+    .label("Minimum amount to purchase"),
 
   starts_at: Joi.string().required(),
   ends_at: Joi.string().required(),
@@ -29,10 +29,47 @@ export const VUpdateDiscount = Joi.object({
 
   min_amount_to_select: Joi.number()
     .required()
-    .label("Minium amount to purchase"),
+    .label("Minimum amount to purchase"),
 
   starts_at: Joi.string().required(),
   ends_at: Joi.string().required(),
+});
+
+export const VCreateAutoDiscountRule = Joi.object({
+  title: Joi.string().required().label("Title"),
+
+  min_order_amount: Joi.number()
+    .min(0)
+    .required()
+    .label("Minimum order amount"),
+
+  type: Joi.string().valid("percentage", "fixed_amount").required(),
+
+  value: Joi.number()
+    .greater(0)
+    .when("type", {
+      is: "percentage",
+      then: Joi.number().max(100).label("Discount percentage"),
+    })
+    .required()
+    .label("Discount value"),
+
+  // only meaningful for percentage rules, null/0 means no cap
+  max_discount_amount: Joi.number().min(0).allow(null, "").optional(),
+
+  stackable_with_coupon: Joi.boolean().default(false),
+
+  status: Joi.string().valid("active", "disabled").default("active"),
+
+  priority: Joi.number().integer().min(0).default(0),
+
+  // "YYYY-MM-DDTHH:mm" like the coupon dates, empty means no boundary
+  starts_at: Joi.string().allow(null, "").optional(),
+  ends_at: Joi.string().allow(null, "").optional(),
+});
+
+export const VUpdateAutoDiscountRule = VCreateAutoDiscountRule.keys({
+  id: Joi.number().required(),
 });
 
 export const VValidateDiscount = Joi.object({

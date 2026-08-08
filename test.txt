@@ -460,11 +460,7 @@ const CheckoutPage = () => {
                           </div>
                           <button
                             onClick={() => deleteItem(item)}
-<<<<<<< HEAD
-                            className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-800 text-red-600 cursor-pointer"
-=======
                             className="flex-shrink-0 self-start p-2 hover:bg-gray-100 rounded transition-colors text-gray-400 hover:text-gray-600"
->>>>>>> 0ae94bf72f577294be1c41b36bcd9b9166cb3edf
                           >
                             <TrashIcon />
                           </button>

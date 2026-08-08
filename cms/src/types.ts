@@ -331,3 +331,53 @@ export interface IBlog {
   created_at: string;
   updated_at: string;
 }
+
+export interface IContactEntry {
+  label: string;
+  value: string;
+  is_primary: boolean;
+}
+
+export interface IAddressEntry {
+  label: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  map_url: string;
+  is_primary: boolean;
+}
+
+export interface ISiteInfo {
+  site_logo: string;
+  site_logo_alt: string;
+  contact_emails: IContactEntry[];
+  contact_phones: IContactEntry[];
+  site_addresses: IAddressEntry[];
+}
+
+export interface IBanner {
+  id: number;
+  image_url: string;
+  alt_text: string | null;
+  link_url: string | null;
+  position: number;
+  is_active: boolean;
+}
+
+// order value discount that applies without any coupon code
+export interface IAutoDiscountRule {
+  id: number;
+  title: string;
+  min_order_amount: string;
+  type: "percentage" | "fixed_amount";
+  value: string;
+  max_discount_amount: string | null;
+  stackable_with_coupon: boolean;
+  status: "active" | "disabled";
+  priority: number;
+  starts_at: string | null;
+  ends_at: string | null;
+}

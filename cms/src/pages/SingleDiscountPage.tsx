@@ -108,7 +108,7 @@ export default function SingleDiscountPage() {
                       type="button"
                       onClick={() => {
                         setDiscountCode(
-                          generateDiscountCodeWithPrefix("TAC", 10)
+                          generateDiscountCodeWithPrefix(undefined, 10)
                         );
                       }}
                       className="inline-block text-blue-600 text-sm cursor-pointer underline select-none"
@@ -167,7 +167,7 @@ export default function SingleDiscountPage() {
                 <LabelInput
                   required
                   name="min_amount_to_select"
-                  label="Minium amount to purchase"
+                  label="Minimum amount to purchase"
                   placeholder="1000"
                   defaultValue={data?.data?.min_amount_to_select}
                 />
