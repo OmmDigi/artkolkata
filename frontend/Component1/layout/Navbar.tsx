@@ -371,7 +371,7 @@ export default function Navbar() {
                             <Link
                               key={category.id}
                               href={`/product?category=${category.slug}`}
-                              className="block hover:bg-gray-50 transition border-b border-gray-100 last:border-b-0"
+                              className="block hover:bg-gray-200 transition border-b border-gray-100 last:border-b-0"
                               onClick={() => setIsDropdownOpen(false)}
                             >
                               <div className="flex items-center space-x-3 p-3">
@@ -595,9 +595,7 @@ export default function Navbar() {
                         <p className="font-medium text-gray-800 text-sm">
                           {item.name}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          ₹{item.price}
-                        </p>
+                        <p className="text-xs text-gray-500">₹{item.price}</p>
                       </div>
                     </Link>
                   ))

@@ -167,7 +167,7 @@ const ShoppingCartSidebar = ({
                     {/* Remove Button */}
                     <button
                       onClick={() => deleteItem(item)}
-                      className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-600 cursor-pointer"
+                      className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-800 text-red-600 cursor-pointer"
                     >
                       <TrashIcon className="text-lg" />
                     </button>

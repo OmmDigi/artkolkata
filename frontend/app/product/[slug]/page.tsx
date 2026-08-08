@@ -1016,6 +1016,32 @@ const ProductPage = () => {
                     Secure transaction
                   </span>
                 </div>
+
+                <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
+                  <div className="h-[35px] flex items-center justify-center w-full">
+                    <img
+                      src="/icons/icon-top-brand._CB562506657_.png"
+                      className="h-[35px] w-[35px] object-contain mx-auto"
+                      alt="Top Brand"
+                    />
+                  </div>
+                  <span className="text-xs text-blue-600 hover:text-red-500 hover:underline cursor-pointer leading-tight w-full">
+                    Top Brand
+                  </span>
+                </div>
+
+                <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
+                  <div className="h-[35px] flex items-center justify-center w-full">
+                    <img
+                      src="/icons/icon-warranty._CB485935626_.png"
+                      className="h-[35px] w-[35px] object-contain mx-auto"
+                      alt="1 Year Warranty"
+                    />
+                  </div>
+                  <span className="text-xs text-blue-600 hover:text-red-500 hover:underline cursor-pointer leading-tight w-full">
+                    1 Year Warranty
+                  </span>
+                </div>
               </div>
             </div>
           </div>

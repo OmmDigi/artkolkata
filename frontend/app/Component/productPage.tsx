@@ -375,7 +375,7 @@ const ProductsPage = () => {
       {/* <div className="max-w-7xl mx-auto px-4"> */}
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8">
         {/* Sidebar Filters */}
-        <aside className="w-full lg:w-1/8">
+        <aside className="w-full lg:w-1/8 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scrollbar-hide">
           {/* Clear All Button */}
           <button
             onClick={handleClearAll}
