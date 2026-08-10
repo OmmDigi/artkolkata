@@ -50,7 +50,7 @@ export default function ContactUsForm() {
       <div className="text-center pt-6">
         <button
           type="submit"
-          className="bg-black text-white px-12 py-4 font-semibold tracking-wider   transition-colors"
+          className="bg-[#02F8C5] text-black rounded-full px-12 py-4 font-semibold tracking-wider   transition-colors"
         >
           SEND MESSAGE
         </button>

@@ -24,6 +24,12 @@ const CheckoutPage = () => {
   const [showCoupon, setShowCoupon] = useState(false);
   const { removeFromCart, updateQuantity, cart } = useCartStore();
 
+  const [showGstDetails, setShowGstDetails] = useState(false);
+  const [gstDetails, setGstDetails] = useState({
+    gstNumber: "",
+    businessName: "",
+  });
+
   const [shippingDetails, setShippingDetails] = useState({
     fullName: "",
     email: "ommdigitaldebu@gmail.com",
@@ -180,6 +186,10 @@ const CheckoutPage = () => {
       paymentMethod,
     };
 
+    if (showGstDetails) {
+      orderData["gstDetails"] = gstDetails;
+    }
+
     if (formData.code !== "") {
       orderData["product"] = formData;
     } else {
@@ -332,6 +342,50 @@ const CheckoutPage = () => {
                     />
                   </div>
                 ))}
+
+                {/* GST Details Checkbox */}
+                <div className="md:col-span-2 mt-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showGstDetails}
+                      onChange={(e) => setShowGstDetails(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900 cursor-pointer"
+                    />
+                    <span className="text-sm font-semibold text-gray-900">
+                      Add GST Details (Optional)
+                    </span>
+                  </label>
+                </div>
+
+                {showGstDetails && (
+                  <>
+                    <div className="mt-2">
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">
+                        GST Number
+                      </label>
+                      <input
+                        name="gstNumber"
+                        value={gstDetails.gstNumber}
+                        onChange={(e) => setGstDetails({ ...gstDetails, gstNumber: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                        placeholder="Enter GST Number"
+                      />
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">
+                        Business Name
+                      </label>
+                      <input
+                        name="businessName"
+                        value={gstDetails.businessName}
+                        onChange={(e) => setGstDetails({ ...gstDetails, businessName: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                        placeholder="Enter Business Name"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -642,7 +696,7 @@ const CheckoutPage = () => {
                       !isPlacingOrder &&
                       !isCalculatingPrice &&
                       !isNotServiceable
-                        ? "bg-gray-900 text-white hover:bg-gray-800"
+                        ? "bg-[#02F8C5] text-black hover:bg-[#02F8C5] cursor-pointer"
                         : "bg-gray-300 text-gray-600 cursor-not-allowed"
                     }`}
                   >

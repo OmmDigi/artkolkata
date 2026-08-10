@@ -31,7 +31,7 @@ export default function BlogPage() {
 
           <Link
             href="/"
-            className="group inline-flex items-center justify-center gap-3 bg-black hover:bg-[#02F8C5] text-black rounded-full px-10 py-4 font-medium transition-all duration-300"
+            className="group inline-flex items-center justify-center gap-3  hover:bg-[#02F8C5] bg-[#02F8C5] text-black rounded-full px-10 py-4 font-medium transition-all duration-300"
           >
             <Home className="w-5 h-5" />
             Go to Home Page
