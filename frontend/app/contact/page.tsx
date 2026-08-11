@@ -71,7 +71,9 @@ export default function page() {
           <div>
             <h3 className="font-bold text-sm tracking-wider mb-4">ADDRESS</h3>
             <p className="text-gray-600 text-sm leading-relaxed">
-              {addressText}
+              Duttapukur, arabinda pally<br/>
+              Near - Mahesh school<br/>
+              Pin- 743248
             </p>
             <p className="text-gray-600 text-sm mt-4">
               {emailText}
@@ -122,7 +124,7 @@ export default function page() {
         <div className="mb-16">
           <div className="w-full h-96 bg-gray-200 rounded-lg overflow-hidden">
             <iframe
-              src="https://maps.google.com/maps?q=Arabinda%20Pally,%20Duttapukur,%20Kolkata,%20N.%2024%20Pgs,%20743248,%20West%20Bengal&t=&z=14&ie=UTF8&iwloc=&output=embed"
+              src="https://maps.google.com/maps?q=Mahesh+Vidyapith,+Duttapukur,+West+Bengal+743248&t=&z=14&ie=UTF8&iwloc=&output=embed"
               width="100%"
               height="100%"
               style={{ border: 0 }}

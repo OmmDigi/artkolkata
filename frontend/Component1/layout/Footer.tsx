@@ -86,8 +86,14 @@ export default function Footer() {
     if (primaryAddress) contactLinks.push({ label: formatAddress(primaryAddress), href: primaryAddress.map_url || "#", icon: MapPin });
   } else {
     contactLinks.push({
-      label: "Duttapukur, North 24 Parganas, West Bengal – 743248",
-      href: "https://maps.google.com/maps?q=Arabinda%20Pally,%20Duttapukur,%20Kolkata,%20N.%2024%20Pgs,%20743248,%20West%20Bengal&t=&z=14&ie=UTF8&iwloc=&output=embed",
+      label: (
+        <>
+          Duttapukur, arabinda pally<br />
+          Near - Mahesh school<br />
+          Pin- 743248
+        </>
+      ),
+      href: "https://maps.app.goo.gl/rZFptT31uftFVGTP9?g_st=ac",
       icon: MapPin,
     });
   }
