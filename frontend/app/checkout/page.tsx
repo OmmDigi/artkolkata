@@ -32,7 +32,7 @@ const CheckoutPage = () => {
 
   const [shippingDetails, setShippingDetails] = useState({
     fullName: "",
-    email: "ommdigitaldebu@gmail.com",
+    email: "",
     phone: "",
     address: "",
     city: "",
@@ -49,6 +49,44 @@ const CheckoutPage = () => {
   const couponRef = useRef<HTMLDivElement>(null);
 
   const [debouncedPincode, setDebouncedPincode] = useState("");
+
+  const [selectedAddressId, setSelectedAddressId] = useState<number | "new">("new");
+
+  const { data: profileData } = useQuery({
+    queryKey: ["userProfileCheckout"],
+    queryFn: () => getRequest<any>("/api/v1/users/profile"),
+  });
+  const savedAddresses = profileData?.data?.user_address || [];
+
+  const handleAddressSelect = (id: number | "new") => {
+    setSelectedAddressId(id);
+    if (id === "new") {
+      setShippingDetails({
+        fullName: "",
+        email: "",
+        phone: "",
+        address: "",
+        city: "",
+        state: "",
+        pincode: "",
+        country: "India",
+      });
+    } else {
+      const addr = savedAddresses.find((a: any) => a.address_id === id);
+      if (addr) {
+        setShippingDetails({
+          fullName: addr.name || "",
+          email: addr.email || "",
+          phone: addr.phone || "",
+          address: addr.address_line1 || "",
+          city: addr.city || "",
+          state: addr.state || "",
+          pincode: addr.pincode || "",
+          country: "India",
+        });
+      }
+    }
+  };
 
   const changeQty = (item: any, diff: number) => {
     const newQty = item.quantity + diff;
@@ -284,64 +322,119 @@ const CheckoutPage = () => {
                 </h2>
               </div>
 
+              {savedAddresses.length > 0 && (
+                <div className="mb-6 space-y-3">
+                  <label className="text-sm font-semibold text-gray-900 block">
+                    Select a Delivery Address
+                  </label>
+                  <div className="grid gap-3">
+                    {savedAddresses.map((addr: any) => (
+                      <label
+                        key={addr.address_id}
+                        className={`flex items-start gap-3 p-4 border rounded-xl cursor-pointer transition ${
+                          selectedAddressId === addr.address_id
+                            ? "border-gray-900 bg-gray-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="addressSelection"
+                          checked={selectedAddressId === addr.address_id}
+                          onChange={() => handleAddressSelect(addr.address_id)}
+                          className="mt-1 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">{addr.name}</p>
+                          <p className="text-sm text-gray-600">
+                            {addr.address_line1}, {addr.city}, {addr.state} - {addr.pincode}
+                          </p>
+                          <p className="text-sm text-gray-600">Phone: {addr.phone}</p>
+                        </div>
+                      </label>
+                    ))}
+                    <label
+                      className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition ${
+                        selectedAddressId === "new"
+                          ? "border-gray-900 bg-gray-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="addressSelection"
+                        checked={selectedAddressId === "new"}
+                        onChange={() => handleAddressSelect("new")}
+                        className="cursor-pointer"
+                      />
+                      <span className="font-semibold text-gray-900">Enter a new address</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div className="grid md:grid-cols-2 gap-4">
                 {/* Fields */}
-                {["fullName", "email", "phone"].map((name) => (
-                  <div
-                    key={name}
-                    className={name === "fullName" ? "md:col-span-2" : ""}
-                  >
-                    <label className="text-sm font-semibold text-gray-900 mb-2 block capitalize">
-                      {name.replace(/([A-Z])/g, " $1")}{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      name={name}
-                      value={(shippingDetails as any)[name]}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                      placeholder={
-                        name === "fullName"
-                          ? "Full Name"
-                          : name === "email"
-                            ? "Email Address"
-                            : "Phone Number"
-                      }
-                    />
-                  </div>
-                ))}
+                {selectedAddressId === "new" && (
+                  <>
+                    {["fullName", "email", "phone"].map((name) => (
+                      <div
+                        key={name}
+                        className={name === "fullName" ? "md:col-span-2" : ""}
+                      >
+                        <label className="text-sm font-semibold text-gray-900 mb-2 block capitalize">
+                          {name.replace(/([A-Z])/g, " $1")}{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name={name}
+                          value={(shippingDetails as any)[name]}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                          placeholder={
+                            name === "fullName"
+                              ? "Full Name"
+                              : name === "email"
+                                ? "Email Address"
+                                : "Phone Number"
+                          }
+                        />
+                      </div>
+                    ))}
 
-                {/* Address */}
-                <div className="md:col-span-2 mt-2">
-                  <label className="text-sm font-semibold text-gray-900 mb-2 block">
-                    Address <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    name="address"
-                    value={shippingDetails.address}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                    placeholder="House number, street name, apartment, etc."
-                  />
-                </div>
+                    {/* Address */}
+                    <div className="md:col-span-2 mt-2">
+                      <label className="text-sm font-semibold text-gray-900 mb-2 block">
+                        Address <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        name="address"
+                        value={shippingDetails.address}
+                        onChange={handleInputChange}
+                        rows={3}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
+                        placeholder="House number, street name, apartment, etc."
+                      />
+                    </div>
 
-                {/* City / State / Pincode / Country */}
-                {["city", "state", "pincode", "country"].map((name) => (
-                  <div key={name} className="mt-2">
-                    <label className="block text-sm font-semibold text-gray-900 mb-2 capitalize">
-                      {name} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      name={name}
-                      disabled={name === "country"}
-                      value={(shippingDetails as any)[name]}
-                      onChange={handleInputChange}
-                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition ${name === "country" ? "bg-gray-100 text-gray-500" : ""}`}
-                      placeholder={`Enter ${name}`}
-                    />
-                  </div>
-                ))}
+                    {/* City / State / Pincode / Country */}
+                    {["city", "state", "pincode", "country"].map((name) => (
+                      <div key={name} className="mt-2">
+                        <label className="block text-sm font-semibold text-gray-900 mb-2 capitalize">
+                          {name} <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          name={name}
+                          disabled={name === "country"}
+                          value={(shippingDetails as any)[name]}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition ${name === "country" ? "bg-gray-100 text-gray-500" : ""}`}
+                          placeholder={`Enter ${name}`}
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
 
                 {/* GST Details Checkbox */}
                 <div className="md:col-span-2 mt-4">
@@ -367,7 +460,12 @@ const CheckoutPage = () => {
                       <input
                         name="gstNumber"
                         value={gstDetails.gstNumber}
-                        onChange={(e) => setGstDetails({ ...gstDetails, gstNumber: e.target.value })}
+                        onChange={(e) =>
+                          setGstDetails({
+                            ...gstDetails,
+                            gstNumber: e.target.value,
+                          })
+                        }
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
                         placeholder="Enter GST Number"
                       />
@@ -379,7 +477,12 @@ const CheckoutPage = () => {
                       <input
                         name="businessName"
                         value={gstDetails.businessName}
-                        onChange={(e) => setGstDetails({ ...gstDetails, businessName: e.target.value })}
+                        onChange={(e) =>
+                          setGstDetails({
+                            ...gstDetails,
+                            businessName: e.target.value,
+                          })
+                        }
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
                         placeholder="Enter Business Name"
                       />

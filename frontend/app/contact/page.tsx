@@ -128,7 +128,7 @@ export default function page() {
         <div className="mb-16">
           <div className="w-full h-96 bg-gray-200 rounded-lg overflow-hidden">
             <iframe
-              src="https://maps.app.goo.gl/rZFptT31uftFVGTP9?g_st=ac"
+              src="https://maps.google.com/maps?q=Duttapukur,%20arabinda%20pally,%20Near%20-%20Mahesh%20school,%20Pin-%20743248&t=&z=15&ie=UTF8&iwloc=&output=embed"
               width="100%"
               height="100%"
               style={{ border: 0 }}

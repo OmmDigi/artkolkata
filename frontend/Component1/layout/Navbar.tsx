@@ -237,6 +237,7 @@ export default function Navbar() {
 
   const { wishlist } = useWishlistStore();
   const isLoggedIn = useIsLoggedIn();
+  const user = useUserStore((state) => state.user);
   const logout = useUserStore((state) => state.logout);
   const [mounted, setMounted] = useState(false);
 
@@ -471,7 +472,7 @@ export default function Navbar() {
               <div className="relative transition hover:text-gray-900 cursor-pointer group">
                 <div className="flex flex-col text-sm leading-tight">
                   <span className="text-[11px] text-gray-500 font-medium">
-                    Hello, sign in
+                    Hello, {isAuthenticated ? user?.name || "User" : "sign in"}
                   </span>
                   <span className="font-bold flex items-center text-[13px]">
                     Account & Lists

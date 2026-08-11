@@ -1,17 +1,18 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Package, Download, Loader2, LogOut } from "lucide-react";
+import { Package, Download, Loader2, LogOut, MapPin, User } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getRequest, postRequest } from "@/lib/fetcher";
 import { toast } from "react-toastify";
 import { useUserStore } from "@/store/useUserStore";
+import AddressManager from "./AddressManager";
 
 export default function Profile() {
-  const [activeTab, setActiveTab] = useState("orders");
+  const [activeTab, setActiveTab] = useState("account");
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
-  const { logout } = useUserStore();
+  const { logout, user } = useUserStore();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -54,7 +55,7 @@ export default function Profile() {
     if (tab) {
       setActiveTab(tab);
     } else {
-      setActiveTab("orders"); // default
+      setActiveTab("account"); // default
     }
   }, [searchParams]);
 
@@ -111,6 +112,17 @@ export default function Profile() {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="bg-white border border-gray-200 rounded p-4 space-y-2">
+              <button
+                onClick={() => handleTabChange("account")}
+                className={`w-full flex items-center gap-3 px-4 py-3 transition ${
+                  activeTab === "account"
+                    ? "bg-[#02F8C5] text-black"
+                    : "hover:bg-gray-50 text-gray-700"
+                }`}
+              >
+                <User className="w-5 h-5" />
+                <span className="font-medium">Account Settings</span>
+              </button>
               <button
                 onClick={() => handleTabChange("orders")}
                 className={`w-full flex items-center gap-3 px-4 py-3 transition ${
@@ -383,6 +395,26 @@ export default function Profile() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Account Settings Tab */}
+            {activeTab === "account" && (
+              <div className="space-y-6">
+                <div className="bg-white border border-gray-200 rounded p-6">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile Details</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Name</p>
+                      <p className="font-medium text-gray-900">{user?.name || "Not provided"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Email</p>
+                      <p className="font-medium text-gray-900">{user?.email || "Not provided"}</p>
+                    </div>
+                  </div>
+                </div>
+                <AddressManager />
               </div>
             )}
           </div>

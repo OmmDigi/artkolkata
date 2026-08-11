@@ -61,10 +61,10 @@ export const postRequest = async <T = unknown,>(
 // };
 
 // ==================== DELETE REQUEST ====================
-// export const deleteRequest = async <T = unknown>(url: string): Promise<T> => {
-//   const response: AxiosResponse<T> = await API.delete(url);
-//   return response.data;
-// };
+export const deleteRequest = async <T = unknown>(config: RequestConfig): Promise<T> => {
+  const response: AxiosResponse<T> = await API.delete(config.url, { data: config.body });
+  return response.data;
+};
 
 // ==================== EXPORT API INSTANCE ====================
 export default API;
