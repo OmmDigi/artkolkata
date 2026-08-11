@@ -161,6 +161,64 @@ class BigshipService {
     return token;
   }
 
+  // Bigship binds the warehouse ids as System.Int64, but the seller panel shows
+  // them prefixed — "BSW142255" for warehouse 142255. Sending the prefixed form
+  // makes the whole request body fail to bind, which Bigship reports as the
+  // unhelpful "The req field is required". Accept either form, and fail here
+  // with the actual reason if the value is neither.
+  private numericLocationId(value: string, envVar: string): number {
+    const parsed = Number(value.trim().replace(/^BSW/i, ""));
+
+    if (!value || !Number.isInteger(parsed) || parsed <= 0) {
+      throw new Error(
+        `${envVar} must be a Bigship warehouse id (e.g. 142255 or BSW142255), but is "${value}".`,
+      );
+    }
+
+    return parsed;
+  }
+
+  // ------------------------------------------------------------
+  // FIELD SANITISERS — Bigship validates these strictly and answers
+  // any breach with a generic 400, so normalise before sending.
+  // ------------------------------------------------------------
+
+  // Names: 3-25 chars, alphabets/dots/spaces only.
+  private cleanName(value: string | undefined, fallback: string): string {
+    const cleaned = (value ?? "")
+      .replace(/[^A-Za-z. ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return (cleaned.length >= 3 ? cleaned : fallback).slice(0, 25);
+  }
+
+  // Address parts: alphanumeric, spaces and ' . , - / only.
+  private cleanAddress(value: string | undefined, max = 50): string {
+    return (value ?? "")
+      .replace(/[^A-Za-z0-9 '.,\-/]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, max);
+  }
+
+  // 10-12 digits starting 0/6/7/8/9 — strip the +91 / spacing people type in.
+  private cleanPhone(value: string | undefined): string {
+    const digits = (value ?? "").replace(/\D/g, "");
+    return digits.length > 12 ? digits.slice(-10) : digits;
+  }
+
+  // product_name takes alphabets, spaces and - , / only — digits are rejected,
+  // so "Ganesh Idol 12 inch" has to go across as "Ganesh Idol inch".
+  private cleanProductName(value: string | undefined): string {
+    const cleaned = (value ?? "")
+      .replace(/[^A-Za-z ,/-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return cleaned.length > 0 ? cleaned.slice(0, 50) : "Item";
+  }
+
   private async authHeaders() {
     const token = await this.getToken();
     return {
@@ -177,10 +235,14 @@ class BigshipService {
     weight = 0.5,
     invoiceValue = 500,
     codRequired = false,
+    dimensions?: { length: number; breadth: number; height: number },
   ): Promise<ServiceabilityResult> {
     try {
       const headers = await this.authHeaders();
 
+      // Quote against the same box the shipment will actually be booked with —
+      // couriers price on volumetric weight, so quoting a 10x10x10 box for a
+      // bulky item undercharges the customer at checkout.
       const payload = {
         shipment_category: "B2C",
         payment_type: codRequired ? "COD" : "Prepaid",
@@ -191,9 +253,9 @@ class BigshipService {
         box_details: [
           {
             each_box_dead_weight: Math.max(0.1, weight),
-            each_box_length: 10,
-            each_box_width: 10,
-            each_box_height: 10,
+            each_box_length: Math.ceil(dimensions?.length ?? 10),
+            each_box_width: Math.ceil(dimensions?.breadth ?? 10),
+            each_box_height: Math.ceil(dimensions?.height ?? 10),
             box_count: 1,
           },
         ],
@@ -245,31 +307,60 @@ class BigshipService {
       );
       const isCod = params.paymentMethod === "COD";
 
-      const [firstName, ...rest] = params.customerName.trim().split(/\s+/);
-      const lastName = rest.join(" ") || firstName;
+      const [rawFirst, ...rest] = (params.customerName ?? "").trim().split(/\s+/);
+      const firstName = this.cleanName(rawFirst, "Customer");
+      const lastName = this.cleanName(rest.join(" "), firstName);
+
+      // address_line1 has a 10 character minimum, so top a short one up with
+      // the city rather than letting Bigship reject the whole order.
+      let addressLine1 = this.cleanAddress(params.customerAddress);
+      if (addressLine1.length < 10) {
+        addressLine1 = this.cleanAddress(
+          `${addressLine1} ${params.customerCity}`.trim(),
+        );
+      }
+
+      // Anything past the 50 char cap spills into line2 instead of being lost.
+      const addressOverflow = this.cleanAddress(params.customerAddress).slice(
+        addressLine1.length,
+      );
+      const addressLine2 = this.cleanAddress(
+        params.customerAddress2 ?? addressOverflow,
+      );
+
+      const email = params.customerEmail ?? "";
+      const isValidEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 
       const addOrderPayload = {
         shipment_category: "b2c",
         warehouse_detail: {
-          pickup_location_id: this.pickupLocationId,
-          return_location_id: this.returnLocationId,
+          pickup_location_id: this.numericLocationId(
+            this.pickupLocationId,
+            "BIGSHIP_PICKUP_LOCATION_ID",
+          ),
+          return_location_id: this.numericLocationId(
+            this.returnLocationId,
+            "BIGSHIP_RETURN_LOCATION_ID",
+          ),
         },
         consignee_detail: {
           first_name: firstName,
           last_name: lastName,
           company_name: "",
-          contact_number_primary: params.customerPhone,
+          contact_number_primary: this.cleanPhone(params.customerPhone),
           contact_number_secondary: "",
-          email_id: params.customerEmail ?? "",
-        },
-        consignee_address: {
-          address_line1: params.customerAddress,
-          address_line2: params.customerAddress2 ?? "",
-          address_landmark: params.customerLandmark ?? "N/A",
-          pincode: params.customerPincode,
+          email_id: isValidEmail ? email : "",
+          // consignee_address is nested inside consignee_detail, not a sibling
+          consignee_address: {
+            address_line1: addressLine1,
+            address_line2: addressLine2,
+            address_landmark: this.cleanAddress(params.customerLandmark ?? "N A"),
+            pincode: params.customerPincode,
+          },
         },
         order_detail: {
-          invoice_date: params.orderDate,
+          // Docs require UTC DateTime format
+          invoice_date: new Date(params.orderDate).toISOString(),
           invoice_id: params.orderNumber,
           payment_type: isCod ? "COD" : "Prepaid",
           shipment_invoice_amount: invoiceAmount,
@@ -286,19 +377,20 @@ class BigshipService {
               product_details: params.items.map((item) => ({
                 product_category: this.defaultCategory,
                 product_sub_category: "",
-                product_name: item.name,
+                product_name: this.cleanProductName(item.name),
                 product_quantity: item.units,
                 each_product_invoice_amount: item.sellingPrice * item.units,
                 each_product_collectable_amount: isCod ? item.sellingPrice * item.units : 0,
-                hsn: item.hsn ?? "",
+                hsn: (item.hsn ?? "").replace(/\D/g, ""),
               })),
             },
           ],
-        },
-        ewaybill_number: "",
-        document_detail: {
-          invoice_document_file: "",
-          ewaybill_document_file: "",
+          // ewaybill_number and document_detail belong to order_detail
+          ewaybill_number: "",
+          document_detail: {
+            invoice_document_file: "",
+            ewaybill_document_file: "",
+          },
         },
       };
 
@@ -375,6 +467,36 @@ class BigshipService {
         message: "Bigship create order error",
         error: axiosError.response?.data ?? axiosError.message,
       });
+      return {
+        success: false,
+        error: axiosError.response?.data ?? axiosError.message,
+      };
+    }
+  }
+
+  // ============================================================
+  // GET WAREHOUSE LIST — the numeric warehouse_id returned here is what
+  // BIGSHIP_PICKUP_LOCATION_ID must be set to. The seller panel shows the
+  // same id prefixed with "BSW".
+  // ============================================================
+  async getWarehouseList(pageIndex = 1, pageSize = 50) {
+    try {
+      const headers = await this.authHeaders();
+      const response = await this.api.get("/api/warehouse/get/list", {
+        headers,
+        params: { page_index: pageIndex, page_size: pageSize },
+      });
+
+      if (!response.data.success) {
+        return { success: false, error: response.data.message };
+      }
+
+      return {
+        success: true,
+        warehouses: response.data.data?.result_data ?? [],
+      };
+    } catch (error) {
+      const axiosError = error as AxiosError;
       return {
         success: false,
         error: axiosError.response?.data ?? axiosError.message,
