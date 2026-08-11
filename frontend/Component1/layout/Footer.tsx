@@ -68,28 +68,59 @@ export default function Footer() {
 
   const contactLinks = [];
   if (siteInfo?.contact_emails?.length) {
-    const primaryEmail = siteInfo.contact_emails.find((e) => e.is_primary) ?? siteInfo.contact_emails[0];
-    if (primaryEmail) contactLinks.push({ label: primaryEmail.value, href: `mailto:${primaryEmail.value}`, icon: Mail });
+    const primaryEmail =
+      siteInfo.contact_emails.find((e) => e.is_primary) ??
+      siteInfo.contact_emails[0];
+    if (primaryEmail)
+      contactLinks.push({
+        label: primaryEmail.value,
+        href: `mailto:${primaryEmail.value}`,
+        icon: Mail,
+      });
   } else {
-    contactLinks.push({ label: "artkolkata921@gmail.com", href: "mailto:artkolkata921@gmail.com", icon: Mail });
+    contactLinks.push({
+      label: "artkolkata921@gmail.com",
+      href: "mailto:artkolkata921@gmail.com",
+      icon: Mail,
+    });
   }
 
   if (siteInfo?.contact_phones?.length) {
-    const primaryPhone = siteInfo.contact_phones.find((p) => p.is_primary) ?? siteInfo.contact_phones[0];
-    if (primaryPhone) contactLinks.push({ label: primaryPhone.value, href: `tel:${primaryPhone.value.replace(/\s/g, "")}`, icon: Phone });
+    const primaryPhone =
+      siteInfo.contact_phones.find((p) => p.is_primary) ??
+      siteInfo.contact_phones[0];
+    if (primaryPhone)
+      contactLinks.push({
+        label: primaryPhone.value,
+        href: `tel:${primaryPhone.value.replace(/\s/g, "")}`,
+        icon: Phone,
+      });
   } else {
-    contactLinks.push({ label: "+91 8621803898", href: "tel:+918621803898", icon: Phone });
+    contactLinks.push({
+      label: "+91 8621803898",
+      href: "tel:+918621803898",
+      icon: Phone,
+    });
   }
 
   if (siteInfo?.site_addresses?.length) {
-    const primaryAddress = siteInfo.site_addresses.find((a) => a.is_primary) ?? siteInfo.site_addresses[0];
-    if (primaryAddress) contactLinks.push({ label: formatAddress(primaryAddress), href: primaryAddress.map_url || "#", icon: MapPin });
+    const primaryAddress =
+      siteInfo.site_addresses.find((a) => a.is_primary) ??
+      siteInfo.site_addresses[0];
+    if (primaryAddress)
+      contactLinks.push({
+        label: formatAddress(primaryAddress),
+        href: primaryAddress.map_url || "#",
+        icon: MapPin,
+      });
   } else {
     contactLinks.push({
       label: (
         <>
-          Duttapukur, arabinda pally<br />
-          Near - Mahesh school<br />
+          Duttapukur, arabinda pally
+          <br />
+          Near - Mahesh school
+          <br />
           Pin- 743248
         </>
       ),
@@ -170,11 +201,11 @@ export default function Footer() {
           <div>
             <h5 className="text-lg font-semibold mb-6">Get in touch</h5>
             <div className="space-y-3">
-              {contactLinks.map((link) => {
+              {contactLinks.map((link: any) => {
                 const Icon = link.icon;
                 return (
                   <a
-                    key={link.label}
+                    key={link?.label}
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
