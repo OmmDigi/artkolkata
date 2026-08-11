@@ -19,14 +19,22 @@ import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
 
 export default function page() {
   const { data: siteInfo } = useSiteInfo();
-  
-  const primaryPhone = siteInfo?.contact_phones?.find(p => p.is_primary) ?? siteInfo?.contact_phones?.[0];
+
+  const primaryPhone =
+    siteInfo?.contact_phones?.find((p) => p.is_primary) ??
+    siteInfo?.contact_phones?.[0];
   const phoneText = primaryPhone?.value || "8621803898";
-  
-  const primaryAddress = siteInfo?.site_addresses?.find(a => a.is_primary) ?? siteInfo?.site_addresses?.[0];
-  const addressText = primaryAddress ? formatAddress(primaryAddress) : "Arabinda Pally, Duttapukur, Kolkata, N. 24 Pgs, 743248, West Bengal";
-  
-  const primaryEmail = siteInfo?.contact_emails?.find(e => e.is_primary) ?? siteInfo?.contact_emails?.[0];
+
+  const primaryAddress =
+    siteInfo?.site_addresses?.find((a) => a.is_primary) ??
+    siteInfo?.site_addresses?.[0];
+  const addressText = primaryAddress
+    ? formatAddress(primaryAddress)
+    : "Arabinda Pally, Duttapukur, Kolkata, N. 24 Pgs, 743248, West Bengal";
+
+  const primaryEmail =
+    siteInfo?.contact_emails?.find((e) => e.is_primary) ??
+    siteInfo?.contact_emails?.[0];
   const emailText = primaryEmail?.value || "artkolkata921@gmail.com";
 
   return (
@@ -71,13 +79,9 @@ export default function page() {
           <div>
             <h3 className="font-bold text-sm tracking-wider mb-4">ADDRESS</h3>
             <p className="text-gray-600 text-sm leading-relaxed">
-              Duttapukur, arabinda pally<br/>
-              Near - Mahesh school<br/>
-              Pin- 743248
+              {addressText}
             </p>
-            <p className="text-gray-600 text-sm mt-4">
-              {emailText}
-            </p>
+            <p className="text-gray-600 text-sm mt-4">{emailText}</p>
           </div>
 
           {/* We're Open */}
@@ -124,7 +128,7 @@ export default function page() {
         <div className="mb-16">
           <div className="w-full h-96 bg-gray-200 rounded-lg overflow-hidden">
             <iframe
-              src="https://maps.google.com/maps?q=Mahesh+Vidyapith,+Duttapukur,+West+Bengal+743248&t=&z=14&ie=UTF8&iwloc=&output=embed"
+              src="https://maps.app.goo.gl/rZFptT31uftFVGTP9?g_st=ac"
               width="100%"
               height="100%"
               style={{ border: 0 }}
