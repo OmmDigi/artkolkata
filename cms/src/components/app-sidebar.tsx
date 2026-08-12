@@ -64,10 +64,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           asChild
                           isActive={location.pathname === item.url}
                         >
-                          <div className="flex items-center gap-1">
+                          <Link
+                            to={item.url}
+                            className="flex items-center gap-1"
+                          >
                             <div className="size-1.5 bg-gray-700 rounded-full"></div>
-                            <Link to={item.url}>{item.title}</Link>
-                          </div>
+                            <div>{item.title}</div>
+                          </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}
