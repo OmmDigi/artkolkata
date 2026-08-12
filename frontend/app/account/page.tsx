@@ -42,13 +42,6 @@ const Account = () => {
     setActiveTab(0);
   };
 
-  console.log(
-    "Modal state - showOtp:",
-    showOtp,
-    "pendingOtpEmail:",
-    pendingOtpEmail,
-  );
-
   if (!mounted) return null;
 
   if (isLoggedIn) {

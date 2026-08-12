@@ -107,7 +107,12 @@ export default function page() {
               >
                 <Facebook size={20} />
               </a>
-
+              <a
+                href="https://x.com/artkolkata1"
+                className="text-[#1DA1F2] hover:opacity-80 transition-opacity"
+              >
+                <Twitter size={20} />
+              </a>
               <a
                 href="https://www.youtube.com/channel/UC96zR5UuNfReQHaoHwMax9g"
                 className="text-[#FF0000] hover:opacity-80 transition-opacity"

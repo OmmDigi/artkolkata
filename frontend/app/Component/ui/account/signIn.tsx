@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useState, FC, ChangeEvent, FormEvent } from "react";
 import { toast } from "react-toastify";
+import { useUserStore } from "../../../../store/useUserStore";
 
 interface SignInProps {
   pendingOtpEmail?: string;
@@ -25,6 +26,11 @@ interface LoginPayload {
 interface LoginResponse {
   data: {
     refreshToken: string;
+    user: {
+      name: string;
+      email: string;
+      [key: string]: any;
+    };
   };
 }
 
@@ -48,6 +54,7 @@ const SignIn: FC<SignInProps> = ({
   onOpenOtp,
 }) => {
   const router = useRouter();
+  const setUser = useUserStore((state) => state.setUser);
 
   const [form, setForm] = useState<FormState>({ email: "", password: "" });
 
@@ -60,7 +67,11 @@ const SignIn: FC<SignInProps> = ({
       }),
 
     onSuccess: (res: LoginResponse) => {
-      localStorage.setItem("token", res.data.refreshToken);
+      setUser({
+        token: res.data.refreshToken,
+        name: res.data.user?.name,
+        email: res.data.user?.email,
+      });
       router.push("/");
       toast.success("Signed in successfully!");
     },

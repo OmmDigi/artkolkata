@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Heart,
   ShoppingCart,
@@ -35,6 +35,7 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -522,11 +523,13 @@ export default function Navbar() {
                       href="/product"
                       className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
                     >
-                      Keep shopping for
+                      Keep shopping
                     </Link>
                     {isAuthenticated && (
                       <button
-                        onClick={() => logout()}
+                        onClick={() => {
+                          (logout(), router.push("/"));
+                        }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-orange-500"
                       >
                         Logout

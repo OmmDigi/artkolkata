@@ -52,12 +52,12 @@ export default function Footer() {
       icon: Facebook,
       color: "text-[#1877F2]",
     },
-    // {
-    //   label: "Twitter",
-    //   href: "https://x.com",
-    //   icon: Twitter,
-    //   color: "text-[#1DA1F2]",
-    // },
+    {
+      label: "Twitter",
+      href: "https://x.com/artkolkata1",
+      icon: Twitter,
+      color: "text-[#1DA1F2]",
+    },
     {
       label: "Youtube",
       href: "https://www.youtube.com/channel/UC96zR5UuNfReQHaoHwMax9g",
