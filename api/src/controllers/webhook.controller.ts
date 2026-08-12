@@ -5,10 +5,7 @@ import { doTransition } from "../utils/doTransition";
 import { httpResponse } from "../utils/httpResponse";
 import { processDelhiveryStatus } from "../services/webhook.service";
 import { getAuthToken } from "../utils/getAuthToken";
-import { pool } from "..";
-import BigshipService, { BigshipOrderItem } from "../services/bigshipService";
-import { aggregateShipmentDimensions } from "../utils/aggregateShipmentDimensions";
-import logger from "../utils/logger";
+import { createBigshipShipment } from "../utils/createBigshipShipment";
 
 export const verifyRazorpayPayment = asyncErrorHandler(async (req, res) => {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -186,9 +183,7 @@ export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
 
   // For successful ONLINE payments: create Bigship order
   if (status === "PAID" && dbOrderId) {
-    createBigshipOrderForOnlinePayment(dbOrderId).catch((err) => {
-      logger.error({ message: "Bigship order async failed for ONLINE order", error: err });
-    });
+    createBigshipShipment(dbOrderId);
   }
 
   // === 3. Respond with 200 status quickly ===
@@ -196,75 +191,3 @@ export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
   return res.sendStatus(200);
 });
 
-// ============================================================
-// HELPER — create Bigship order after ONLINE payment confirmed
-// ============================================================
-async function createBigshipOrderForOnlinePayment(dbOrderId: number) {
-  const orderRes = await pool.query(
-    `SELECT o.order_id, o.order_number, o.subtotal, o.shipping_address,
-            json_agg(
-              json_build_object(
-                'product_info', oi.product_info,
-                'variant_info', oi.variant_info,
-                'quantity',     oi.quantity,
-                'price',        oi.price
-              )
-            ) AS items
-     FROM orders o
-     JOIN order_items oi ON oi.order_id = o.order_id
-     WHERE o.order_id = $1
-     GROUP BY o.order_id`,
-    [dbOrderId],
-  );
-
-  if (orderRes.rowCount === 0) return;
-
-  const order  = orderRes.rows[0];
-  const addr   = order.shipping_address;
-  const itemInfos = (order.items as any[]).map((item) => ({
-    item,
-    info: item.variant_info ?? item.product_info,
-  }));
-
-  const items: BigshipOrderItem[] = itemInfos.map(({ item, info }) => ({
-    name:         info.product_name ?? info.name,
-    units:        item.quantity,
-    sellingPrice: parseFloat(item.price),
-  }));
-
-  const { weight, length, breadth, height } = aggregateShipmentDimensions(
-    itemInfos.map(({ item, info }) => ({ ...info, quantity: item.quantity })),
-  );
-
-  const result = await BigshipService.createOrder({
-    orderNumber:     order.order_number,
-    orderDate:       new Date().toISOString().slice(0, 19).replace("T", " "),
-    customerName:    addr.name,
-    customerEmail:   addr.email,
-    customerPhone:   addr.phone,
-    customerAddress: addr.address_line1,
-    customerCity:    addr.city,
-    customerState:   addr.state,
-    customerPincode: addr.pincode,
-    customerCountry: addr.country || "India",
-    paymentMethod:   "ONLINE",
-    items,
-    weight,
-    length,
-    breadth,
-    height,
-  });
-
-  if (result.success && result.bigshipOrderId) {
-    await pool.query(
-      "UPDATE orders SET bigship_order_id = $1, waybill = $2 WHERE order_id = $3",
-      [result.bigshipOrderId, result.awbCode ?? null, dbOrderId],
-    );
-  } else {
-    logger.error({
-      message: "Bigship order creation failed for ONLINE payment",
-      dbOrderId,
-      error: result.error,
-    });
-  }
-}

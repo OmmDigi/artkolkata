@@ -11,7 +11,6 @@ import {
 } from "../constant";
 import { sendEmail } from "./sendEmail";
 import DelhiveryService, { ShipmentData } from "../services/delhiveryService";
-import { ErrorHandler } from "./ErrorHandler";
 import logger from "./logger";
 
 interface IProps {
@@ -191,15 +190,7 @@ export const manageStock = async ({
             END,
             ', '
            ) AS items,
-           JSON_BUILD_OBJECT(
-            'name', a.name,
-            'address_line1', a.address_line1,
-            'pincode', a.pincode,
-            'city', a.city,
-            'state', a.state,
-            'phone', a.phone,
-            'email', a.email
-           ) AS shipping_details
+           COALESCE(o.shipping_address, '{}'::jsonb) AS shipping_details
           FROM orders o
 
           LEFT JOIN users u
@@ -208,16 +199,9 @@ export const manageStock = async ({
           LEFT JOIN order_items oi
           ON oi.order_id = o.order_id
 
-          LEFT JOIN addresses a
-          ON a.address_id = o.shipping_address_id
+          WHERE ${orderid ? "o.order_id = $1" : "oi.order_item_id = $1"}
 
-          WHERE ${
-            orderid
-              ? "o.order_id = $1 AND o.waybill IS NULL"
-              : "oi.order_item_id = $1 AND oi.waybill IS NULL"
-          }
- 
-          GROUP BY u.id, o.order_id, a.address_id
+          GROUP BY u.id, o.order_id
         `,
         [orderid ?? orderitemid]
       );
@@ -225,9 +209,11 @@ export const manageStock = async ({
       if (rowCount != 0) {
         // do the shipment craction process
         const value = rows[0];
-        if (!value.shipping_details.name) {
-          throw new ErrorHandler(500, "Unable to fetch shipment address details");
-        }
+        // Orders placed before the shipping_address JSONB migration have no
+        // snapshot. Fall back to the account details so a missing snapshot
+        // never blocks the status transition.
+        const customerName = value.shipping_details.name ?? value.name;
+        const customerEmail = value.shipping_details.email ?? value.email;
 
         // const orderData: ShipmentData = {
         //   customerName: value.shipping_details[0].name,
@@ -299,15 +285,24 @@ export const manageStock = async ({
         //   );
         // }
 
-        sendEmail(value.shipping_details.email, "ORDER_CONFIRMED_EMAIL", {
-          customerName: value.shipping_details.name,
-          orderId: rows[0].order_number,
-          orderDate: rows[0].order_date,
-          customerEmail: value.shipping_details.email,
-          totalAmount: rows[0].total_amount,
-          items: rows[0].items,
-          orderLink: `${process.env.FRONTEND_HOST_URL}/myaccount/orders`,
-        });
+        if (!customerEmail) {
+          logger.error({
+            message: "Order confirmed but no email address to notify",
+            orderid,
+            orderitemid,
+            order_number: value.order_number,
+          });
+        } else {
+          sendEmail(customerEmail, "ORDER_CONFIRMED_EMAIL", {
+            customerName,
+            orderId: value.order_number,
+            orderDate: value.order_date,
+            customerEmail,
+            totalAmount: value.total_amount,
+            items: value.items,
+            orderLink: `${process.env.FRONTEND_HOST_URL}/myaccount/orders`,
+          });
+        }
       }
     }
   } else if (

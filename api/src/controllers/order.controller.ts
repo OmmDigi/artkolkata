@@ -35,11 +35,12 @@ import {
   VUpdateOrderStatus,
 } from "../validator/order.validator";
 import DelhiveryService from "../services/delhiveryService";
-import BigshipService, { BigshipOrderItem } from "../services/bigshipService";
+import BigshipService from "../services/bigshipService";
 import {
   aggregateShipmentDimensions,
   IShipmentDimensionInput,
 } from "../utils/aggregateShipmentDimensions";
+import { createBigshipShipment } from "../utils/createBigshipShipment";
 import { createPaymentGatewayOrder } from "../services/payment.service";
 import logger from "../utils/logger";
 
@@ -67,10 +68,12 @@ export const createOrder = asyncErrorHandler(
 
     // Captured inside transaction for post-transaction Bigship order creation
     let capturedOrderId: number;
-    let capturedOrderNumber: string;
-    let capturedSubTotal: number;
-    let capturedProductsInfo: any[] = [];
-    let capturedVarientsInfo: any[] = [];
+    let shipmentDimensions = {
+      weight: 0.5,
+      length: 10,
+      breadth: 10,
+      height: 10,
+    };
 
     await doTransition(async (client) => {
       let tokenInfo: ITokenInfo | null = null;
@@ -130,10 +133,6 @@ export const createOrder = asyncErrorHandler(
           client,
         );
 
-      capturedProductsInfo = productsInfo as any[];
-      capturedVarientsInfo = varientsInfo as any[];
-      capturedSubTotal = subTotal;
-
       const cartDimensionInputs: IShipmentDimensionInput[] = [];
       for (const v of value.product.varient_ids) {
         const info = varientsInfo.find((item) => item.id == v.id);
@@ -143,16 +142,18 @@ export const createOrder = asyncErrorHandler(
         const info = productsInfo.find((item) => item.id == p.id);
         if (info) cartDimensionInputs.push({ ...info, quantity: p.quantity });
       }
-      const cartWeight = aggregateShipmentDimensions(cartDimensionInputs).weight;
+      // Snapshotted onto the order below so the shipment booked later uses the
+      // dimensions as they were when the customer ordered.
+      shipmentDimensions = aggregateShipmentDimensions(cartDimensionInputs);
 
       // Check pincode serviceability via Bigship and get shipping charge
       const serviceability = await BigshipService.checkServiceability(
         value.shippingDetails.pincode,
-        cartWeight,
+        shipmentDimensions.weight,
         subTotal,
         value.paymentMethod === "COD",
+        shipmentDimensions,
       );
-      console.log(serviceability)
 
       if (!serviceability.success) {
         throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
@@ -212,8 +213,8 @@ export const createOrder = asyncErrorHandler(
 
       const orderInfo = await client.query(
         `INSERT INTO orders
-            (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, total_amount, coupon_code, shipping_address, price_breakdown, payment_method)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING order_id`,
+            (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, total_amount, coupon_code, shipping_address, price_breakdown, payment_method, shipment_dimensions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING order_id`,
         [
           tokenInfo.id,
           orderNumber,
@@ -228,12 +229,12 @@ export const createOrder = asyncErrorHandler(
           JSON.stringify(shippingAddressSnapshot),
           JSON.stringify(priceBreakdown),
           value.paymentMethod,
+          JSON.stringify(shipmentDimensions),
         ],
       );
 
       const orderId = orderInfo.rows[0].order_id;
       capturedOrderId = orderId;
-      capturedOrderNumber = orderNumber;
 
       const placeholder = generatePlaceholders(
         value.product.varient_ids.length + value.product.product_ids.length,
@@ -321,18 +322,11 @@ export const createOrder = asyncErrorHandler(
       // }
     });
 
-    // For COD: create Bigship order immediately (async, non-blocking)
+    // For COD: create Bigship order immediately (async, non-blocking). If it
+    // fails here the admin's Confirm action retries it — createBigshipShipment
+    // is idempotent, so an order that already booked is left untouched.
     if (value.paymentMethod === "COD") {
-      createBigshipOrderAsync({
-        orderId: capturedOrderId!,
-        orderNumber: capturedOrderNumber!,
-        subTotal: capturedSubTotal!,
-        shippingDetails: value.shippingDetails,
-        paymentMethod: "COD",
-        product: value.product,
-        productsInfo: capturedProductsInfo,
-        varientsInfo: capturedVarientsInfo,
-      });
+      createBigshipShipment(capturedOrderId!);
     }
     // For ONLINE: Bigship order is created after payment confirmed (PhonePe webhook)
 
@@ -373,13 +367,14 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     const info = productsInfo.find((item) => item.id == p.id);
     if (info) cartDimensionInputs.push({ ...info, quantity: p.quantity });
   }
-  const cartWeight = aggregateShipmentDimensions(cartDimensionInputs).weight;
+  const cartDimensions = aggregateShipmentDimensions(cartDimensionInputs);
 
   const serviceability = await BigshipService.checkServiceability(
     value.pincode,
-    cartWeight,
+    cartDimensions.weight,
     subTotal,
     value.paymentMethod === "COD",
+    cartDimensions,
   );
 
   if (!serviceability.success) {
@@ -416,98 +411,6 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     estimated_days: serviceability.estimatedDays ?? null,
   });
 });
-
-// ============================================================
-// HELPER — create Bigship order in background after DB commit
-// ============================================================
-interface BigshipAsyncParams {
-  orderId: number;
-  orderNumber: string;
-  subTotal: number;
-  shippingDetails: IShippingAddress;
-  paymentMethod: "COD" | "ONLINE";
-  product: {
-    product_ids: { id: number; quantity: number }[];
-    varient_ids: { id: number; quantity: number }[];
-  };
-  productsInfo: any[];
-  varientsInfo: any[];
-}
-
-async function createBigshipOrderAsync(params: BigshipAsyncParams) {
-  try {
-    const items: BigshipOrderItem[] = [];
-    const dimensionInputs: IShipmentDimensionInput[] = [];
-
-    for (const v of params.product.varient_ids) {
-      const info = params.varientsInfo.find((x) => x.id == v.id);
-      if (info) {
-        items.push({
-          name:         info.product_name,
-          units:        v.quantity,
-          sellingPrice: parseFloat(info.price),
-        });
-        dimensionInputs.push({ ...info, quantity: v.quantity });
-      }
-    }
-
-    for (const p of params.product.product_ids) {
-      const info = params.productsInfo.find((x) => x.id == p.id);
-      if (info) {
-        items.push({
-          name:         info.name,
-          units:        p.quantity,
-          sellingPrice: parseFloat(info.price),
-        });
-        dimensionInputs.push({ ...info, quantity: p.quantity });
-      }
-    }
-
-    const { weight, length, breadth, height } = aggregateShipmentDimensions(dimensionInputs);
-
-    const addr = params.shippingDetails;
-    const orderDate = new Date().toISOString().slice(0, 19).replace("T", " ");
-
-    const result = await BigshipService.createOrder({
-      orderNumber:       params.orderNumber,
-      orderDate,
-      customerName:      addr.fullName,
-      customerEmail:     addr.email,
-      customerPhone:     addr.phone,
-      customerAddress:   addr.address,
-      customerCity:      addr.city,
-      customerState:     addr.state,
-      customerPincode:   addr.pincode,
-      customerCountry:   addr.country || "India",
-      paymentMethod:     params.paymentMethod,
-      items,
-      weight,
-      length,
-      breadth,
-      height,
-    });
-
-    if (result.success && result.bigshipOrderId) {
-      await pool.query(
-        "UPDATE orders SET bigship_order_id = $1, waybill = $2 WHERE order_id = $3",
-        [result.bigshipOrderId, result.awbCode ?? null, params.orderId],
-      );
-      logger.info({
-        message: "Bigship order linked to DB order",
-        orderId: params.orderId,
-        bigshipOrderId: result.bigshipOrderId,
-      });
-    } else {
-      logger.error({
-        message: "Bigship order creation failed",
-        orderId: params.orderId,
-        error: result.error,
-      });
-    }
-  } catch (err) {
-    logger.error({ message: "createBigshipOrderAsync threw", error: err });
-  }
-}
 
 export const getOrderList = asyncErrorHandler(async (req, res) => {
   const { TO_STRING } = parsePagination(req);
@@ -703,6 +606,47 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
       );
     }
   });
+
+  // Confirming an order is the point of no return for fulfilment, so make sure
+  // a Bigship shipment exists. Orders that already booked one at placement are
+  // skipped; orders whose booking failed back then get retried here. Runs after
+  // the transaction commits so a courier failure never rolls back the status.
+  if (value.status === ORDER_CONFIRMED && value.order_id) {
+    const shipment = await createBigshipShipment(value.order_id);
+
+    // Booked just now, or already booked at placement — either way the order
+    // is with the courier and there is nothing left to retry.
+    const isBooked = shipment.created || shipment.skipped === "already_created";
+
+    const REASON_MESSAGE: Record<string, string> = {
+      payment_not_completed:
+        "Order status updated. No shipment booked — this online order is not paid yet.",
+      no_shipping_address:
+        "Order status updated, but no shipment was booked: the order has no shipping address.",
+      no_items:
+        "Order status updated, but no shipment was booked: the order has no items.",
+      order_not_found:
+        "Order status updated, but the order could not be read back to book a shipment.",
+    };
+
+    if (!isBooked) {
+      return httpResponse(
+        res,
+        200,
+        shipment.skipped
+          ? REASON_MESSAGE[shipment.skipped]
+          : "Order status updated, but the Bigship shipment could not be booked. Confirm the order again to retry.",
+        { shipment_booked: false, reason: shipment.skipped ?? "booking_failed" },
+      );
+    }
+
+    return httpResponse(res, 200, "Order status successfully updated", {
+      shipment_booked: true,
+      already_booked: shipment.skipped === "already_created",
+      waybill: shipment.awbCode ?? null,
+      bigship_order_id: shipment.bigshipOrderId ?? null,
+    });
+  }
 
   httpResponse(res, 200, "Order status successfully updated");
 });

@@ -141,6 +141,9 @@ export const login = asyncErrorHandler(async (req, res) => {
 
   httpResponse(res, 200, "Successfully login", {
     [COOKIE_KEY]: token,
+    user : {
+      name : userName
+    },
     permissions: rows[0].permissions,
   });
 });

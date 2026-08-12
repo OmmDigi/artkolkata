@@ -401,6 +401,10 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_breakdown JSONB;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS bigship_order_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_orders_bigship_order_id ON orders(bigship_order_id);
 
+-- Shipment box snapshot taken at placement: { weight, length, breadth, height }.
+-- Frozen with the order so a later product edit cannot change what gets booked.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipment_dimensions JSONB;
+
 -- Physical dimensions, used to calculate real shipping weight/rates via Bigship
 ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(10, 3) DEFAULT 0.5;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS length_cm DECIMAL(10, 2) DEFAULT 10;
