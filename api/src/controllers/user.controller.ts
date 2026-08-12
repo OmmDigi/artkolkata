@@ -87,18 +87,20 @@ export const login = asyncErrorHandler(async (req, res) => {
   const { rows, rowCount } = await pool.query(
     `
     SELECT 
-      users.id, password, name, role, is_verified, is_active, up.permissions
+      users.id, users.email, password, name, role, is_verified, is_active, up.permissions
     FROM users 
 
     LEFT JOIN user_permissions up
     ON up.user_id = users.id
 
-    WHERE email = $1
+    WHERE users.email = $1
     `,
     [value.email],
   );
 
   if (rowCount == 0) throw new ErrorHandler(404, "Account does not found");
+
+  const userEmail = rows[0].email;
 
   if (rows[0].is_active == false) {
     throw new ErrorHandler(400, "Your account is disabled");
@@ -142,7 +144,8 @@ export const login = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Successfully login", {
     [COOKIE_KEY]: token,
     user : {
-      name : userName
+      name : userName,
+      email : userEmail
     },
     permissions: rows[0].permissions,
   });
