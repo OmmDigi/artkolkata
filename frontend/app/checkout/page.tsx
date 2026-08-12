@@ -139,7 +139,13 @@ const CheckoutPage = () => {
       }
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message || "Order failed");
+      const status = error?.response?.status || error?.response?.data?.statusCode || error?.status;
+      if (status === 401 || status === 403) {
+        toast.error("Please login to place an order");
+        window.location.href = "/account";
+      } else {
+        toast.error(error?.response?.data?.message || "Order failed");
+      }
     },
   });
 
