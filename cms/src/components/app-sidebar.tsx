@@ -8,7 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Sidebar,
+  Sidebar, 
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
