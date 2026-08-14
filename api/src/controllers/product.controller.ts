@@ -62,10 +62,18 @@ export const getCategoryList = asyncErrorHandler(
   async (req: CustomRequest, res) => {
     const { TO_STRING } = parsePagination(req);
 
+    let filter = "WHERE 1=1";
+    let placeholdernum = 1;
+    const filterValues: any[] = [];
+
     // only admin can see the private (hidden) categories, everyone else gets the public one
-    let filter = "";
     if (!checkPermission(req.token_info?.permissions ?? null, ["1-3"])) {
-      filter = "WHERE c.is_visible = TRUE";
+      filter += " AND c.is_visible = TRUE";
+    }
+
+    if (req.query.search) {
+      filter += ` AND c.name ILIKE '%' || $${placeholdernum++} || '%'`;
+      filterValues.push(req.query.search);
     }
 
     const { rows } = await pool.query(
@@ -84,6 +92,7 @@ export const getCategoryList = asyncErrorHandler(
 
     ORDER BY c.position ASC, c.id DESC ${TO_STRING}
     `,
+      filterValues,
     );
 
     httpResponse(res, 200, "Category list", rows);
@@ -988,9 +997,18 @@ export const createNewSubCategory = asyncErrorHandler(async (req, res) => {
 export const getSubCategoryList = asyncErrorHandler(async (req, res) => {
   const { TO_STRING } = parsePagination(req);
 
+  let filter = "";
+  let placeholdernum = 1;
+  const filterValues: any[] = [];
+
+  if (req.query.search) {
+    filter = `WHERE sc.name ILIKE '%' || $${placeholdernum++} || '%'`;
+    filterValues.push(req.query.search);
+  }
+
   const { rows } = await pool.query(
     `
-    SELECT 
+    SELECT
       sc.*,
       c.name AS category
     FROM sub_categories sc
@@ -998,8 +1016,11 @@ export const getSubCategoryList = asyncErrorHandler(async (req, res) => {
     LEFT JOIN categories c
     ON c.id = sc.category_id
 
+    ${filter}
+
     ORDER BY sc.position ASC, sc.id DESC ${TO_STRING}
     `,
+    filterValues,
   );
 
   httpResponse(res, 200, "Sub Category list", rows);

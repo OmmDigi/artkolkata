@@ -15,8 +15,10 @@ import { useProduct } from "@/hooks/useProduct";
 import { queryClient } from "@/main";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { Copy, Loader, Pencil, Plus, Trash } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import SearchInput from "@/components/SearchInput";
+import { useDebounce } from "@/hooks/useDebounce";
 
 export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +28,28 @@ export default function ProductsPage() {
   const currentPage = parseInt(searchParams.get("page") ?? "1");
   const currentCategory = searchParams.get("category")?.toString();
   const currentStatus = searchParams.get("status")?.toString();
+  const currentSearch = searchParams.get("search") ?? "";
+
+  // the input stays instant, only the debounced value hits the api
+  const [searchTerm, setSearchTerm] = useState(currentSearch);
+  const debouncedSearch = useDebounce(searchTerm, 500);
+
+  useEffect(() => {
+    if (debouncedSearch === currentSearch) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (debouncedSearch) {
+          next.set("search", debouncedSearch);
+        } else {
+          next.delete("search");
+        }
+        next.set("page", "1");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [debouncedSearch]);
 
   const {
     isProductFetching,
@@ -38,9 +62,10 @@ export default function ProductsPage() {
     filter: {
       categoryId: currentCategory,
       status: currentStatus ?? "1",
-      limit : 20
+      limit : 20,
+      search: currentSearch,
     },
-    depandencyArray: [currentPage, currentCategory, currentStatus],
+    depandencyArray: [currentPage, currentCategory, currentStatus, currentSearch],
   });
 
   const { categoryData, isCategoryFetching } = useCategory();
@@ -51,6 +76,11 @@ export default function ProductsPage() {
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-2xl">Products</h2>
         <div className="flex items-center justify-center gap-3.5">
+          <SearchInput
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder="Search product by name..."
+          />
           <SelectInput
             name="status"
             options={[

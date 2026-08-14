@@ -13,8 +13,10 @@ import { useDoMutation } from "@/hooks/useDoMutation";
 import { useSubCategory } from "@/hooks/useSubCategory";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { Loader, Pencil, Plus, Trash } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import SearchInput from "@/components/SearchInput";
+import { useDebounce } from "@/hooks/useDebounce";
 
 export default function SubCategoryPage() {
   const [open, setOpen] = useState(false);
@@ -23,11 +25,33 @@ export default function SubCategoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const currentSearch = searchParams.get("search") ?? "";
+
+  // the input stays instant, only the debounced value hits the api
+  const [searchTerm, setSearchTerm] = useState(currentSearch);
+  const debouncedSearch = useDebounce(searchTerm, 500);
+
+  useEffect(() => {
+    if (debouncedSearch === currentSearch) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (debouncedSearch) {
+          next.set("search", debouncedSearch);
+        } else {
+          next.delete("search");
+        }
+        next.set("page", "1");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [debouncedSearch]);
 
   const { isLoading, mutate } = useDoMutation();
 
   const { subCategoryData, isSubCategoryFetching, subCategoryError, refetchSubCategory } =
-    useSubCategory({ page: currentPage });
+    useSubCategory({ page: currentPage, search: currentSearch });
 
   return (
     <>
@@ -40,17 +64,24 @@ export default function SubCategoryPage() {
       <div className="space-y-3.5">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-2xl">Sub Category</h2>
-          <Button
-            onClick={() => {
-              setSubCategoryId(0);
-              setOpen(true);
-            }}
-            variant="own"
-            className="flex items-center gap-1.5"
-          >
-            <Plus />
-            Add New Sub Category
-          </Button>
+          <div className="flex items-center gap-3.5">
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search sub category by name..."
+            />
+            <Button
+              onClick={() => {
+                setSubCategoryId(0);
+                setOpen(true);
+              }}
+              variant="own"
+              className="flex items-center gap-1.5"
+            >
+              <Plus />
+              Add New Sub Category
+            </Button>
+          </div>
         </div>
         <LoadingHandler
           loading={isSubCategoryFetching}

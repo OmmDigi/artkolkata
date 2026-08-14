@@ -11,6 +11,7 @@ const getProductList = async (
   categoryId?: string,
   status?: string,
   limit?: number,
+  search?: string,
 ) => {
   const urlSearchParams = new URLSearchParams();
   urlSearchParams.set("page", page.toString());
@@ -26,6 +27,9 @@ const getProductList = async (
   if (limit) {
     urlSearchParams.set("limit", String(limit));
   }
+  if (search) {
+    urlSearchParams.set("search", search);
+  }
   return (await api.get(`/api/v1/products?${urlSearchParams.toString()}`)).data;
 };
 
@@ -36,6 +40,7 @@ interface IProps {
     categoryId?: string;
     status?: string;
     limit?: number;
+    search?: string;
   };
   enabledFetching?: boolean;
   depandencyArray?: any[];
@@ -62,6 +67,7 @@ export const useProduct = (props?: IProps) => {
         props?.filter?.categoryId,
         props?.filter?.status,
         props?.filter?.limit,
+        props?.filter?.search,
       ),
     enabled: props?.enabledFetching ?? true,
   });

@@ -3,13 +3,22 @@ import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 
-const getCategoryList = async (page: number, limit : number) => {
-  return (await api.get(`/api/v1/products/category?page=${page}&limit=${limit}`)).data;
+const getCategoryList = async (page: number, limit: number, search?: string) => {
+  const urlSearchParams = new URLSearchParams();
+  urlSearchParams.set("page", page.toString());
+  urlSearchParams.set("limit", limit.toString());
+  if (search) {
+    urlSearchParams.set("search", search);
+  }
+  return (
+    await api.get(`/api/v1/products/category?${urlSearchParams.toString()}`)
+  ).data;
 };
 
 interface IProps {
   page?: number;
-  limit?:number;
+  limit?: number;
+  search?: string;
 }
 
 export const useCategory = (props?: IProps) => {
@@ -17,8 +26,9 @@ export const useCategory = (props?: IProps) => {
     IResponse<ICategory[]>,
     AxiosError<IError>
   >({
-    queryKey: ["get-category-list", props?.page ?? 1],
-    queryFn: () => getCategoryList(props?.page ?? 1, props?.limit ?? 10),
+    queryKey: ["get-category-list", props?.page ?? 1, props?.search ?? ""],
+    queryFn: () =>
+      getCategoryList(props?.page ?? 1, props?.limit ?? 10, props?.search),
   });
 
   return {
