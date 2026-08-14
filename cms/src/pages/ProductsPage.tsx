@@ -68,7 +68,7 @@ export default function ProductsPage() {
     depandencyArray: [currentPage, currentCategory, currentStatus, currentSearch],
   });
 
-  const { categoryData, isCategoryFetching } = useCategory();
+  const { categoryData, isCategoryFetching } = useCategory({limit : -1});
   const { isLoading: isCoping, mutate: copyProduct } = useDoMutation();
 
   return (

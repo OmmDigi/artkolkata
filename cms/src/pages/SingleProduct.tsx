@@ -45,7 +45,7 @@ export default function SingleProduct() {
   const [productSlug, setProductSlug] = useState<string | null>(null);
   const [productTags, setProductTags] = useState<string[]>([]);
 
-  const { categoryData, isCategoryFetching } = useCategory();
+  const { categoryData, isCategoryFetching } = useCategory({ limit: -1 });
 
   const {
     mutateProduct,
@@ -106,7 +106,7 @@ export default function SingleProduct() {
     setHasVarient(product.available_quantity <= 0);
     setProductSlug(product.slug ?? null);
     setProductTags(Object.keys(product.tags ?? {}));
-  }, [dataUpdatedAt, isProductFetching, ]);
+  }, [dataUpdatedAt, isProductFetching]);
 
   const handleFormSubmit = (formData: FormData) => {
     let payload: Record<string, any> = {};
