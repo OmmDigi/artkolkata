@@ -372,6 +372,9 @@ export const getProductList = asyncErrorHandler(
       }
     }
 
+    // console.log(filter);
+    // console.log(filterValues)
+
     const { rows } = await pool.query(
       `
     SELECT 

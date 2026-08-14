@@ -5,7 +5,6 @@ import { doTransition } from "../utils/doTransition";
 import { httpResponse } from "../utils/httpResponse";
 import { processDelhiveryStatus } from "../services/webhook.service";
 import { getAuthToken } from "../utils/getAuthToken";
-import { createBigshipShipment } from "../utils/createBigshipShipment";
 
 export const verifyRazorpayPayment = asyncErrorHandler(async (req, res) => {
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -165,8 +164,6 @@ export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
       return res.sendStatus(200); // Always ack unhandled events
   }
 
-  let dbOrderId: number | null = null;
-
   await doTransition(async (client) => {
     const paymentInfo = await client.query(
       "UPDATE payments SET provider_payment_id = $1, status = $2, created_at = $3::timestamp, provider_order_id = $4 WHERE provider_order_id = $5 RETURNING order_id",
@@ -174,17 +171,14 @@ export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
     );
     if (paymentInfo.rowCount == 0)
       throw new ErrorHandler(400, "Unable to update payment status");
-    dbOrderId = paymentInfo.rows[0].order_id;
     await client.query(
       "UPDATE orders SET payment_status = $1 WHERE order_id = $2",
-      [status, dbOrderId],
+      [status, paymentInfo.rows[0].order_id],
     );
   });
 
-  // For successful ONLINE payments: create Bigship order
-  if (status === "PAID" && dbOrderId) {
-    createBigshipShipment(dbOrderId);
-  }
+  // A paid order is not booked with the courier here. The boxes it ships in
+  // are entered in the CMS by hand, so booking waits for an admin to confirm.
 
   // === 3. Respond with 200 status quickly ===
   // PhonePe considers webhook delivered if you return a 2xx status within a few seconds

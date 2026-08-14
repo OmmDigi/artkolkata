@@ -208,6 +208,15 @@ export interface PriceBreakdown {
   total: number;
 }
 
+// One physical box of the shipment, keyed in by the admin. Bigship types the
+// edges as int cm, hence the whole numbers.
+export interface ShipmentBox {
+  weight_kg: number | string;
+  length_cm: number | string;
+  breadth_cm: number | string;
+  height_cm: number | string;
+}
+
 export interface OrderInfo {
   user_id: number;
   order_number: string;
@@ -221,6 +230,11 @@ export interface OrderInfo {
   payment_method: string;
   price_breakdown: PriceBreakdown | null;
   shiprocket_order_id: number | null;
+  bigship_order_id: string | null;
+  shipment_boxes: ShipmentBox[] | null;
+  ewaybill_number: string | null;
+  has_ewaybill_document: boolean;
+  has_invoice_document: boolean;
 }
 
 export interface AddressInfo {

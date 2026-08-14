@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.1",
     "nodemon": "^3.1.10",
+    "pdfkit": "^0.19.1",
     "pg": "^8.14.1",
     "razorpay": "^2.9.6",
     "ts-node": "^10.9.2",
@@ -42,6 +43,7 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.14.1",
     "@types/nodemailer": "^6.4.17",
+    "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.12",
     "typescript": "^5.9.3"
   }

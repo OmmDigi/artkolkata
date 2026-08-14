@@ -47,6 +47,15 @@ export interface BigshipOrderItem {
   sellingPrice: number;
 }
 
+// One physical box as keyed in by the admin. Bigship types the box edges as
+// int cm and the dead weight as decimal kg.
+export interface BigshipBox {
+  weight: number;
+  length: number;
+  breadth: number;
+  height: number;
+}
+
 export interface BigshipCreateOrderParams {
   orderNumber: string;
   orderDate: string; // UTC datetime
@@ -62,11 +71,18 @@ export interface BigshipCreateOrderParams {
   customerCountry: string;
   paymentMethod: "COD" | "ONLINE";
   items: BigshipOrderItem[];
-  weight?: number;
-  length?: number;
-  breadth?: number;
-  height?: number;
+  // One entry books B2C, more than one books B2B heavy.
+  boxes: BigshipBox[];
+  // B2B only, and mandatory there — data URI of the order invoice.
+  invoiceDocument?: string;
+  // B2B only, and mandatory once the invoice reaches EWAYBILL_THRESHOLD.
+  ewaybillNumber?: string;
+  ewaybillDocument?: string;
 }
+
+// Bigship rejects a B2B shipment invoiced at or above this without an ewaybill
+// number and document.
+export const EWAYBILL_THRESHOLD = 50000;
 
 // ============================================================
 // STATUS MAP — Bigship scan_status → Delhivery-format
@@ -219,6 +235,16 @@ class BigshipService {
     return cleaned.length > 0 ? cleaned.slice(0, 50) : "Item";
   }
 
+  // The B2B rates API reports the risk a quote was priced at as "owner_risk" /
+  // "carrier_risk", but the manifest API only accepts "OwnerRisk" /
+  // "CarrierRisk". Anything unrecognised falls back to Bigship's own default.
+  private riskTypeOf(rateRiskTypeName: string | undefined): string {
+    return String(rateRiskTypeName ?? "").replace(/_/g, "").toLowerCase() ===
+      "carrierrisk"
+      ? "CarrierRisk"
+      : "OwnerRisk";
+  }
+
   private async authHeaders() {
     const token = await this.getToken();
     return {
@@ -298,6 +324,12 @@ class BigshipService {
 
   // ============================================================
   // CREATE ORDER — add order -> get rates -> manifest -> fetch AWB
+  //
+  // A single box books as B2C through api/order/add/single. Bigship caps B2C
+  // at exactly one box, so a multi-box shipment has to go the B2B "heavy"
+  // route instead: a different add endpoint, B2B rates, a manifest that wants
+  // a risk_type, and a mandatory invoice document. Everything else — auth,
+  // consignee, cheapest-courier pick, AWB fetch — is shared.
   // ============================================================
   async createOrder(params: BigshipCreateOrderParams): Promise<CreateOrderResult> {
     try {
@@ -306,6 +338,31 @@ class BigshipService {
         0,
       );
       const isCod = params.paymentMethod === "COD";
+
+      const boxes = params.boxes ?? [];
+      if (boxes.length === 0) {
+        return { success: false, error: "No shipment boxes provided" };
+      }
+
+      const isB2B = boxes.length > 1;
+
+      if (isB2B && !params.invoiceDocument) {
+        return {
+          success: false,
+          error: "A B2B (multi-box) shipment needs an invoice document",
+        };
+      }
+
+      if (
+        isB2B &&
+        invoiceAmount >= EWAYBILL_THRESHOLD &&
+        (!params.ewaybillNumber || !params.ewaybillDocument)
+      ) {
+        return {
+          success: false,
+          error: `A B2B shipment invoiced at ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document`,
+        };
+      }
 
       const [rawFirst, ...rest] = (params.customerName ?? "").trim().split(/\s+/);
       const firstName = this.cleanName(rawFirst, "Customer");
@@ -331,8 +388,51 @@ class BigshipService {
       const email = params.customerEmail ?? "";
       const isValidEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 
+      // B2B carries no money on the boxes or the products — Bigship requires
+      // every each_box_/each_product_ amount to be 0 there and reads the value
+      // off the invoice document instead. B2C is the opposite: the box total
+      // has to reconcile exactly with shipment_invoice_amount.
+      const productDetails = params.items.map((item) => ({
+        product_category: this.defaultCategory,
+        product_sub_category: "",
+        product_name: this.cleanProductName(item.name),
+        product_quantity: item.units,
+        each_product_invoice_amount: isB2B ? 0 : item.sellingPrice * item.units,
+        each_product_collectable_amount:
+          !isB2B && isCod ? item.sellingPrice * item.units : 0,
+        hsn: (item.hsn ?? "").replace(/\D/g, ""),
+      }));
+
+      // Bigship wants product_details on every box, but the admin keys the
+      // boxes in by hand and never says which item went where. The full item
+      // list rides on the first box; the rest declare one line naming the same
+      // goods so the manifest reads sensibly. Harmless because B2B zeroes all
+      // the amounts anyway — this is a description, not an invoice.
+      const filler = [
+        {
+          product_category: this.defaultCategory,
+          product_sub_category: "",
+          product_name: this.cleanProductName(params.items[0]?.name),
+          product_quantity: 1,
+          each_product_invoice_amount: 0,
+          each_product_collectable_amount: 0,
+          hsn: "",
+        },
+      ];
+
+      const boxDetails = boxes.map((box, index) => ({
+        each_box_dead_weight: Math.max(0.1, box.weight),
+        each_box_length: Math.ceil(box.length),
+        each_box_width: Math.ceil(box.breadth),
+        each_box_height: Math.ceil(box.height),
+        each_box_invoice_amount: isB2B ? 0 : invoiceAmount,
+        each_box_collectable_amount: !isB2B && isCod ? invoiceAmount : 0,
+        box_count: 1,
+        product_details: index === 0 ? productDetails : filler,
+      }));
+
       const addOrderPayload = {
-        shipment_category: "b2c",
+        shipment_category: isB2B ? "b2b" : "b2c",
         warehouse_detail: {
           pickup_location_id: this.numericLocationId(
             this.pickupLocationId,
@@ -365,39 +465,22 @@ class BigshipService {
           payment_type: isCod ? "COD" : "Prepaid",
           shipment_invoice_amount: invoiceAmount,
           total_collectable_amount: isCod ? invoiceAmount : 0,
-          box_details: [
-            {
-              each_box_dead_weight: params.weight ?? 0.5,
-              each_box_length: params.length ?? 10,
-              each_box_width: params.breadth ?? 10,
-              each_box_height: params.height ?? 10,
-              each_box_invoice_amount: invoiceAmount,
-              each_box_collectable_amount: isCod ? invoiceAmount : 0,
-              box_count: 1,
-              product_details: params.items.map((item) => ({
-                product_category: this.defaultCategory,
-                product_sub_category: "",
-                product_name: this.cleanProductName(item.name),
-                product_quantity: item.units,
-                each_product_invoice_amount: item.sellingPrice * item.units,
-                each_product_collectable_amount: isCod ? item.sellingPrice * item.units : 0,
-                hsn: (item.hsn ?? "").replace(/\D/g, ""),
-              })),
-            },
-          ],
+          box_details: boxDetails,
           // ewaybill_number and document_detail belong to order_detail
-          ewaybill_number: "",
+          ewaybill_number: (params.ewaybillNumber ?? "").replace(/\D/g, ""),
           document_detail: {
-            invoice_document_file: "",
-            ewaybill_document_file: "",
+            invoice_document_file: params.invoiceDocument ?? "",
+            ewaybill_document_file: params.ewaybillDocument ?? "",
           },
         },
       };
 
       const addHeaders = await this.authHeaders();
-      const addResponse = await this.api.post("/api/order/add/single", addOrderPayload, {
-        headers: addHeaders,
-      });
+      const addResponse = await this.api.post(
+        isB2B ? "/api/order/add/heavy" : "/api/order/add/single",
+        addOrderPayload,
+        { headers: addHeaders },
+      );
 
       if (!addResponse.data.success) {
         return { success: false, error: addResponse.data.message };
@@ -409,13 +492,21 @@ class BigshipService {
       }
       const systemOrderId = systemOrderIdMatch[1];
 
-      logger.info({ message: "Bigship order added", systemOrderId });
+      logger.info({
+        message: "Bigship order added",
+        systemOrderId,
+        category: isB2B ? "b2b" : "b2c",
+        boxes: boxes.length,
+      });
 
       // Get serviceable couriers + rates for this order, pick the cheapest
       const rateHeaders = await this.authHeaders();
       const rateResponse = await this.api.get("/api/order/shipping/rates", {
         headers: rateHeaders,
-        params: { shipment_category: "b2c", system_order_id: systemOrderId },
+        params: {
+          shipment_category: isB2B ? "b2b" : "b2c",
+          system_order_id: systemOrderId,
+        },
       });
 
       const rates: any[] = rateResponse.data?.data ?? [];
@@ -431,11 +522,18 @@ class BigshipService {
         (a, b) => parseFloat(a.total_shipping_charges) - parseFloat(b.total_shipping_charges),
       )[0];
 
-      // Manifest the order with the cheapest serviceable courier
+      // Manifest the order with the cheapest serviceable courier. B2B also
+      // needs a risk_type, and Bigship rejects a risk the chosen courier does
+      // not offer — so echo back the one the quote we picked was priced at
+      // rather than forcing a default onto every courier.
       const manifestHeaders = await this.authHeaders();
       const manifestResponse = await this.api.post(
-        "/api/order/manifest/single",
-        { system_order_id: parseInt(systemOrderId, 10), courier_id: cheapest.courier_id },
+        isB2B ? "/api/order/manifest/heavy" : "/api/order/manifest/single",
+        {
+          system_order_id: parseInt(systemOrderId, 10),
+          courier_id: cheapest.courier_id,
+          ...(isB2B ? { risk_type: this.riskTypeOf(cheapest.risk_type_name) } : {}),
+        },
         { headers: manifestHeaders },
       );
 

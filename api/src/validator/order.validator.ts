@@ -87,6 +87,56 @@ export const VUpdateOrderStatus = Joi.object({
     ),
 });
 
+// The boxes an admin keys in against an order before confirming it. Bigship
+// types the box edges as int cm and rejects a decimal outright, so they are
+// held to integers here rather than silently rounded at booking time.
+export const VUpdateShipmentBoxes = Joi.object({
+  boxes: Joi.array()
+    .min(1)
+    .items(
+      Joi.object({
+        weight_kg: Joi.number().greater(0).required(),
+        length_cm: Joi.number().integer().greater(0).required(),
+        breadth_cm: Joi.number().integer().greater(0).required(),
+        height_cm: Joi.number().integer().greater(0).required(),
+      }),
+    )
+    .required(),
+  // Bigship wants exactly 12 digits, and only on B2B shipments at or above
+  // 50,000. Optional here — updateOrderStatus is what enforces it.
+  ewaybill_number: Joi.string()
+    .pattern(/^\d{12}$/)
+    .allow("", null)
+    .optional()
+    .messages({
+      "string.pattern.base": "Ewaybill number must be exactly 12 digits",
+    }),
+  // PDF or JPEG as a Data URI — the form Bigship accepts it in.
+  ewaybill_document: Joi.string()
+    .pattern(/^data:(application\/pdf|image\/jpeg);base64,/)
+    .max(6 * 1024 * 1024)
+    .allow("", null)
+    .optional()
+    .messages({
+      "string.pattern.base": "Ewaybill document must be a PDF or JPEG file",
+      "string.max": "Ewaybill document is too large",
+    }),
+});
+
+// The invoice an admin uploads against an order. Restricted to PDF and JPEG
+// because the same file is what a B2B shipment is booked with, and those are
+// the only two formats Bigship accepts there.
+export const VUploadOrderInvoice = Joi.object({
+  invoice_document: Joi.string()
+    .pattern(/^data:(application\/pdf|image\/jpeg);base64,/)
+    .max(8 * 1024 * 1024)
+    .required()
+    .messages({
+      "string.pattern.base": "Invoice must be a PDF or JPEG file",
+      "string.max": "Invoice file is too large",
+    }),
+});
+
 export const VReturnOrder = Joi.object({
   order_id: Joi.string().required(),
   type: Joi.string().valid("Return", "Replace").required(),

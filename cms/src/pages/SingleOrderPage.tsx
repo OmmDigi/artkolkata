@@ -1,7 +1,9 @@
 import LabelInput from "@/components/LabelInput";
 import LabelTextArea from "@/components/LabelTextArea";
 import LoadingLayout from "@/components/LoadingLayout";
+import OrderInvoice from "@/components/OrderInvoice";
 import Section from "@/components/Section";
+import ShipmentBoxes from "@/components/ShipmentBoxes";
 import SelectInput from "@/components/SelectInput";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -41,7 +43,7 @@ export default function SingleOrderPage() {
 
   if (!params?.id) return <Label>Order id is required</Label>;
 
-  const { error, data, isFetching } = useQuery<
+  const { error, data, isFetching, refetch } = useQuery<
     IResponse<OrderResponse>,
     AxiosError<IError>
   >({
@@ -223,6 +225,23 @@ export default function SingleOrderPage() {
                 </ul>
               </Section>
 
+              {data?.data.orderInfo && params.id ? (
+                <>
+                  <ShipmentBoxes
+                    key={data.data.orderInfo.bigship_order_id ?? "unbooked"}
+                    orderId={params.id}
+                    orderInfo={data.data.orderInfo}
+                    onSaved={() => refetch()}
+                  />
+
+                  <OrderInvoice
+                    orderId={params.id}
+                    orderInfo={data.data.orderInfo}
+                    onChanged={() => refetch()}
+                  />
+                </>
+              ) : null}
+
               <Section>
                 <Label className="text-xl">Payment Info</Label>
 
@@ -379,6 +398,10 @@ export default function SingleOrderPage() {
                       },
                       onSuccess() {
                         setOrderStatus(value);
+                        // Confirming books the shipment and locks the boxes,
+                        // so pull the order back down rather than leaving the
+                        // page showing what was true before the change.
+                        refetch();
                       },
                     });
                   }}

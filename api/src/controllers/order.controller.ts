@@ -33,14 +33,19 @@ import {
   VReturnOrder,
   VTrackOrder,
   VUpdateOrderStatus,
+  VUpdateShipmentBoxes,
+  VUploadOrderInvoice,
 } from "../validator/order.validator";
 import DelhiveryService from "../services/delhiveryService";
-import BigshipService from "../services/bigshipService";
+import BigshipService, { EWAYBILL_THRESHOLD } from "../services/bigshipService";
 import {
   aggregateShipmentDimensions,
   IShipmentDimensionInput,
 } from "../utils/aggregateShipmentDimensions";
-import { createBigshipShipment } from "../utils/createBigshipShipment";
+import {
+  createBigshipShipment,
+  parseShipmentBoxes,
+} from "../utils/createBigshipShipment";
 import { createPaymentGatewayOrder } from "../services/payment.service";
 import logger from "../utils/logger";
 
@@ -66,8 +71,6 @@ export const createOrder = asyncErrorHandler(
     let totalFinalAmount = 0;
     let paymentPageUrl: string | null = null;
 
-    // Captured inside transaction for post-transaction Bigship order creation
-    let capturedOrderId: number;
     let shipmentDimensions = {
       weight: 0.5,
       length: 10,
@@ -234,7 +237,6 @@ export const createOrder = asyncErrorHandler(
       );
 
       const orderId = orderInfo.rows[0].order_id;
-      capturedOrderId = orderId;
 
       const placeholder = generatePlaceholders(
         value.product.varient_ids.length + value.product.product_ids.length,
@@ -322,13 +324,9 @@ export const createOrder = asyncErrorHandler(
       // }
     });
 
-    // For COD: create Bigship order immediately (async, non-blocking). If it
-    // fails here the admin's Confirm action retries it — createBigshipShipment
-    // is idempotent, so an order that already booked is left untouched.
-    if (value.paymentMethod === "COD") {
-      createBigshipShipment(capturedOrderId!);
-    }
-    // For ONLINE: Bigship order is created after payment confirmed (PhonePe webhook)
+    // No Bigship shipment is booked here, for COD or ONLINE. The boxes that
+    // actually ship are keyed into the CMS by hand after the order lands, so
+    // booking only happens when an admin moves the order to CONFIRMED.
 
     httpResponse(res, 201, "New order successfully created", {
       gatewayUrl: value.paymentMethod === "ONLINE" ? paymentPageUrl : null,
@@ -451,11 +449,12 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
          o.order_status,
          TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
          (o.created_at >= NOW() - INTERVAL '7 days') AS is_returnable,
-         CASE
-          WHEN o.order_status = '${ORDER_DELIVERED}'
-          THEN true
-          ELSE false
-         END AS invoice_avilable
+         -- An invoice uploaded from the CMS is downloadable straight away; the
+         -- generated one only appears once the order has been delivered.
+         (
+           o.order_status = '${ORDER_DELIVERED}'
+           OR (o.invoice_document IS NOT NULL AND o.invoice_document <> '')
+         ) AS invoice_avilable
         FROM orders o
 
         LEFT JOIN users u
@@ -496,7 +495,13 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         shipping_address,
         price_breakdown,
         payment_method,
-        bigship_order_id
+        bigship_order_id,
+        shipment_boxes,
+        ewaybill_number,
+        -- the documents themselves are multi-MB data URIs; the CMS only needs
+        -- to know whether one is already on file
+        (ewaybill_document IS NOT NULL AND ewaybill_document <> '') AS has_ewaybill_document,
+        (invoice_document IS NOT NULL AND invoice_document <> '') AS has_invoice_document
        FROM orders
 
        WHERE order_id = $1
@@ -577,9 +582,129 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Single Order Info", objToReturn);
 });
 
+// Saves the boxes the order will actually ship in, plus the ewaybill details
+// a B2B shipment needs. Admin only, and only while the order is still pending:
+// confirming is what hands the boxes to the courier, so from that point on an
+// edit here would only make the CMS disagree with what is actually shipping.
+export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
+  const orderId = parseInt(String(req.params.orderid ?? ""), 10);
+  if (!orderId) throw new ErrorHandler(400, "Invalid order id");
+
+  const value = doValidate<{
+    boxes: {
+      weight_kg: number;
+      length_cm: number;
+      breadth_cm: number;
+      height_cm: number;
+    }[];
+    ewaybill_number?: string | null;
+    ewaybill_document?: string | null;
+  }>(VUpdateShipmentBoxes, req.body ?? {});
+
+  const { rows, rowCount } = await pool.query(
+    "SELECT bigship_order_id, order_status FROM orders WHERE order_id = $1",
+    [orderId],
+  );
+
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+
+  if (rows[0].bigship_order_id) {
+    throw new ErrorHandler(
+      400,
+      "This order is already booked with the courier, so its boxes can no longer be changed.",
+    );
+  }
+
+  if (rows[0].order_status !== ORDER_PENDING) {
+    throw new ErrorHandler(
+      400,
+      `This order is already ${rows[0].order_status}, so its boxes can no longer be changed.`,
+    );
+  }
+
+  // An omitted ewaybill field leaves whatever is already stored alone, so the
+  // admin can re-save the boxes without re-uploading the document every time.
+  await pool.query(
+    `
+     UPDATE orders
+     SET shipment_boxes   = $1,
+         ewaybill_number  = COALESCE($2, ewaybill_number),
+         ewaybill_document = COALESCE($3, ewaybill_document),
+         updated_at       = CURRENT_TIMESTAMP
+     WHERE order_id = $4
+    `,
+    [
+      JSON.stringify(value.boxes),
+      value.ewaybill_number === undefined ? null : value.ewaybill_number || null,
+      value.ewaybill_document === undefined
+        ? null
+        : value.ewaybill_document || null,
+      orderId,
+    ],
+  );
+
+  httpResponse(res, 200, "Shipment boxes saved", { boxes: value.boxes.length });
+});
+
+// Confirming is the point where the order goes to the courier, so everything
+// Bigship will demand is checked up front — a status change that commits and
+// then fails to book leaves the order looking fulfilled when it is not.
+const assertReadyToConfirm = async (orderId: number) => {
+  const { rows, rowCount } = await pool.query(
+    `
+     SELECT
+      o.bigship_order_id,
+      o.shipment_boxes,
+      o.ewaybill_number,
+      o.ewaybill_document,
+      COALESCE(SUM(oi.price * oi.quantity), 0) AS invoice_amount
+     FROM orders o
+     JOIN order_items oi ON oi.order_id = o.order_id
+     WHERE o.order_id = $1
+     GROUP BY o.order_id
+    `,
+    [orderId],
+  );
+
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+
+  const order = rows[0];
+
+  // Already with the courier — re-confirming is a no-op, not a reason to block.
+  if (order.bigship_order_id) return;
+
+  const boxes = parseShipmentBoxes(order.shipment_boxes);
+
+  if (boxes.length === 0) {
+    throw new ErrorHandler(
+      400,
+      "Add the shipment box dimensions before confirming this order.",
+    );
+  }
+
+  // One box books as B2C, which carries no ewaybill at all.
+  if (boxes.length === 1) return;
+
+  const invoiceAmount = parseFloat(order.invoice_amount);
+
+  if (
+    invoiceAmount >= EWAYBILL_THRESHOLD &&
+    (!order.ewaybill_number || !order.ewaybill_document)
+  ) {
+    throw new ErrorHandler(
+      400,
+      `A multi-box shipment invoiced at Rs. ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document before it can be confirmed.`,
+    );
+  }
+};
+
 // this is for admin access
 export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
   const value = doValidate(VUpdateOrderStatus, req.body ?? {});
+
+  if (value.status === ORDER_CONFIRMED && value.order_id) {
+    await assertReadyToConfirm(value.order_id);
+  }
 
   await doTransition(async (client) => {
     await manageStock({
@@ -625,6 +750,10 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         "Order status updated, but no shipment was booked: the order has no shipping address.",
       no_items:
         "Order status updated, but no shipment was booked: the order has no items.",
+      no_shipment_boxes:
+        "Order status updated, but no shipment was booked: the order has no box dimensions.",
+      ewaybill_required:
+        "Order status updated, but no shipment was booked: this multi-box shipment needs an ewaybill number and document.",
       order_not_found:
         "Order status updated, but the order could not be read back to book a shipment.",
     };
@@ -779,9 +908,71 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Order successfully cancelled");
 });
 
+// Attaches an invoice supplied by the admin to an order. Once one is on file
+// it is what the customer downloads, so the app stops generating its own.
+export const uploadOrderInvoice = asyncErrorHandler(async (req, res) => {
+  const orderId = parseInt(String(req.params.orderid ?? ""), 10);
+  if (!orderId) throw new ErrorHandler(400, "Invalid order id");
+
+  const value = doValidate<{ invoice_document: string }>(
+    VUploadOrderInvoice,
+    req.body ?? {},
+  );
+
+  const { rowCount } = await pool.query(
+    "UPDATE orders SET invoice_document = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2",
+    [value.invoice_document, orderId],
+  );
+
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+
+  httpResponse(res, 200, "Invoice uploaded");
+});
+
+// Drops the uploaded invoice, which puts the generated one back in play.
+export const deleteOrderInvoice = asyncErrorHandler(async (req, res) => {
+  const orderId = parseInt(String(req.params.orderid ?? ""), 10);
+  if (!orderId) throw new ErrorHandler(400, "Invalid order id");
+
+  const { rowCount } = await pool.query(
+    "UPDATE orders SET invoice_document = NULL, updated_at = CURRENT_TIMESTAMP WHERE order_id = $1",
+    [orderId],
+  );
+
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+
+  httpResponse(res, 200, "Uploaded invoice removed");
+});
+
 export const downloadInvoice = asyncErrorHandler(async (req, res) => {
   const orderid = req.params.orderid;
   if (!orderid) throw new ErrorHandler(400, "Invalid request");
+
+  // An admin-uploaded invoice wins over the generated one, and is served
+  // whatever the order status is — the admin chose to put it there, so the
+  // "only once delivered" rule the generated invoice follows does not apply.
+  const uploaded = await pool.query(
+    "SELECT order_number, invoice_document FROM orders WHERE order_id = $1",
+    [orderid],
+  );
+
+  const dataUri: string | null = uploaded.rows[0]?.invoice_document ?? null;
+
+  if (dataUri) {
+    const [header, base64] = dataUri.split(",");
+    const mime = header.match(/^data:([^;]+);base64$/)?.[1];
+
+    if (!base64 || !mime) {
+      throw new ErrorHandler(500, "The uploaded invoice for this order is unreadable");
+    }
+
+    const extension = mime === "application/pdf" ? "pdf" : "jpg";
+    const fileName = `invoice-${uploaded.rows[0].order_number}.${extension}`;
+
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(Buffer.from(base64, "base64"));
+  }
 
   let objectToSend: any = {};
 

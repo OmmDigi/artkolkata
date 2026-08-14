@@ -403,7 +403,28 @@ CREATE INDEX IF NOT EXISTS idx_orders_bigship_order_id ON orders(bigship_order_i
 
 -- Shipment box snapshot taken at placement: { weight, length, breadth, height }.
 -- Frozen with the order so a later product edit cannot change what gets booked.
+-- Only used to quote shipping at checkout — what actually ships is shipment_boxes.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipment_dimensions JSONB;
+
+-- The real boxes, keyed in by the admin from the CMS before confirming the
+-- order: [{ weight_kg, length_cm, breadth_cm, height_cm }, ...], one entry per
+-- physical box. This replaces the product-derived dimensions at booking time —
+-- what leaves the warehouse is packed by hand, so only the admin knows it.
+-- One box books as Bigship B2C (api/order/add/single); more than one has to go
+-- as a B2B heavy order (api/order/add/heavy), which B2C does not support.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipment_boxes JSONB;
+
+-- Bigship demands an ewaybill on B2B shipments invoiced at 50,000 or above.
+-- The document is held as a data URI (application/pdf or image/jpeg base64),
+-- which is the form Bigship wants it in, so no conversion at booking time.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS ewaybill_number TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS ewaybill_document TEXT;
+
+-- An invoice uploaded against this order from the CMS, held as a data URI the
+-- same way. When present it is what the customer downloads and what a B2B
+-- shipment is booked against, and the invoice the app generates itself is not
+-- used at all.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_document TEXT;
 
 -- Physical dimensions, used to calculate real shipping weight/rates via Bigship
 ALTER TABLE products ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(10, 3) DEFAULT 0.5;

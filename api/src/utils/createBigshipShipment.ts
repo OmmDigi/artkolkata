@@ -1,10 +1,11 @@
 import { pool } from "..";
-import BigshipService, { BigshipOrderItem } from "../services/bigshipService";
+import BigshipService, {
+  BigshipBox,
+  BigshipOrderItem,
+  EWAYBILL_THRESHOLD,
+} from "../services/bigshipService";
 import { ONLINE_PAYMENT } from "../constant";
-import {
-  aggregateShipmentDimensions,
-  IShipmentDimensionInput,
-} from "./aggregateShipmentDimensions";
+import { generateInvoiceDataUri } from "./generateInvoicePdf";
 import logger from "./logger";
 
 export type ShipmentSkipReason =
@@ -12,6 +13,8 @@ export type ShipmentSkipReason =
   | "order_not_found"
   | "no_items"
   | "no_shipping_address"
+  | "no_shipment_boxes"
+  | "ewaybill_required"
   | "payment_not_completed";
 
 export interface CreateShipmentResult {
@@ -22,11 +25,41 @@ export interface CreateShipmentResult {
   error?: any;
 }
 
+// The boxes the admin keys into the CMS. Anything unreadable is dropped rather
+// than sent as NaN, which Bigship answers with a generic 400.
+export interface IShipmentBox {
+  weight_kg: string | number;
+  length_cm: string | number;
+  breadth_cm: string | number;
+  height_cm: string | number;
+}
+
+const num = (raw: string | number | undefined) => {
+  const parsed = parseFloat(String(raw));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+// Rows keyed in by hand can be blank or half-filled — only a row with all four
+// measurements describes a real box, so the rest are discarded.
+export const parseShipmentBoxes = (raw: any): BigshipBox[] => {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.flatMap((box: IShipmentBox) => {
+    const weight = num(box?.weight_kg);
+    const length = num(box?.length_cm);
+    const breadth = num(box?.breadth_cm);
+    const height = num(box?.height_cm);
+
+    if (!weight || !length || !breadth || !height) return [];
+
+    return [{ weight, length, breadth, height }];
+  });
+};
+
 // Single entry point for booking a Bigship shipment against an order that
 // already exists in our DB. Safe to call more than once for the same order —
-// an order that already carries a bigship_order_id is left alone, so the
-// order-create path and the admin confirm path can both call it without
-// double-booking an AWB.
+// an order that already carries a bigship_order_id is left alone, so a failed
+// confirm can simply be retried without double-booking an AWB.
 export const createBigshipShipment = async (
   orderId: number,
 ): Promise<CreateShipmentResult> => {
@@ -40,7 +73,14 @@ export const createBigshipShipment = async (
         o.payment_status,
         o.bigship_order_id,
         o.shipping_address,
-        o.shipment_dimensions,
+        o.shipment_boxes,
+        o.ewaybill_number,
+        o.ewaybill_document,
+        o.invoice_document,
+        o.subtotal,
+        o.discount,
+        o.shipping_charge,
+        o.total_amount,
         o.created_at,
         JSON_AGG(
           JSON_BUILD_OBJECT(
@@ -99,16 +139,65 @@ export const createBigshipShipment = async (
       sellingPrice: parseFloat(item.price),
     }));
 
-    // Dimensions snapshotted on the order at placement time. Older orders have
-    // no snapshot, so fall back to recomputing from the item snapshots.
-    const dimensions =
-      order.shipment_dimensions ??
-      aggregateShipmentDimensions(
-        itemInfos.map(
-          ({ item, info }) =>
-            ({ ...info, quantity: item.quantity }) as IShipmentDimensionInput,
-        ),
-      );
+    // What ships is packed by hand, so the boxes come from the admin and there
+    // is no product-derived fallback — booking without them would hand the
+    // courier dimensions nobody has verified.
+    const boxes = parseShipmentBoxes(order.shipment_boxes);
+    if (boxes.length === 0) {
+      return { created: false, skipped: "no_shipment_boxes" };
+    }
+
+    // More than one box means Bigship B2B, which is invoiced on a document
+    // rather than on the box amounts, and needs an ewaybill above the
+    // threshold. One box stays on the cheaper B2C route with none of that.
+    const isB2B = boxes.length > 1;
+
+    const invoiceAmount = items.reduce(
+      (sum, item) => sum + item.units * item.sellingPrice,
+      0,
+    );
+
+    if (
+      isB2B &&
+      invoiceAmount >= EWAYBILL_THRESHOLD &&
+      (!order.ewaybill_number || !order.ewaybill_document)
+    ) {
+      return { created: false, skipped: "ewaybill_required" };
+    }
+
+    // B2B is invoiced on an attached document, and only B2B needs one. An
+    // invoice uploaded from the CMS is the real one, so it goes to the courier
+    // as-is; the app only draws its own when nothing was uploaded.
+    let invoiceDocument: string | undefined;
+
+    if (isB2B) {
+      invoiceDocument =
+        order.invoice_document ||
+        (await generateInvoiceDataUri({
+          orderNumber: order.order_number,
+          orderDate: order.created_at,
+          paymentMethod:
+            order.payment_method === ONLINE_PAYMENT
+              ? "Online Paid"
+              : "Cash on delivery",
+          customerName: addr.name,
+          customerPhone: addr.phone,
+          customerEmail: addr.email,
+          addressLine1: addr.address_line1,
+          city: addr.city,
+          state: addr.state,
+          pincode: addr.pincode,
+          items: items.map((item) => ({
+            name: item.name,
+            quantity: item.units,
+            price: item.sellingPrice,
+          })),
+          subtotal: parseFloat(order.subtotal ?? 0),
+          discount: parseFloat(order.discount ?? 0),
+          shipping: parseFloat(order.shipping_charge ?? 0),
+          total: parseFloat(order.total_amount ?? 0),
+        }));
+    }
 
     const result = await BigshipService.createOrder({
       orderNumber: order.order_number,
@@ -123,10 +212,11 @@ export const createBigshipShipment = async (
       customerCountry: addr.country || "India",
       paymentMethod: order.payment_method === ONLINE_PAYMENT ? "ONLINE" : "COD",
       items,
-      weight: dimensions.weight,
-      length: dimensions.length,
-      breadth: dimensions.breadth,
-      height: dimensions.height,
+      boxes,
+      invoiceDocument,
+      // Only B2B carries an ewaybill; sending one on B2C is rejected.
+      ewaybillNumber: isB2B ? (order.ewaybill_number ?? undefined) : undefined,
+      ewaybillDocument: isB2B ? (order.ewaybill_document ?? undefined) : undefined,
     });
 
     if (!result.success || !result.bigshipOrderId) {
@@ -134,6 +224,7 @@ export const createBigshipShipment = async (
         message: "Bigship order creation failed",
         orderId,
         orderNumber: order.order_number,
+        category: isB2B ? "b2b" : "b2c",
         error: result.error,
       });
       return { created: false, error: result.error };
@@ -152,6 +243,8 @@ export const createBigshipShipment = async (
     logger.info({
       message: "Bigship order linked to DB order",
       orderId,
+      category: isB2B ? "b2b" : "b2c",
+      boxes: boxes.length,
       bigshipOrderId: result.bigshipOrderId,
       awb: result.awbCode,
     });
