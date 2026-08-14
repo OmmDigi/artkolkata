@@ -270,7 +270,7 @@ export default function ShopSection() {
 
     return {
       category,
-      products: categoryProducts.slice(0, 10).map(mapApiProduct),
+      products: categoryProducts.slice(0, 5).map(mapApiProduct),
     };
   });
 
@@ -335,7 +335,7 @@ export default function ShopSection() {
 
         {!isLoading && !isError && (
           <div>
-            {productsData?.slice(0, 4).map(({ category, products }) => (
+            {productsData?.map(({ category, products }) => (
               <div key={category.id} className="mb-12">
                 <div className=" hidden md:inline-flex items-center gap-2 bg-white border border-black rounded-full px-4 py-2 mb-6">
                   <Star size={16} className="fill-black" />

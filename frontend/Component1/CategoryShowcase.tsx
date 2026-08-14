@@ -24,7 +24,7 @@ export default function CategoryShowcase() {
   });
 
   const categories = categoryData?.data?.filter(Boolean) ?? [];
-  const displayCategories = categories.slice(0, 14);
+  const displayCategories = categories;
 
   return (
     <section className="w-full bg-white py-3 md:py-5 px-6 md:px-12">
