@@ -301,12 +301,14 @@ export const getProductList = asyncErrorHandler(
           filter = `WHERE ${key} = $${placeholdernum++}`;
         } else {
           filter = `WHERE ${key} IN ${placeholders}`;
+          placeholdernum += keys.length;
         }
       } else {
         if (keys.length == 0) {
           filter = ` AND ${key} = $${placeholdernum++}`;
         } else {
           filter += ` AND ${key} IN ${placeholders}`;
+          placeholdernum += keys.length;
         }
       }
     }
@@ -366,6 +368,7 @@ export const getProductList = asyncErrorHandler(
     SELECT 
      p.*,
      c.slug AS category_slug,
+     c.name AS category_name,
      TO_CHAR(p.updated_at, 'DD Mon YYYY') AS updated_at,
      COALESCE(JSON_AGG(pi ORDER BY pi.position ASC) FILTER (WHERE pi.id IS NOT NULL), '[]'::json) as images,
      COALESCE(AVG(r.stars), 0.0) AS rating,

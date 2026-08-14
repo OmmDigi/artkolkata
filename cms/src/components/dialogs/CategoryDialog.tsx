@@ -41,7 +41,7 @@ export default function CategoryDialog({
     name: string;
     slug: string;
     alt_tag: string | null;
-    position: number;
+    position: number | "";
     is_visible: boolean;
   }>({
     image: "",
@@ -93,7 +93,7 @@ export default function CategoryDialog({
       name: formData.name,
       slug: formData.slug,
       image: data.get("image")?.toString() ?? "",
-      position: formData.position,
+      position: formData.position === "" ? 0 : formData.position,
       is_visible: formData.is_visible,
     };
 
@@ -170,9 +170,13 @@ export default function CategoryDialog({
                   name="alt_tag"
                   label="Image Alt Tag"
                   placeholder="Image alt tag (optional)"
-                  value={formData.alt_tag ?? undefined}
-                  onChange={(e) => {
-                    setFormData(prev => ({...prev, alt_tag : e.currentTarget?.value ?? ""}))
+                  value={formData.alt_tag ?? ""}
+                  onChange={(event) => {
+                    const inputValue = event.currentTarget.value ?? "";
+                    setFormData((prev) => ({
+                      ...prev,
+                      alt_tag: inputValue,
+                    }));
                   }}
                 />
               </div>
@@ -194,11 +198,13 @@ export default function CategoryDialog({
                 label="Position"
                 placeholder="0"
                 type="number"
-                value={formData.position.toString()}
+                value={formData.position === "" ? "" : formData.position.toString()}
                 onChange={(event) => {
+                  const inputValue = event.currentTarget.value;
+                  const parsed = parseInt(inputValue);
                   setFormData((prev) => ({
                     ...prev,
-                    position: parseInt(event.currentTarget.value) || 0,
+                    position: inputValue === "" || isNaN(parsed) ? "" : parsed,
                   }));
                 }}
               />

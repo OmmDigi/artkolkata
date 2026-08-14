@@ -44,7 +44,7 @@ export default function SubCategoryDialog({
     slug: string;
     alt_tag: string | null;
     category_id: number | null;
-    position: number;
+    position: number | "";
   }>({
     image: "",
     alt_tag: null,
@@ -96,7 +96,7 @@ export default function SubCategoryDialog({
       slug: formData.slug,
       image: data.get("image")?.toString() ?? "",
       category_id: formData.category_id,
-      position: formData.position,
+      position: formData.position === "" ? 0 : formData.position,
     };
 
     const altTag = data.get("alt_tag")?.toString();
@@ -225,11 +225,13 @@ export default function SubCategoryDialog({
                 label="Position"
                 placeholder="0"
                 type="number"
-                value={formData.position.toString()}
+                value={formData.position === "" ? "" : formData.position.toString()}
                 onChange={(event) => {
+                  const inputValue = event.currentTarget.value;
+                  const parsed = parseInt(inputValue);
                   setFormData((prev) => ({
                     ...prev,
-                    position: parseInt(event.currentTarget.value) || 0,
+                    position: inputValue === "" || isNaN(parsed) ? "" : parsed,
                   }));
                 }}
               />

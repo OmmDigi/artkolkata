@@ -38,6 +38,7 @@ export default function ProductsPage() {
     filter: {
       categoryId: currentCategory,
       status: currentStatus ?? "1",
+      limit : 20
     },
     depandencyArray: [currentPage, currentCategory, currentStatus],
   });
@@ -110,6 +111,9 @@ export default function ProductsPage() {
                 <TableHead className="w-[100px] text-white">
                   Product Name
                 </TableHead>
+                <TableHead className="w-[100px] text-white">
+                  Category
+                </TableHead>
                 <TableHead className="text-white text-center">
                   Updated Date
                 </TableHead>
@@ -123,6 +127,9 @@ export default function ProductsPage() {
                 <TableRow key={product.id}>
                   <TableCell className="font-medium max-w-lg text-wrap line-clamp-2 w-lg">
                     {product.name}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {product.category_name}
                   </TableCell>
                   <TableCell className="text-center">
                     {product.updated_at}

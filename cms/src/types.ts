@@ -153,6 +153,7 @@ export interface IProducts {
   position: number;
   description_json: any | null;
   category_id: number;
+  category_name : string;
   sub_category_id: number | null;
   price: string;
   compare_at_price: string;

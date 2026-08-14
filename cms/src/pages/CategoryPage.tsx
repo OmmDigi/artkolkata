@@ -1,5 +1,5 @@
 import CategoryDialog from "@/components/dialogs/CategoryDialog";
-import { PaginationComp } from "@/components/PaginationComp";
+// import { PaginationComp } from "@/components/PaginationComp";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -23,7 +23,7 @@ export default function CategoryPage() {
   const [open, setOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(0);
 
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, _] = useSearchParams();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
 
@@ -35,7 +35,7 @@ export default function CategoryPage() {
     useDoMutation();
 
   const { categoryData, isCategoryFetching, categoryError, refetchCategory } =
-    useCategory({ page: currentPage });
+    useCategory({ page: currentPage, limit : -1 });
 
   const onVisibilityChange = (item: ICategory, isVisible: boolean) => {
     const payload: Record<string, string | number | boolean | null> = {
@@ -182,7 +182,7 @@ export default function CategoryPage() {
             </TableBody>
           </Table>
 
-          <PaginationComp
+          {/* <PaginationComp
             totalPage={-1}
             page={currentPage}
             totalItems={categoryData.length}
@@ -192,7 +192,7 @@ export default function CategoryPage() {
                 return prev;
               });
             }}
-          />
+          /> */}
         </LoadingHandler>
       </div>
     </>

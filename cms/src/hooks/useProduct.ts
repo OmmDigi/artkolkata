@@ -9,7 +9,8 @@ const getProductList = async (
   page: number,
   productId?: number,
   categoryId?: string,
-  status?: string
+  status?: string,
+  limit?: number,
 ) => {
   const urlSearchParams = new URLSearchParams();
   urlSearchParams.set("page", page.toString());
@@ -22,6 +23,9 @@ const getProductList = async (
   if (status) {
     urlSearchParams.set("status", status);
   }
+  if (limit) {
+    urlSearchParams.set("limit", String(limit));
+  }
   return (await api.get(`/api/v1/products?${urlSearchParams.toString()}`)).data;
 };
 
@@ -31,6 +35,7 @@ interface IProps {
     productId?: number;
     categoryId?: string;
     status?: string;
+    limit?: number;
   };
   enabledFetching?: boolean;
   depandencyArray?: any[];
@@ -49,13 +54,14 @@ export const useProduct = (props?: IProps) => {
     IResponse<IProducts[]>,
     AxiosError<IError>
   >({
-    queryKey: ["get-product-list", ...props?.depandencyArray ?? ""],
+    queryKey: ["get-product-list", ...(props?.depandencyArray ?? "")],
     queryFn: () =>
       getProductList(
         props?.page ?? 1,
         props?.filter?.productId,
         props?.filter?.categoryId,
-        props?.filter?.status
+        props?.filter?.status,
+        props?.filter?.limit,
       ),
     enabled: props?.enabledFetching ?? true,
   });
@@ -119,6 +125,6 @@ export const useProduct = (props?: IProps) => {
     refetchProduct: refetch,
     isMuting: isLoading,
     mutateProduct,
-    dataUpdatedAt
+    dataUpdatedAt,
   };
 };
