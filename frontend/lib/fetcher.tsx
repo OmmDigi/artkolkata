@@ -10,6 +10,8 @@ const API: AxiosInstance = axios.create({
   },
 });
 
+import { useUserStore } from "@/store/useUserStore";
+
 // Read the token fresh on every request instead of once at module load,
 // so a login/logout after the app has already booted is picked up immediately.
 API.interceptors.request.use((config) => {
@@ -21,6 +23,26 @@ API.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Intercept responses to handle 401/403 errors globally
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      if (typeof window !== "undefined") {
+        try {
+          useUserStore.getState().logout();
+        } catch (e) {
+          localStorage.removeItem("token");
+        }
+        if (window.location.pathname !== "/account") {
+          window.location.href = "/account";
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Debug: Check base URL during development
 

@@ -40,16 +40,6 @@ export default function Profile() {
       postRequest({ url: "api/v1/orders/cancel", body: data }),
   });
 
-  const { mutateAsync: returnd, isPending: returnMutating } = useMutation({
-    mutationFn: (data: any) =>
-      postRequest({ url: "api/v1/orders/return", body: data }),
-  });
-
-  const { mutateAsync: replace, isPending: replaceMutating } = useMutation({
-    mutationFn: (data: any) =>
-      postRequest({ url: "api/v1/orders/return", body: data }),
-  });
-
   useEffect(() => {
     const tab = searchParams?.get("tab");
     if (tab) {
@@ -64,26 +54,6 @@ export default function Profile() {
     try {
       const response: any = await cancle(order_id);
       toast.success(response.message || "Order Cancelled");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Try Again");
-    }
-  };
-
-  const returnOrder = async (id: number) => {
-    const payload = { order_id: id, type: "Return" };
-    try {
-      const response: any = await returnd(payload);
-      toast.success(response.message || "Return Requested");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Try Again");
-    }
-  };
-
-  const replaceOrder = async (id: number) => {
-    const payload = { order_id: id, type: "Replace" };
-    try {
-      const response: any = await replace(payload);
-      toast.success(response.message || "Replacement Requested");
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Try Again");
     }
@@ -107,7 +77,7 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-1 md:px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Sidebar */}
           <div className="lg:col-span-1">
@@ -229,11 +199,31 @@ export default function Profile() {
                           )}
                         </div>
 
-                        <div className="border-t border-gray-100 mt-4 pt-4 flex justify-between items-center">
-                          <p className="text-gray-500 text-sm">Total Amount</p>
-                          <p className="text-lg font-bold text-gray-900">
-                            ₹ {order.total_amount}
-                          </p>
+                        <div className="border-t border-gray-100 mt-4 pt-4 space-y-4">
+                          <div className="flex justify-between items-center">
+                            <p className="text-gray-500 text-sm">Total Amount</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              ₹ {order.total_amount}
+                            </p>
+                          </div>
+                          <div className="flex gap-3 justify-end">
+                            <button
+                              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded hover:bg-gray-800 transition"
+                              onClick={() => {
+                                /* TODO: implement order again */
+                              }}
+                            >
+                              Order Again
+                            </button>
+                            <button
+                              className="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded hover:bg-gray-50 transition"
+                              onClick={() => {
+                                /* TODO: implement review */
+                              }}
+                            >
+                              Review
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -295,11 +285,19 @@ export default function Profile() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => cancleOrder(selectedOrder?.order_number)}
-                      disabled={!selectedOrder?.is_cancelable || cancleMutating}
+                      disabled={
+                        !selectedOrder?.is_cancelable ||
+                        cancleMutating ||
+                        (selectedOrder?.order_status !== "PENDING" &&
+                          selectedOrder?.order_status !== "ORDER CONFIRMED")
+                      }
                       className={`cursor-pointer px-4 py-2 text-sm text-white transition flex items-center gap-2
                                  ${
                                    !selectedOrder?.is_cancelable ||
-                                   cancleMutating
+                                   cancleMutating ||
+                                   (selectedOrder?.order_status !== "PENDING" &&
+                                     selectedOrder?.order_status !==
+                                       "ORDER CONFIRMED")
                                      ? "bg-gray-300 cursor-not-allowed"
                                      : "bg-[#02F8C5]  "
                                  }
@@ -309,42 +307,6 @@ export default function Profile() {
                         <Loader2 className="w-4 h-4 animate-spin" />
                       )}
                       {cancleMutating ? "Cancelling..." : "Cancel Order"}
-                    </button>
-                    <button
-                      onClick={() => returnOrder(selectedOrder?.order_number)}
-                      disabled={!selectedOrder?.is_returnable || returnMutating}
-                      className={`cursor-pointer px-4 py-2 text-sm text-white transition flex items-center gap-2
-                                 ${
-                                   !selectedOrder?.is_returnable ||
-                                   returnMutating
-                                     ? "bg-gray-300 cursor-not-allowed"
-                                     : "bg-[#02F8C5]  "
-                                 }
-                         `}
-                    >
-                      {returnMutating && (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      )}
-                      {returnMutating ? "Processing..." : "Return Order"}
-                    </button>
-                    <button
-                      onClick={() => replaceOrder(selectedOrder?.order_number)}
-                      disabled={
-                        !selectedOrder?.is_replaceable || replaceMutating
-                      }
-                      className={`cursor-pointer px-4 py-2 text-sm text-white transition flex items-center gap-2
-                                 ${
-                                   !selectedOrder?.is_replaceable ||
-                                   replaceMutating
-                                     ? "bg-gray-300 cursor-not-allowed"
-                                     : "bg-[#02F8C5]  "
-                                 }
-                         `}
-                    >
-                      {replaceMutating && (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      )}
-                      {replaceMutating ? "Processing..." : "Replace Order"}
                     </button>
                   </div>
                 </div>
@@ -402,15 +364,21 @@ export default function Profile() {
             {activeTab === "account" && (
               <div className="space-y-6">
                 <div className="bg-white border border-gray-200 rounded p-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6">Profile Details</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                    Profile Details
+                  </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-500">Name</p>
-                      <p className="font-medium text-gray-900">{user?.name || "Not provided"}</p>
+                      <p className="font-medium text-gray-900">
+                        {user?.name || "Not provided"}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Email</p>
-                      <p className="font-medium text-gray-900">{user?.email || "Not provided"}</p>
+                      <p className="font-medium text-gray-900">
+                        {user?.email || "Not provided"}
+                      </p>
                     </div>
                   </div>
                 </div>

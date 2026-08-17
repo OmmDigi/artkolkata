@@ -683,9 +683,9 @@ export default function Navbar() {
                   logout();
                   setIsMenuOpen(false);
                 }}
-                className="flex items-center w-full text-left text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2 mb-4"
+                className="flex items-center w-full text-left text-red-500 hover:text-red-600 font-medium text-lg border-b pb-2 mb-4"
               >
-                <User size={20} className="mr-3" /> Logout
+                <User size={20} className="mr-3 text-red-600" /> Logout
               </button>
             )}
             <Link
@@ -699,6 +699,23 @@ export default function Navbar() {
                 {wishlist.length}
               </span>
             </Link>
+
+            <div className="flex flex-col space-y-3 mt-6">
+              <Link
+                href={isAuthenticated ? "/account?tab=orders" : "/account"}
+                onClick={() => setIsMenuOpen(false)}
+                className="w-max px-5 py-2 rounded-lg bg-[#5A5A0A] text-[#E0E847] font-medium text-lg"
+              >
+                Your order
+              </Link>
+              <Link
+                href="/product"
+                onClick={() => setIsMenuOpen(false)}
+                className="w-max px-5 py-2 rounded-lg bg-[#00574B] text-[#2DD4BF] font-medium text-lg"
+              >
+                Keep shopping
+              </Link>
+            </div>
           </div>
         </nav>
       </div>

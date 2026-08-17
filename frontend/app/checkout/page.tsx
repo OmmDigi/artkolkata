@@ -48,9 +48,9 @@ const CheckoutPage = () => {
   const [showCouponList, setShowCouponList] = useState(false);
   const couponRef = useRef<HTMLDivElement>(null);
 
-  const [debouncedPincode, setDebouncedPincode] = useState("");
-
-  const [selectedAddressId, setSelectedAddressId] = useState<number | "new">("new");
+  const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
+    "new",
+  );
 
   const { data: profileData } = useQuery({
     queryKey: ["userProfileCheckout"],
@@ -139,7 +139,10 @@ const CheckoutPage = () => {
       }
     },
     onError: (error: any) => {
-      const status = error?.response?.status || error?.response?.data?.statusCode || error?.status;
+      const status =
+        error?.response?.status ||
+        error?.response?.data?.statusCode ||
+        error?.status;
       if (status === 401 || status === 403) {
         toast.error("Please login to place an order");
         window.location.href = "/account";
@@ -165,51 +168,6 @@ const CheckoutPage = () => {
     code: couponCode,
   };
 
-  // Debounce pincode so we don't hit the API on every keystroke
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedPincode(shippingDetails.pincode);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [shippingDetails.pincode]);
-
-  const {
-    data: priceBreakdownResponse,
-    isFetching: isCalculatingPrice,
-    isError: isPriceBreakdownError,
-  } = useQuery({
-    queryKey: [
-      "price-breakdown",
-      debouncedPincode,
-      paymentMethod,
-      appliedCoupon ? couponCode : "",
-      normal,
-      variant,
-    ],
-    queryFn: () =>
-      postRequest<{ data: any }>({
-        url: "/api/v1/orders/price-breakdown",
-        body: {
-          pincode: debouncedPincode,
-          paymentMethod,
-          product: {
-            code: appliedCoupon ? couponCode : undefined,
-            product_ids: normal,
-            varient_ids: variant,
-          },
-        },
-      }),
-    enabled: debouncedPincode.length === 6 && cart.length > 0,
-    retry: false,
-  });
-
-  const priceBreakdown = priceBreakdownResponse?.data;
-  const isPincodeReady = debouncedPincode.length === 6;
-  const isNotServiceable =
-    isPincodeReady &&
-    !isCalculatingPrice &&
-    priceBreakdown?.serviceable === false;
-
   const applyCoupon = async () => {
     if (!couponCode) return;
     try {
@@ -221,10 +179,7 @@ const CheckoutPage = () => {
 
   const handleOrderPlace = async () => {
     if (!agreedToTerms) return;
-    if (isNotServiceable) {
-      toast.error(`Delivery isn't available for pincode ${debouncedPincode}`);
-      return;
-    }
+
     const orderData: Record<string, any> = {
       shippingDetails,
       paymentMethod,
@@ -250,32 +205,18 @@ const CheckoutPage = () => {
     }
   };
 
-  // Compute Totals — once the pincode is entered, use the real
-  // subtotal/discount/GST/shipping/total from the price-breakdown API.
-  // Before that (or if the call fails), fall back to a client-side estimate
-  // with no shipping/GST so the summary isn't empty while typing the address.
-  const clientSubtotal = cart.reduce(
+  // Compute Totals
+  const subtotal = cart.reduce(
     (sum, item) => sum + (item.product?.price || 0) * item.quantity,
     0,
   );
-  const clientDiscountAmount =
+  const couponDiscountAmount =
     discount?.data?.subTotal && discount?.data?.priceAfterDiscount
       ? discount?.data?.subTotal - discount?.data?.priceAfterDiscount
       : 0;
 
-  const subtotal = priceBreakdown?.subtotal ?? clientSubtotal;
-  const discountAmount = priceBreakdown?.discount ?? clientDiscountAmount;
-  // discountAmount is coupon + automatic together, these two split it for display
-  const couponDiscountAmount =
-    priceBreakdown?.coupon_discount ?? clientDiscountAmount;
-  const autoDiscount = priceBreakdown?.auto_discount ?? 0;
-  const autoDiscountRule = priceBreakdown?.auto_discount_rule ?? null;
-  const gstPercentage = priceBreakdown?.gst_percentage ?? 0;
-  const gstAmount = priceBreakdown?.gst_amount ?? 0;
-  const shippingCost = priceBreakdown?.shipping_charge ?? 0;
-  const total =
-    priceBreakdown?.total ??
-    subtotal - discountAmount + shippingCost + gstAmount;
+  const total = subtotal - couponDiscountAmount;
+  const gstAmount = (total * 18) / 100;
 
   const countries = [
     "United Kingdom (UK)",
@@ -351,11 +292,16 @@ const CheckoutPage = () => {
                           className="mt-1 cursor-pointer"
                         />
                         <div className="flex-1">
-                          <p className="font-semibold text-gray-900">{addr.name}</p>
-                          <p className="text-sm text-gray-600">
-                            {addr.address_line1}, {addr.city}, {addr.state} - {addr.pincode}
+                          <p className="font-semibold text-gray-900">
+                            {addr.name}
                           </p>
-                          <p className="text-sm text-gray-600">Phone: {addr.phone}</p>
+                          <p className="text-sm text-gray-600">
+                            {addr.address_line1}, {addr.city}, {addr.state} -{" "}
+                            {addr.pincode}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Phone: {addr.phone}
+                          </p>
                         </div>
                       </label>
                     ))}
@@ -373,7 +319,9 @@ const CheckoutPage = () => {
                         onChange={() => handleAddressSelect("new")}
                         className="cursor-pointer"
                       />
-                      <span className="font-semibold text-gray-900">Enter a new address</span>
+                      <span className="font-semibold text-gray-900">
+                        Enter a new address
+                      </span>
                     </label>
                   </div>
                 </div>
@@ -644,60 +592,25 @@ const CheckoutPage = () => {
 
                 {couponDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>
-                      {autoDiscount > 0 ? "Coupon discount" : "Discount"}
-                    </span>
+                    <span>Discount</span>
                     <span className="font-semibold">
                       -₹{couponDiscountAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
 
-                {autoDiscount > 0 && (
-                  <div className="flex justify-between text-sm text-green-600">
-                    <span>{autoDiscountRule?.title ?? "Offer discount"}</span>
-                    <span className="font-semibold">
-                      -₹{autoDiscount.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Shipping</span>
-                  {!isPincodeReady ? (
-                    <span className="text-xs text-gray-400">Enter pincode</span>
-                  ) : isCalculatingPrice ? (
-                    <span className="text-xs text-gray-400">
-                      Calculating...
-                    </span>
-                  ) : (
-                    <span className="font-semibold text-gray-900">
-                      ₹{shippingCost.toFixed(2)}
-                    </span>
-                  )}
+                  <span className="font-semibold text-green-600">Free</span>
                 </div>
 
                 {gstAmount > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      GST ({gstPercentage}%)
-                    </span>
+                    <span className="text-gray-600">Includes GST (18%)</span>
                     <span className="font-semibold text-gray-900">
                       ₹{gstAmount.toFixed(2)}
                     </span>
                   </div>
-                )}
-
-                {isPriceBreakdownError && (
-                  <p className="text-xs text-red-500">
-                    Unable to calculate shipping right now. Try again.
-                  </p>
-                )}
-
-                {isNotServiceable && (
-                  <p className="text-xs text-red-500">
-                    Delivery isn't available for pincode {debouncedPincode}.
-                  </p>
                 )}
               </div>
 
@@ -794,17 +707,9 @@ const CheckoutPage = () => {
                   <button
                     type="button"
                     onClick={handleOrderPlace}
-                    disabled={
-                      !agreedToTerms ||
-                      isPlacingOrder ||
-                      isCalculatingPrice ||
-                      isNotServiceable
-                    }
+                    disabled={!agreedToTerms || isPlacingOrder}
                     className={`w-full py-3 px-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 transition ${
-                      agreedToTerms &&
-                      !isPlacingOrder &&
-                      !isCalculatingPrice &&
-                      !isNotServiceable
+                      agreedToTerms && !isPlacingOrder
                         ? "bg-[#02F8C5] text-black hover:bg-[#02F8C5] cursor-pointer"
                         : "bg-gray-300 text-gray-600 cursor-not-allowed"
                     }`}
