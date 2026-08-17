@@ -64,11 +64,6 @@ export default function Profile() {
     router.replace(`?tab=${tab}`, { scroll: false });
   };
 
-  const downloadIvoice = (id: number) => {
-    window.open(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}api/v1/orders/invoice/${id}`,
-    );
-  };
 
   const handleLogout = () => {
     logout();
@@ -137,15 +132,30 @@ export default function Profile() {
                             <p className="text-sm text-gray-500">
                               {order.order_date}
                             </p>
-                            {order?.invoice_avilable == true && (
-                              <button
-                                onClick={() => downloadIvoice(order?.order_id)}
-                                className="mt-2 flex justify-center items-center gap-1 px-3 py-1 text-sm font-medium cursor-pointer border border-gray-300 hover:bg-gray-50 text-gray-700"
-                              >
-                                <span>Invoice</span>
-                                <Download className="w-4 h-4" />
-                              </button>
-                            )}
+                            <div className="mt-2 flex flex-col gap-2">
+                              {order?.invoice_url && (
+                                <a
+                                  href={order.invoice_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex justify-center items-center gap-1 px-3 py-1 text-sm font-medium cursor-pointer border border-gray-300 hover:bg-gray-50 text-gray-700"
+                                >
+                                  <span>Invoice</span>
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              )}
+                              {order?.payment_slip_url && (
+                                <a
+                                  href={order.payment_slip_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex justify-center items-center gap-1 px-3 py-1 text-sm font-medium cursor-pointer border border-gray-300 hover:bg-gray-50 text-gray-700"
+                                >
+                                  <span>Payment Slip</span>
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              )}
+                            </div>
                           </div>
                           <div className="flex flex-col gap-2 items-end">
                             <div
