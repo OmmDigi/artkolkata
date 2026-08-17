@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getRequest, postRequest } from "@/lib/fetcher";
 import { toast } from "react-toastify";
 import { useUserStore } from "@/store/useUserStore";
+import { useCartStore } from "@/store/useCartStore";
 import AddressManager from "./AddressManager";
 
 export default function Profile() {
@@ -13,6 +14,7 @@ export default function Profile() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   const { logout, user } = useUserStore();
+  const addToCart = useCartStore((state) => state.addToCart);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -64,6 +66,21 @@ export default function Profile() {
     router.replace(`?tab=${tab}`, { scroll: false });
   };
 
+  const handleOrderAgain = (order: any) => {
+    order.ordered_products.forEach((item: any) => {
+      addToCart(
+        {
+          id: item.product_id || item.id,
+          name: item.product_name,
+          price: item.price || 0,
+          images: [{ image: item.images?.image || item.image || "" }],
+        },
+        item.variant_id || item.sku,
+        item.quantity,
+      );
+    });
+    router.push("/checkout");
+  };
 
   const handleLogout = () => {
     logout();
@@ -211,24 +228,28 @@ export default function Profile() {
 
                         <div className="border-t border-gray-100 mt-4 pt-4 space-y-4">
                           <div className="flex justify-between items-center">
-                            <p className="text-gray-500 text-sm">Total Amount</p>
+                            <p className="text-gray-500 text-sm">
+                              Total Amount
+                            </p>
                             <p className="text-lg font-bold text-gray-900">
                               ₹ {order.total_amount}
                             </p>
                           </div>
                           <div className="flex gap-3 justify-end">
                             <button
-                              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded hover:bg-gray-800 transition"
-                              onClick={() => {
-                                /* TODO: implement order again */
-                              }}
+                              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded hover:bg-gray-800 transition cursor-pointer"
+                              onClick={() => handleOrderAgain(order)}
                             >
                               Order Again
                             </button>
                             <button
-                              className="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded hover:bg-gray-50 transition"
+                              className="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded hover:bg-gray-50 transition cursor-pointer"
                               onClick={() => {
-                                /* TODO: implement review */
+                                const product = order.ordered_products[0];
+                                if (product) {
+                                  const identifier = product?.product_slug;
+                                  router.push(`/product/${identifier}#reviews`);
+                                }
                               }}
                             >
                               Review

@@ -151,6 +151,16 @@ const ProductPage = () => {
 
   const imageRef = useRef<HTMLDivElement | null>(null);
   const thumbnailRef = useRef<HTMLDivElement | null>(null);
+  const reviewsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#reviews") {
+      const timeoutId = setTimeout(() => {
+        reviewsRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 500); // Wait for render
+      return () => clearTimeout(timeoutId);
+    }
+  }, []);
 
   const [showLens, setShowLens] = useState(false);
   const [lensPos, setLensPos] = useState({ x: 0, y: 0 });
@@ -1070,7 +1080,7 @@ const ProductPage = () => {
       )}
 
       {/* Reviews section  */}
-      <div className="max-w-7xl mx-auto px-4 pb-8">
+      <div id="reviews" ref={reviewsRef} className="max-w-7xl mx-auto px-4 pb-8">
         <h2 className="text-2xl font-bold text-black mb-6">Product Reviews</h2>
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="lg:w-1/3 h-auto bg-white p-5 rounded-lg border border-gray-200">
