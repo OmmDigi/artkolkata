@@ -621,7 +621,7 @@ const CheckoutPage = () => {
                 </span>
               </div>
 
-              {/* <div
+              <div
                 className="border-t border-gray-200 pt-4 relative"
                 ref={couponRef}
               >
@@ -687,7 +687,7 @@ const CheckoutPage = () => {
                     )}
                   </div>
                 )}
-              </div> */}
+              </div>
 
               <div className="mt-8">
                 <div className="space-y-4 pt-6 border-t border-gray-200">

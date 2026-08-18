@@ -14,8 +14,7 @@ export default function HeroSection() {
       if (!banners?.length) return;
       if (e.key === "ArrowLeft")
         setIndex((i) => (i - 1 + banners.length) % banners.length);
-      if (e.key === "ArrowRight")
-        setIndex((i) => (i + 1) % banners.length);
+      if (e.key === "ArrowRight") setIndex((i) => (i + 1) % banners.length);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -41,7 +40,7 @@ export default function HeroSection() {
             <img
               src={banner.image_url}
               alt={banner.alt_text ?? "Banner"}
-              className={`w-full h-[600px] md:h-auto object-cover brightness-100 transition-transform pt-20 ${
+              className={`w-full h-[600px] md:h-auto object-cover  transition-transform pt-20 ${
                 index === idx
                   ? "scale-105 duration-[6000ms] ease-out"
                   : "scale-100 duration-1000 ease-in"
@@ -53,10 +52,16 @@ export default function HeroSection() {
             <div
               key={banner.id}
               className={`[grid-area:1/1] overflow-hidden transition-opacity duration-1000 ${
-                index === idx ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
+                index === idx
+                  ? "opacity-100 z-10"
+                  : "opacity-0 z-0 pointer-events-none"
               }`}
             >
-              {banner.link_url ? <Link href={banner.link_url}>{image}</Link> : image}
+              {banner.link_url ? (
+                <Link href={banner.link_url}>{image}</Link>
+              ) : (
+                image
+              )}
             </div>
           );
         })}
@@ -70,8 +75,9 @@ export default function HeroSection() {
               key={i}
               aria-label={`Go to slide ${i + 1}`}
               onClick={() => setIndex(i)}
-              className={`h-2 w-8 rounded-full transition-colors duration-200 ${i === index ? "bg-white" : "bg-white/40"
-                }`}
+              className={`h-2 w-8 rounded-full transition-colors duration-200 ${
+                i === index ? "bg-white" : "bg-white/40"
+              }`}
             />
           ))}
         </div>
@@ -80,7 +86,9 @@ export default function HeroSection() {
       <div className="absolute left-6 top-1/2 z-20 -translate-y-1/2">
         <button
           aria-label="Previous"
-          onClick={() => setIndex((index - 1 + banners.length) % banners.length)}
+          onClick={() =>
+            setIndex((index - 1 + banners.length) % banners.length)
+          }
           className="h-10 w-10 rounded-full bg-white/90 text-black flex items-center justify-center shadow hover:bg-white"
         >
           ‹
