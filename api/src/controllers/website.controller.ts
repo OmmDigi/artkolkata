@@ -23,7 +23,7 @@ export const addEnquiry = asyncErrorHandler(async (req, res) => {
   if (sendEmailTo && rowCount !== 0) {
     const dataToSend = {
       timestamp: rows[0].created_at,
-      adminName: "Groceberry",
+      adminName: "Art Kolkata",
       inquiry: {
         message: value?.message,
         name: value.name,
