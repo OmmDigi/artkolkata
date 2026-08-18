@@ -206,8 +206,19 @@ export interface OrderResponse {
 export interface PriceBreakdown {
   subtotal: number;
   discount: number;
+  coupon_discount: number;
+  auto_discount: number;
+  auto_discount_rule: {
+    id: number;
+    title: string;
+    type: "percentage" | "fixed_amount";
+    value: number;
+    min_order_amount: number;
+  } | null;
+  // informational only : GST is already inside the product prices
   gst_percentage: number;
   gst_amount: number;
+  // always 0, the customer is never billed for delivery
   shipping_charge: number;
   total: number;
 }

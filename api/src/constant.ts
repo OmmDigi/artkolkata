@@ -1,6 +1,11 @@
 export const COOKIE_KEY = "refreshToken";
 
-export const GST_PERCENTAGE = 3;
+// GST is baked into every product price, so this rate is only ever used to show
+// the customer how much of what they already pay is tax. It is deliberately a
+// constant : the CMS has no GST setting anymore.
+export const GST_PERCENTAGE = 18;
+
+// The customer is never charged for delivery, the seller absorbs it.
 export const SHIPPING_CHARGE_STATIC = 0;
 
 export const RETURN_INITIATED = "RETURN INITIATED";

@@ -321,33 +321,33 @@ export default function SingleOrderPage() {
                   </div>
                 ) : null}
 
-                {data?.data.orderInfo.price_breakdown ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">
-                        GST ({data.data.orderInfo.price_breakdown.gst_percentage}%)
-                      </span>
-                      <span>₹{data.data.orderInfo.price_breakdown.gst_amount}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">Shipping</span>
-                      <span>
-                        {data.data.orderInfo.price_breakdown.shipping_charge > 0
-                          ? `₹${data.data.orderInfo.price_breakdown.shipping_charge}`
-                          : "FREE"}
-                      </span>
-                    </div>
-                  </>
-                ) : (
+                {data?.data.orderInfo.price_breakdown?.auto_discount ? (
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold">Shipping</span>
+                    <span className="font-semibold">
+                      {data.data.orderInfo.price_breakdown.auto_discount_rule
+                        ?.title ?? "Offer Discount"}
+                    </span>
                     <span>
-                      {parseFloat(data?.data.orderInfo.shipping_charge ?? "0") > 0
-                        ? `₹${data?.data.orderInfo.shipping_charge}`
-                        : "FREE"}
+                      ₹{data.data.orderInfo.price_breakdown.auto_discount}
                     </span>
                   </div>
-                )}
+                ) : null}
+
+                {data?.data.orderInfo.price_breakdown ? (
+                  // GST sits inside the price, it is never added to the total
+                  <div className="flex items-center justify-between text-gray-500">
+                    <span className="font-semibold">
+                      Includes GST (
+                      {data.data.orderInfo.price_breakdown.gst_percentage}%)
+                    </span>
+                    <span>₹{data.data.orderInfo.price_breakdown.gst_amount}</span>
+                  </div>
+                ) : null}
+
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">Shipping</span>
+                  <span>FREE</span>
+                </div>
                 <div className="w-full border-t border-gray-300"></div>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">TOTAL</span>

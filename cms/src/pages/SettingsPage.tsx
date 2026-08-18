@@ -6,38 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useDoMutation } from "@/hooks/useDoMutation";
 import { SITE_INFO_DEFAULTS, useSiteInfo } from "@/hooks/useSiteSettings";
-import type { IError, IResponse, ISiteInfo } from "@/types";
-import { api } from "@/utils/api";
-import { useQuery } from "@tanstack/react-query";
-import type { AxiosError } from "axios";
+import type { ISiteInfo } from "@/types";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-
-interface ISettings {
-  gst_percentage: number;
-  shipping_charge: number;
-}
 
 export default function SettingsPage() {
   return (
     <main className="space-y-6">
       <h2 className="font-semibold text-2xl">Settings</h2>
 
-      <Tabs defaultValue="charges">
+      <Tabs defaultValue="logo">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="charges">Order Charges</TabsTrigger>
           <TabsTrigger value="logo">Logo</TabsTrigger>
           <TabsTrigger value="emails">Emails</TabsTrigger>
           <TabsTrigger value="phones">Phone Numbers</TabsTrigger>
           <TabsTrigger value="addresses">Addresses</TabsTrigger>
           <TabsTrigger value="banners">Banners</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="charges">
-          <OrderChargesTab />
-        </TabsContent>
 
         <TabsContent value="logo">
           <SiteInfoTab section="logo" />
@@ -62,89 +48,6 @@ export default function SettingsPage() {
         </TabsContent>
       </Tabs>
     </main>
-  );
-}
-
-function OrderChargesTab() {
-  const [gst, setGst] = useState("");
-  const [shipping, setShipping] = useState("");
-
-  const { data, isFetching } = useQuery<
-    IResponse<ISettings>,
-    AxiosError<IError>
-  >({
-    queryKey: ["store-settings"],
-    queryFn: () => api.get("/api/v1/settings").then((r) => r.data),
-  });
-
-  useEffect(() => {
-    if (data?.data) {
-      setGst(data.data.gst_percentage.toString());
-      setShipping(data.data.shipping_charge.toString());
-    }
-  }, [data]);
-
-  const { mutate, isLoading } = useDoMutation();
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    mutate({
-      apiPath: "/api/v1/settings",
-      method: "post",
-      formData: {
-        gst_percentage: parseFloat(gst),
-        shipping_charge: parseFloat(shipping || "0"),
-      },
-    });
-  };
-
-  if (isFetching) return <LoadingRow />;
-
-  return (
-    <form onSubmit={handleSave} className="space-y-6 max-w-lg">
-      <div className="border rounded-lg p-6 space-y-5">
-        <h3 className="font-medium text-sm text-gray-500 uppercase tracking-wide">
-          Order Charges
-        </h3>
-
-        <div className="space-y-2">
-          <Label htmlFor="gst">GST Percentage (%)</Label>
-          <Input
-            id="gst"
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            value={gst}
-            onChange={(e) => setGst(e.target.value)}
-            placeholder="e.g. 18"
-            required
-          />
-          <p className="text-xs text-gray-400">
-            Applied on (subtotal − discount + shipping). Set 0 to disable.
-          </p>
-        </div>
-
-        {/* <div className="space-y-2">
-          <Label htmlFor="shipping">Shipping Charge (₹)</Label>
-          <Input
-            id="shipping"
-            type="number"
-            min="0"
-            step="0.01"
-            value={shipping}
-            onChange={(e) => setShipping(e.target.value)}
-            placeholder="e.g. 100"
-            required
-          />
-          <p className="text-xs text-gray-400">
-            Fixed shipping fee per order. Set 0 for free shipping.
-          </p>
-        </div> */}
-      </div>
-
-      <SaveButton isLoading={isLoading} text="Save Settings" />
-    </form>
   );
 }
 

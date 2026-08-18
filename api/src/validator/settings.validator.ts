@@ -1,10 +1,5 @@
 import Joi from "joi";
 
-export const VSaveSettings = Joi.object({
-  gst_percentage: Joi.number().min(0).max(100).required().label("GST %"),
-  shipping_charge: Joi.number().min(0).required().label("Shipping charge"),
-});
-
 const VContactEntry = Joi.object({
   label: Joi.string().allow("", null).default(""),
   value: Joi.string().required(),

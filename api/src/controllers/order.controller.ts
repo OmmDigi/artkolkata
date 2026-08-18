@@ -9,12 +9,12 @@ import {
   REPLACE_INITIATED,
   SHIPMENT_MAPING,
 } from "../constant";
-import { fetchSettingsFromDb } from "./settings.controller";
 import { v4 as uuidv4 } from "uuid";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { CustomRequest, IShippingAddress, ITokenInfo } from "../types";
 import { calcluteCartAmounts } from "../utils/calcluteCartAmounts";
 import { calculateAutoDiscount } from "../utils/calculateAutoDiscount";
+import { buildPriceBreakdown } from "../utils/buildPriceBreakdown";
 import { doTransition } from "../utils/doTransition";
 import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
@@ -64,7 +64,6 @@ export const createOrder = asyncErrorHandler(
       };
     }>(VCreateOrder, req.body ?? {});
 
-    let bigshipShippingCharge = 0;
     let paymentMethodOrderId: string | null = null;
     let totalFinalAmount = 0;
     let paymentPageUrl: string | null = null;
@@ -147,7 +146,8 @@ export const createOrder = asyncErrorHandler(
       // dimensions as they were when the customer ordered.
       shipmentDimensions = aggregateShipmentDimensions(cartDimensionInputs);
 
-      // Check pincode serviceability via Bigship and get shipping charge
+      // Pincode serviceability only : the quoted courier rate is ignored, the
+      // customer is never charged for delivery.
       const serviceability = await BigshipService.checkServiceability(
         value.shippingDetails.pincode,
         shipmentDimensions.weight,
@@ -167,8 +167,6 @@ export const createOrder = asyncErrorHandler(
         );
       }
 
-      bigshipShippingCharge = serviceability.shippingCharge ?? 0;
-
       // now continue with creating order
 
       const shippingAddressSnapshot = {
@@ -184,9 +182,6 @@ export const createOrder = asyncErrorHandler(
 
       const orderNumber = generateOrderNumber();
 
-      const storeSettings = await fetchSettingsFromDb();
-      const shippingCharge = bigshipShippingCharge;
-      const gstPercentage = storeSettings.gst_percentage;
       // order value rule (e.g. "spend ₹2000, get 10% off") — applied on top of
       // the coupon, on the same client so it reads the rules inside the transaction
       const autoDiscount = await calculateAutoDiscount(
@@ -195,22 +190,15 @@ export const createOrder = asyncErrorHandler(
         client,
       );
 
-      const baseAmount = parseFloat((priceAfterDiscount - autoDiscount.amount).toFixed(2));
-      const discountAmount = parseFloat((couponDiscount + autoDiscount.amount).toFixed(2));
-      const gstAmount = parseFloat((baseAmount * (gstPercentage / 100)).toFixed(2));
-      totalFinalAmount = parseFloat((baseAmount + gstAmount + shippingCharge).toFixed(2));
+      // same helper the checkout preview calls, so what was quoted is charged
+      const priceBreakdown = buildPriceBreakdown({
+        subTotal,
+        priceAfterDiscount,
+        couponDiscount,
+        autoDiscount,
+      });
 
-      const priceBreakdown = {
-        subtotal:           subTotal,
-        discount:           discountAmount,
-        coupon_discount:    couponDiscount,
-        auto_discount:      autoDiscount.amount,
-        auto_discount_rule: autoDiscount.rule,
-        gst_percentage:     gstPercentage,
-        gst_amount:         gstAmount,
-        shipping_charge:    shippingCharge,
-        total:              totalFinalAmount,
-      };
+      totalFinalAmount = priceBreakdown.total;
 
       const orderInfo = await client.query(
         `INSERT INTO orders
@@ -219,12 +207,12 @@ export const createOrder = asyncErrorHandler(
         [
           tokenInfo.id,
           orderNumber,
-          subTotal,
-          discountAmount,
-          couponDiscount,
-          autoDiscount.amount,
+          priceBreakdown.subtotal,
+          priceBreakdown.discount,
+          priceBreakdown.coupon_discount,
+          priceBreakdown.auto_discount,
           autoDiscount.rule?.id ?? null,
-          shippingCharge,
+          priceBreakdown.shipping_charge,
           totalFinalAmount,
           value.product.code,
           JSON.stringify(shippingAddressSnapshot),
@@ -332,10 +320,11 @@ export const createOrder = asyncErrorHandler(
   },
 );
 
-// Cart summary preview — subtotal, discount, GST, shipping charge, total.
-// Same math as createOrder's price breakdown, but read-only: no order or
-// Bigship shipment is created. Used by the frontend to show full payment
-// details (shipping, GST, etc.) before the customer places the order.
+// Cart summary preview — subtotal, discounts, the GST already inside the price,
+// and the payable total. Runs the exact same buildPriceBreakdown helper
+// createOrder does, but read-only: no order or Bigship shipment is created.
+// The checkout page renders this response as is, so the quote and the charge
+// can never disagree.
 export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
   const value = doValidate<{
     pincode: string;
@@ -377,31 +366,23 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
   }
 
-  const storeSettings = await fetchSettingsFromDb();
-  const gstPercentage = storeSettings.gst_percentage;
   // same rule createOrder will apply, so the cart preview and the placed order match
   const autoDiscount = await calculateAutoDiscount(
     priceAfterDiscount,
     !!value.product.code,
   );
 
-  const baseAmount = parseFloat((priceAfterDiscount - autoDiscount.amount).toFixed(2));
-  const discountAmount = parseFloat((couponDiscount + autoDiscount.amount).toFixed(2));
-  const gstAmount = parseFloat((baseAmount * (gstPercentage / 100)).toFixed(2));
-  const shippingCharge = serviceability.serviceable ? serviceability.shippingCharge ?? 0 : 0;
-  const total = parseFloat((baseAmount + gstAmount + shippingCharge).toFixed(2));
+  const priceBreakdown = buildPriceBreakdown({
+    subTotal,
+    priceAfterDiscount,
+    couponDiscount,
+    autoDiscount,
+  });
 
   httpResponse(res, 200, "Price breakdown", {
-    subtotal: subTotal,
-    discount: discountAmount,
-    coupon_discount: couponDiscount,
-    auto_discount: autoDiscount.amount,
-    // { id, title, type, value, min_order_amount } — lets the cart label the row
-    auto_discount_rule: autoDiscount.rule,
-    gst_percentage: gstPercentage,
-    gst_amount: gstAmount,
-    shipping_charge: shippingCharge,
-    total,
+    ...priceBreakdown,
+    // createOrder refuses an unserviceable pincode, so the cart uses this to
+    // block the place order button before the customer pays
     serviceable: serviceability.serviceable,
     courier_name: serviceability.courierName ?? null,
     estimated_days: serviceability.estimatedDays ?? null,

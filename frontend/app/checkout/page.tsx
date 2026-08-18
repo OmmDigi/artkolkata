@@ -42,7 +42,6 @@ const CheckoutPage = () => {
   });
 
   const [couponCode, setCouponCode] = useState("");
-  const [discount, setDiscount] = useState<any>({});
   const [appliedCoupon, setAppliedCoupon] = useState(false);
   const [showCouponError, setShowCouponError] = useState(false);
   const [showCouponList, setShowCouponList] = useState(false);
@@ -115,7 +114,6 @@ const CheckoutPage = () => {
       mutationFn: (data: any) =>
         postRequest({ url: "/api/v1/discount/validate", body: data }),
       onSuccess: (response: any) => {
-        setDiscount(response);
         setShowCouponError(false);
         setAppliedCoupon(true);
         toast.success(response?.message || "Coupon Applied");
@@ -162,11 +160,26 @@ const CheckoutPage = () => {
     }
   });
 
+  // what gets validated when the customer hits Apply
   const formData = {
     product_ids: normal,
     varient_ids: variant,
     code: couponCode,
   };
+
+  // A code that was typed but never validated must not reach the pricing APIs,
+  // otherwise the preview and the order can disagree about the discount.
+  const appliedCouponCode = appliedCoupon && couponCode ? couponCode : null;
+
+  const cartProduct: Record<string, any> = {
+    product_ids: normal,
+    varient_ids: variant,
+    ...(appliedCouponCode ? { code: appliedCouponCode } : {}),
+  };
+
+  const pincode = shippingDetails.pincode.trim();
+  const isPincodeReady = /^\d{6}$/.test(pincode);
+  const hasItems = cart.length > 0;
 
   const applyCoupon = async () => {
     if (!couponCode) return;
@@ -180,22 +193,33 @@ const CheckoutPage = () => {
   const handleOrderPlace = async () => {
     if (!agreedToTerms) return;
 
+    if (!isPincodeReady) {
+      toast.error("Enter a 6 digit pincode to continue");
+      return;
+    }
+
+    // the summary is the quote : without it we have no confirmed amount
+    if (!breakdown) {
+      toast.error(
+        breakdownErrorMessage || "Order summary is still loading, please wait",
+      );
+      return;
+    }
+
+    if (!isServiceable) {
+      toast.error(`Delivery not available for pincode ${pincode}`);
+      return;
+    }
+
     const orderData: Record<string, any> = {
       shippingDetails,
       paymentMethod,
+      // exactly the cart the quoted total was calculated from
+      product: cartProduct,
     };
 
     if (showGstDetails) {
       orderData["gstDetails"] = gstDetails;
-    }
-
-    if (formData.code !== "") {
-      orderData["product"] = formData;
-    } else {
-      orderData["product"] = {
-        product_ids: normal,
-        varient_ids: variant,
-      };
     }
 
     try {
@@ -205,18 +229,65 @@ const CheckoutPage = () => {
     }
   };
 
-  // Compute Totals
-  const subtotal = cart.reduce(
+  // -------------------------------
+  // Price breakdown
+  // -------------------------------
+  // Every number in the summary comes from this endpoint, which runs the exact
+  // same math place-order does (coupon, auto discount rule, GST already inside
+  // the price, free shipping). Nothing is computed locally, so what the
+  // customer sees here is what they get charged.
+  const {
+    data: breakdownResponse,
+    isFetching: isLoadingBreakdown,
+    error: breakdownError,
+  } = useQuery({
+    queryKey: [
+      "price-breakdown",
+      pincode,
+      paymentMethod,
+      appliedCouponCode ?? "",
+      JSON.stringify(normal),
+      JSON.stringify(variant),
+    ],
+    queryFn: () =>
+      postRequest<{ data: any }>({
+        url: "/api/v1/orders/price-breakdown",
+        body: { pincode, paymentMethod, product: cartProduct },
+      }),
+    enabled: hasItems && isPincodeReady,
+    retry: false,
+  });
+
+  const breakdown = breakdownResponse?.data ?? null;
+
+  // shown until a pincode makes the real breakdown available
+  const localSubtotal = cart.reduce(
     (sum, item) => sum + (item.product?.price || 0) * item.quantity,
     0,
   );
-  const couponDiscountAmount =
-    discount?.data?.subTotal && discount?.data?.priceAfterDiscount
-      ? discount?.data?.subTotal - discount?.data?.priceAfterDiscount
-      : 0;
 
-  const total = subtotal - couponDiscountAmount;
-  const gstAmount = (total * 18) / 100;
+  const subtotal = breakdown ? breakdown.subtotal : localSubtotal;
+  const couponDiscountAmount = breakdown?.coupon_discount ?? 0;
+  const autoDiscountAmount = breakdown?.auto_discount ?? 0;
+  const autoDiscountTitle =
+    breakdown?.auto_discount_rule?.title ?? "Offer discount";
+  const gstPercentage = breakdown?.gst_percentage ?? 18;
+  const gstAmount = breakdown?.gst_amount ?? 0;
+  const shippingCharge = breakdown?.shipping_charge ?? 0;
+  const total: number | null = breakdown ? breakdown.total : null;
+  const isServiceable = breakdown ? breakdown.serviceable !== false : false;
+
+  const breakdownErrorMessage =
+    (breakdownError as any)?.response?.data?.message ?? null;
+
+  // no total, no order : never let the customer pay an amount we did not quote
+  const canPlaceOrder =
+    agreedToTerms &&
+    hasItems &&
+    !!breakdown &&
+    isServiceable &&
+    !isLoadingBreakdown &&
+    !isPlacingOrder;
 
   const countries = [
     "United Kingdom (UK)",
@@ -592,21 +663,36 @@ const CheckoutPage = () => {
 
                 {couponDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>Discount</span>
+                    <span>Coupon discount{couponCode ? ` (${couponCode})` : ""}</span>
                     <span className="font-semibold">
                       -₹{couponDiscountAmount.toFixed(2)}
                     </span>
                   </div>
                 )}
 
+                {autoDiscountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span>{autoDiscountTitle}</span>
+                    <span className="font-semibold">
+                      -₹{autoDiscountAmount.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Shipping</span>
-                  <span className="font-semibold text-green-600">Free</span>
+                  <span className="font-semibold text-green-600">
+                    {shippingCharge > 0 ? `₹${shippingCharge.toFixed(2)}` : "Free"}
+                  </span>
                 </div>
 
+                {/* informational : GST is already inside the prices above, it is
+                    never added to the total */}
                 {gstAmount > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Includes GST (18%)</span>
+                    <span className="text-gray-600">
+                      Includes GST ({gstPercentage}%)
+                    </span>
                     <span className="font-semibold text-gray-900">
                       ₹{gstAmount.toFixed(2)}
                     </span>
@@ -617,9 +703,39 @@ const CheckoutPage = () => {
               <div className="flex justify-between items-center text-lg">
                 <span className="font-bold text-gray-900">Total</span>
                 <span className="text-2xl font-bold text-gray-900">
-                  ₹{total.toFixed(2)}
+                  {total !== null ? (
+                    `₹${total.toFixed(2)}`
+                  ) : (
+                    <span className="text-sm font-semibold text-gray-500">
+                      {isLoadingBreakdown ? "Calculating…" : "—"}
+                    </span>
+                  )}
                 </span>
               </div>
+
+              {!isPincodeReady && hasItems && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Enter your 6 digit pincode to confirm the final amount.
+                </p>
+              )}
+
+              {isPincodeReady && isLoadingBreakdown && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Updating order summary…
+                </p>
+              )}
+
+              {isPincodeReady && !isLoadingBreakdown && breakdownErrorMessage && (
+                <p className="mt-2 text-xs text-red-600">
+                  {breakdownErrorMessage}
+                </p>
+              )}
+
+              {breakdown && !isServiceable && (
+                <p className="mt-2 text-xs text-red-600">
+                  Delivery is not available for pincode {pincode}.
+                </p>
+              )}
 
               <div
                 className="border-t border-gray-200 pt-4 relative"
@@ -707,15 +823,19 @@ const CheckoutPage = () => {
                   <button
                     type="button"
                     onClick={handleOrderPlace}
-                    disabled={!agreedToTerms || isPlacingOrder}
+                    disabled={!canPlaceOrder}
                     className={`w-full py-3 px-4 rounded-lg font-bold text-lg flex items-center justify-center gap-2 transition ${
-                      agreedToTerms && !isPlacingOrder
+                      canPlaceOrder
                         ? "bg-[#02F8C5] text-black hover:bg-[#02F8C5] cursor-pointer"
                         : "bg-gray-300 text-gray-600 cursor-not-allowed"
                     }`}
                   >
                     <Lock className="w-5 h-5" />
-                    {isPlacingOrder ? "Placing Order..." : "Place Order"}
+                    {isPlacingOrder
+                      ? "Placing Order..."
+                      : total !== null
+                        ? `Place Order · ₹${total.toFixed(2)}`
+                        : "Place Order"}
                   </button>
                 </div>
               </div>

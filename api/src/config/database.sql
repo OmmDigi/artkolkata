@@ -390,10 +390,9 @@ CREATE TABLE IF NOT EXISTS store_settings (
   value TEXT NOT NULL
 );
 
-INSERT INTO store_settings (key, value) VALUES
-  ('gst_percentage',  '3'),
-  ('shipping_charge', '0')
-ON CONFLICT (key) DO NOTHING;
+-- Order charges are not configurable: GST is a fixed 18% already inside the
+-- product prices and delivery is never billed, so no rows are seeded here.
+-- The table still backs the site info and banner settings.
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS price_breakdown JSONB;
 
