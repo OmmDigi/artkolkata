@@ -18,7 +18,7 @@ export default function ContactUsForm() {
     try {
       // Sending to /api/v1/enquiry or just /enquiry depending on the backend proxy setup
       // Most of the frontend requests are prefixed with /api/v1/
-      await postRequest({ url: "/api/website/enquiry", body: formData });
+      await postRequest({ url: "/api/v1/website/enquiry", body: formData });
       alert("Your enquiry has been submitted successfully!");
       setFormData({ name: "", email: "", phone: "", message: "" });
     } catch (error) {
