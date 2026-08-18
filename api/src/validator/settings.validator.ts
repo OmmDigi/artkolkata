@@ -41,6 +41,14 @@ export const VSaveSiteInfo = Joi.object({
 
 export const VCreateBanner = Joi.object({
   image_url: Joi.string().required().label("Banner image"),
+  mobile_image_url: Joi.string()
+    .allow("", null)
+    .optional()
+    .label("Mobile banner image"),
+  tablet_image_url: Joi.string()
+    .allow("", null)
+    .optional()
+    .label("Tablet banner image"),
   alt_text: Joi.string().allow("", null).optional(),
   link_url: Joi.string().allow("", null).optional(),
   position: Joi.number().integer().min(0).default(0),

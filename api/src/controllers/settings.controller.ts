@@ -178,6 +178,9 @@ export async function fetchSiteInfoFromDb(): Promise<ISiteInfo> {
 export interface IBanner {
   id: number;
   image_url: string;
+  // device specific artwork, both optional : image_url is used when they are empty
+  mobile_image_url: string | null;
+  tablet_image_url: string | null;
   alt_text: string | null;
   link_url: string | null;
   position: number;
@@ -189,7 +192,8 @@ export const getBanners = asyncErrorHandler(async (req, res) => {
   const onlyActive = req.query.active === "true";
 
   const { rows } = await pool.query<IBanner>(
-    `SELECT id, image_url, alt_text, link_url, position, is_active
+    `SELECT id, image_url, mobile_image_url, tablet_image_url,
+            alt_text, link_url, position, is_active
      FROM site_banners
      ${onlyActive ? "WHERE is_active = TRUE" : ""}
      ORDER BY position ASC, id ASC`,
@@ -202,11 +206,13 @@ export const createBanner = asyncErrorHandler(async (req, res) => {
   const value = doValidate<Omit<IBanner, "id">>(VCreateBanner, req.body ?? {});
 
   const { rows } = await pool.query<IBanner>(
-    `INSERT INTO site_banners (image_url, alt_text, link_url, position, is_active)
-     VALUES ($1, $2, $3, COALESCE(NULLIF($4::int, 0), (SELECT COALESCE(MAX(position), 0) + 1 FROM site_banners)), $5)
-     RETURNING id, image_url, alt_text, link_url, position, is_active`,
+    `INSERT INTO site_banners (image_url, mobile_image_url, tablet_image_url, alt_text, link_url, position, is_active)
+     VALUES ($1, $2, $3, $4, $5, COALESCE(NULLIF($6::int, 0), (SELECT COALESCE(MAX(position), 0) + 1 FROM site_banners)), $7)
+     RETURNING id, image_url, mobile_image_url, tablet_image_url, alt_text, link_url, position, is_active`,
     [
       value.image_url,
+      value.mobile_image_url || null,
+      value.tablet_image_url || null,
       value.alt_text || null,
       value.link_url || null,
       value.position,
@@ -223,16 +229,31 @@ export const updateBanner = asyncErrorHandler(async (req, res) => {
     id: Number(req.params.banner_id),
   });
 
-  // the CTE reads the pre-update snapshot, so it hands back the image we replaced
-  const { rowCount, rows } = await pool.query<{ previous_image: string }>(
-    `WITH previous AS (SELECT image_url FROM site_banners WHERE id = $6)
+  const nextMobile = value.mobile_image_url || null;
+  const nextTablet = value.tablet_image_url || null;
+
+  // the CTE reads the pre-update snapshot, so it hands back the images we replaced
+  const { rowCount, rows } = await pool.query<{
+    previous_image: string | null;
+    previous_mobile_image: string | null;
+    previous_tablet_image: string | null;
+  }>(
+    `WITH previous AS (
+       SELECT image_url, mobile_image_url, tablet_image_url
+       FROM site_banners WHERE id = $8
+     )
      UPDATE site_banners
-     SET image_url = $1, alt_text = $2, link_url = $3, position = $4,
-         is_active = $5, updated_at = NOW()
-     WHERE id = $6
-     RETURNING (SELECT image_url FROM previous) AS previous_image`,
+     SET image_url = $1, mobile_image_url = $2, tablet_image_url = $3,
+         alt_text = $4, link_url = $5, position = $6,
+         is_active = $7, updated_at = NOW()
+     WHERE id = $8
+     RETURNING (SELECT image_url FROM previous) AS previous_image,
+               (SELECT mobile_image_url FROM previous) AS previous_mobile_image,
+               (SELECT tablet_image_url FROM previous) AS previous_tablet_image`,
     [
       value.image_url,
+      nextMobile,
+      nextTablet,
       value.alt_text || null,
       value.link_url || null,
       value.position,
@@ -243,10 +264,15 @@ export const updateBanner = asyncErrorHandler(async (req, res) => {
 
   if (rowCount === 0) throw new ErrorHandler(404, "No banner found with this id");
 
-  // drop the old file from the upload server when the image was swapped out
-  const previousImage = rows[0]?.previous_image;
-  if (previousImage && previousImage !== value.image_url) {
-    deleteFile(previousImage);
+  // drop the old files from the upload server when an image was swapped out or cleared
+  const replaced: [string | null | undefined, string | null][] = [
+    [rows[0]?.previous_image, value.image_url],
+    [rows[0]?.previous_mobile_image, nextMobile],
+    [rows[0]?.previous_tablet_image, nextTablet],
+  ];
+
+  for (const [previous, next] of replaced) {
+    if (previous && previous !== next) deleteFile(previous);
   }
 
   httpResponse(res, 200, "Banner has been updated");
@@ -256,14 +282,25 @@ export const deleteBanner = asyncErrorHandler(async (req, res) => {
   const bannerId = Number(req.params.banner_id);
   if (!Number.isInteger(bannerId)) throw new ErrorHandler(400, "Invalid banner id");
 
-  const { rowCount, rows } = await pool.query<{ image_url: string }>(
-    `DELETE FROM site_banners WHERE id = $1 RETURNING image_url`,
+  const { rowCount, rows } = await pool.query<{
+    image_url: string;
+    mobile_image_url: string | null;
+    tablet_image_url: string | null;
+  }>(
+    `DELETE FROM site_banners WHERE id = $1
+     RETURNING image_url, mobile_image_url, tablet_image_url`,
     [bannerId],
   );
 
   if (rowCount === 0) throw new ErrorHandler(404, "No banner found with this id");
 
-  if (rows[0].image_url) deleteFile(rows[0].image_url);
+  for (const url of [
+    rows[0].image_url,
+    rows[0].mobile_image_url,
+    rows[0].tablet_image_url,
+  ]) {
+    if (url) deleteFile(url);
+  }
 
   httpResponse(res, 200, "Banner has been deleted");
 });

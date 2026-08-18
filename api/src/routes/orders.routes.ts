@@ -5,6 +5,7 @@ import {
   doCancel,
   doReturn,
   downloadInvoice,
+  downloadPaymentSlip,
   getOrderList,
   getPriceBreakdown,
   getSingleOrderInfo,
@@ -25,6 +26,7 @@ orderRoutes
   .post("/return", isAuthenticated, doReturn)
   .post("/cancel", isAuthenticated, doCancel)
   .get("/invoice/:orderid", downloadInvoice)
+  .get("/payment-slip/:orderid", downloadPaymentSlip)
   .patch("/", isAuthorizedV2(["1-5"]), updateOrderStatus)
   .put("/:orderid/shipment-boxes", isAuthorizedV2(["1-5"]), updateShipmentBoxes)
   .put("/:orderid/invoice", isAuthorizedV2(["1-5"]), uploadOrderInvoice)

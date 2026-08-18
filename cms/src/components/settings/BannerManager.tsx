@@ -6,15 +6,56 @@ import { Switch } from "@/components/ui/switch";
 import { useBanners } from "@/hooks/useSiteSettings";
 import type { IBanner } from "@/types";
 import { uploadFiles } from "@/utils/uploadFiles";
-import { ArrowDown, ArrowUp, ImagePlus, Loader2, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ImagePlus,
+  Loader2,
+  Monitor,
+  Smartphone,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
 const BANNER_FOLDER = "/banners";
 
+// the two artwork slots of one banner row. desktop is mandatory, mobile falls back to it
+type BannerSlotKey = "image_url" | "mobile_image_url";
+
+const BANNER_SLOTS: {
+  key: BannerSlotKey;
+  label: string;
+  hint: string;
+  icon: typeof Monitor;
+  aspect: string;
+}[] = [
+  {
+    key: "image_url",
+    label: "Desktop",
+    hint: "Wide 16:9 artwork · shown from 768px and up",
+    icon: Monitor,
+    aspect: "aspect-video",
+  },
+  {
+    key: "mobile_image_url",
+    label: "Mobile",
+    hint: "3:4 portrait artwork · shown below 768px",
+    icon: Smartphone,
+    aspect: "aspect-[3/4]",
+  },
+];
+
 export default function BannerManager() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+  // which banner row + slot the hidden single-file input is currently filling
+  const slotInputRef = useRef<HTMLInputElement>(null);
+  const slotTargetRef = useRef<{ id: number; key: BannerSlotKey } | null>(null);
+  const [slotUploading, setSlotUploading] = useState<string | null>(null);
 
   const {
     banners,
@@ -76,6 +117,54 @@ export default function BannerManager() {
     }
   };
 
+  // opens the hidden input for one slot of one banner row
+  const pickSlotFile = (id: number, key: BannerSlotKey) => {
+    slotTargetRef.current = { id, key };
+    slotInputRef.current?.click();
+  };
+
+  const handleSlotFilePicked = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.currentTarget.files?.[0];
+    const target = slotTargetRef.current;
+    e.target.value = "";
+    if (!file || !target) return;
+
+    const banner = drafts.find((draft) => draft.id === target.id);
+    if (!banner) return;
+
+    setSlotUploading(`${target.id}-${target.key}`);
+    let uploadError: string | null = null;
+    const { data } = await uploadFiles({
+      files: [file],
+      folder: BANNER_FOLDER,
+      onError: (err) => {
+        uploadError = err.response?.data?.message ?? err.message;
+      },
+    });
+    setSlotUploading(null);
+
+    if (uploadError || data.length === 0) {
+      toast.error(uploadError ?? "Unable to upload the banner image");
+      return;
+    }
+
+    // persist right away so the replaced file gets cleaned up on the upload server
+    const updated = { ...banner, [target.key]: data[0].downloadUrl };
+    updateDraft(target.id, { [target.key]: data[0].downloadUrl });
+    saveBanner(updated);
+  };
+
+  const clearSlot = (banner: IBanner, key: BannerSlotKey) => {
+    if (key === "image_url") return; // desktop artwork is mandatory
+    if (!confirm("Remove this device image? The file will be deleted too."))
+      return;
+
+    updateDraft(banner.id, { [key]: "" });
+    saveBanner({ ...banner, [key]: "" });
+  };
+
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= drafts.length) return;
@@ -104,6 +193,7 @@ export default function BannerManager() {
       id: banner.id,
       data: {
         image_url: banner.image_url,
+        mobile_image_url: banner.mobile_image_url ?? "",
         alt_text: banner.alt_text ?? "",
         link_url: banner.link_url ?? "",
         position: banner.position,
@@ -125,8 +215,8 @@ export default function BannerManager() {
             Website Banners
           </h3>
           <p className="text-xs text-gray-400 mt-1">
-            Pick several images at once. Only active banners are served to the
-            website.
+            Pick several desktop images at once, then add the mobile artwork on
+            each banner. Slots left empty fall back to the desktop image. Only active banners are served to the website.
           </p>
         </div>
 
@@ -153,6 +243,15 @@ export default function BannerManager() {
         accept="image/*"
         className="hidden"
         onChange={handleFilesPicked}
+      />
+
+      {/* single file picker reused by every per-device slot */}
+      <input
+        ref={slotInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleSlotFilePicked}
       />
 
       {uploadProgress !== null ? (
@@ -182,11 +281,82 @@ export default function BannerManager() {
             key={banner.id}
             className="border rounded-lg p-4 flex gap-4 flex-col md:flex-row bg-white"
           >
-            <img
-              src={banner.image_url}
-              alt={banner.alt_text ?? "Banner"}
-              className="w-full md:w-56 aspect-video object-cover rounded-lg border shrink-0"
-            />
+            <div className="w-full md:w-72 shrink-0 grid grid-cols-2 gap-2">
+              {BANNER_SLOTS.map((slot) => {
+                const url = banner[slot.key] ?? "";
+                const busy = slotUploading === `${banner.id}-${slot.key}`;
+                const SlotIcon = slot.icon;
+
+                return (
+                  <div key={slot.key} className="space-y-1">
+                    <span
+                      className="flex items-center gap-1 text-[11px] text-gray-500"
+                      title={slot.hint}
+                    >
+                      <SlotIcon size={12} /> {slot.label}
+                    </span>
+
+                    <div
+                      className={`relative ${slot.aspect} rounded-lg border overflow-hidden bg-gray-50`}
+                    >
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={`${slot.label} banner`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => pickSlotFile(banner.id, slot.key)}
+                          disabled={busy || isMutatingBanner}
+                          className="w-full h-full flex flex-col items-center justify-center gap-1 text-[10px] text-gray-400 border-dashed"
+                        >
+                          <Upload size={14} />
+                          Upload
+                        </button>
+                      )}
+
+                      {busy ? (
+                        <span className="absolute inset-0 flex items-center justify-center bg-white/70">
+                          <Loader2 size={16} className="animate-spin" />
+                        </span>
+                      ) : null}
+
+                      {url ? (
+                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/50 px-1 py-0.5">
+                          <button
+                            type="button"
+                            onClick={() => pickSlotFile(banner.id, slot.key)}
+                            disabled={busy || isMutatingBanner}
+                            className="text-[10px] text-white hover:underline"
+                          >
+                            Replace
+                          </button>
+                          {slot.key === "image_url" ? null : (
+                            <button
+                              type="button"
+                              aria-label={`Remove ${slot.label} banner`}
+                              onClick={() => clearSlot(banner, slot.key)}
+                              disabled={busy || isMutatingBanner}
+                              className="text-white"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {url || slot.key === "image_url" ? null : (
+                      <span className="text-[10px] text-gray-400 leading-tight block">
+                        Falls back to desktop
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             <div className="flex-1 space-y-4">
               <div className="grid gap-4 md:grid-cols-2">

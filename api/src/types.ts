@@ -194,6 +194,7 @@ export interface IVarients {
   available: true;
   product_name: string;
   product_category_id: number;
+  product_slug: string;
   weight_kg: string;
   length_cm: string;
   breadth_cm: string;

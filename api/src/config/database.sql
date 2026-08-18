@@ -488,7 +488,9 @@ ON CONFLICT (key) DO NOTHING;
 -- Website banners
 CREATE TABLE IF NOT EXISTS site_banners (
     id SERIAL PRIMARY KEY,
-    image_url TEXT NOT NULL,
+    image_url TEXT NOT NULL,          -- desktop artwork, also the fallback
+    mobile_image_url TEXT,            -- optional, served below 768px
+    tablet_image_url TEXT,            -- optional, served between 768px and 1024px
     alt_text TEXT,
     link_url TEXT,
     position INTEGER NOT NULL DEFAULT 0,
@@ -496,6 +498,10 @@ CREATE TABLE IF NOT EXISTS site_banners (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- responsive artwork for banner tables created before the device variants existed
+ALTER TABLE site_banners ADD COLUMN IF NOT EXISTS mobile_image_url TEXT;
+ALTER TABLE site_banners ADD COLUMN IF NOT EXISTS tablet_image_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_site_banners_position ON site_banners(position);
 CREATE INDEX IF NOT EXISTS idx_site_banners_is_active ON site_banners(is_active);
