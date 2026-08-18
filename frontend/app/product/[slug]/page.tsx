@@ -355,10 +355,10 @@ const ProductPage = () => {
 
   const getThumbnail = (img: any) => {
     if (img?.type === "video") {
-      const videoIdMatch = img.image?.match(
-        /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/,
+      const match = img.image.match(
+        /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/
       );
-      const videoId = videoIdMatch ? videoIdMatch[1] : "";
+      const videoId = match ? match[1] : "";
       return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     }
     return img?.image;
@@ -1120,7 +1120,7 @@ const ProductPage = () => {
               <div className="w-full aspect-video">
                 <iframe
                   className="w-full h-full"
-                  src={`https://www.youtube.com/embed/${zoomMedia.image.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1]}?autoplay=1`}
+                  src={`https://www.youtube.com/embed/${zoomMedia.image.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1]}?autoplay=1`}
                   title="YouTube video player"
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

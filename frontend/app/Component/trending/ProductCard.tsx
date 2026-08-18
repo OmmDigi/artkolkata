@@ -43,7 +43,11 @@ const ProductCard = ({
   return (
     <div
       className="group relative flex flex-col h-full border border-gray-300 p-2 bg-white"
-      onMouseEnter={() => hoverImage && setCurrentImage(hoverImage)}
+      onMouseEnter={() => {
+        if (hoverImage && hoverImage !== image) {
+          setCurrentImage(hoverImage);
+        }
+      }}
       onMouseLeave={() => setCurrentImage(image)}
     >
       {/* IMAGE CONTAINER */}
