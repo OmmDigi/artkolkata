@@ -6,7 +6,6 @@ import {
   ORDER_DELIVERED,
   ORDER_PENDING,
   ORDER_RETURN_INITIATED,
-  ORDER_SHIPPED,
   REPLACE_INITIATED,
   SHIPMENT_MAPING,
 } from "../constant";
@@ -21,11 +20,9 @@ import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { generateOrderNumber } from "../utils/generateOrderNumber";
 import { generatePlaceholders } from "../utils/generatePlaceholders";
-// import { generateRandomTextPrefix } from "../utils/generateRandomTextPrefix";
 import { httpResponse } from "../utils/httpResponse";
 import { manageStock } from "../utils/manageStock";
 import { parsePagination } from "../utils/parsePagination";
-// import { sendEmail } from "../utils/sendEmail";
 import {
   VCancelOrder,
   VCreateOrder,
@@ -48,6 +45,7 @@ import {
 } from "../utils/createBigshipShipment";
 import { createPaymentGatewayOrder } from "../services/payment.service";
 import logger from "../utils/logger";
+import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
 
 export const createOrder = asyncErrorHandler(
   async (req: CustomRequest, res) => {
@@ -449,11 +447,11 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
          o.order_status,
          TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
          (o.created_at >= NOW() - INTERVAL '7 days') AS is_returnable,
-         -- An invoice uploaded from the CMS is downloadable straight away; the
-         -- generated one only appears once the order has been delivered.
+         -- Only an invoice uploaded from the CMS counts here. The generated
+         -- document is a payment slip, not an invoice, and every order gets one
+         -- regardless of this flag.
          (
-           o.order_status = '${ORDER_DELIVERED}'
-           OR (o.invoice_document IS NOT NULL AND o.invoice_document <> '')
+           o.invoice_document IS NOT NULL AND o.invoice_document <> ''
          ) AS invoice_avilable
         FROM orders o
 
@@ -469,7 +467,7 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
     filterValues,
   );
 
-  httpResponse(res, 200, "Order list", rows);
+  httpResponse(res, 200, "Order list", withOrderDocumentUrls(rows));
 });
 
 export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
@@ -875,13 +873,20 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
         `
         UPDATE orders
           SET order_status = $1
-        WHERE order_number = $2 AND (order_status = '${ORDER_PENDING}' OR order_status = '${ORDER_CONFIRMED}' OR order_status = '${ORDER_SHIPPED}')
+        -- Only a PENDING order can be cancelled. Once it is confirmed the
+        -- shipment is booked with the courier, so cancelling is a support job,
+        -- not something the customer can do from their account.
+        WHERE order_number = $2 AND order_status = '${ORDER_PENDING}'
         RETURNING order_id, waybill
         `,
         [ORDER_CANCELLED, value.order_id],
       );
 
-      if (rowCount === 0) throw new ErrorHandler(400, "Unable to cancel");
+      if (rowCount === 0)
+        throw new ErrorHandler(
+          400,
+          "This order can no longer be cancelled. Only orders that are still pending can be cancelled.",
+        );
 
       const dbOrderId = rows[0].order_id;
       bigshipWaybill = rows[0].waybill ?? null;
@@ -944,35 +949,47 @@ export const deleteOrderInvoice = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Uploaded invoice removed");
 });
 
+// Serves the invoice an admin uploaded from the CMS, whatever the order status
+// is — the admin chose to put it there. Orders with no upload have no invoice
+// at all; what they have is a payment slip, served by downloadPaymentSlip.
 export const downloadInvoice = asyncErrorHandler(async (req, res) => {
   const orderid = req.params.orderid;
   if (!orderid) throw new ErrorHandler(400, "Invalid request");
 
-  // An admin-uploaded invoice wins over the generated one, and is served
-  // whatever the order status is — the admin chose to put it there, so the
-  // "only once delivered" rule the generated invoice follows does not apply.
   const uploaded = await pool.query(
     "SELECT order_number, invoice_document FROM orders WHERE order_id = $1",
     [orderid],
   );
 
-  const dataUri: string | null = uploaded.rows[0]?.invoice_document ?? null;
+  if (uploaded.rowCount == 0)
+    throw new ErrorHandler(404, "Order information not found!");
 
-  if (dataUri) {
-    const [header, base64] = dataUri.split(",");
-    const mime = header.match(/^data:([^;]+);base64$/)?.[1];
+  const dataUri: string | null = uploaded.rows[0].invoice_document ?? null;
 
-    if (!base64 || !mime) {
-      throw new ErrorHandler(500, "The uploaded invoice for this order is unreadable");
-    }
+  if (!dataUri)
+    throw new ErrorHandler(404, "No invoice has been uploaded for this order");
 
-    const extension = mime === "application/pdf" ? "pdf" : "jpg";
-    const fileName = `invoice-${uploaded.rows[0].order_number}.${extension}`;
+  const [header, base64] = dataUri.split(",");
+  const mime = header.match(/^data:([^;]+);base64$/)?.[1];
 
-    res.setHeader("Content-Type", mime);
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    return res.send(Buffer.from(base64, "base64"));
+  if (!base64 || !mime) {
+    throw new ErrorHandler(500, "The uploaded invoice for this order is unreadable");
   }
+
+  const extension = mime === "application/pdf" ? "pdf" : "jpg";
+  const fileName = `invoice-${uploaded.rows[0].order_number}.${extension}`;
+
+  res.setHeader("Content-Type", mime);
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  return res.send(Buffer.from(base64, "base64"));
+});
+
+// The document the app renders itself. It records what was ordered and what was
+// paid, so it is a payment slip rather than an invoice, and it is available for
+// every order at any status.
+export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
+  const orderid = req.params.orderid;
+  if (!orderid) throw new ErrorHandler(400, "Invalid request");
 
   let objectToSend: any = {};
 
@@ -994,7 +1011,7 @@ export const downloadInvoice = asyncErrorHandler(async (req, res) => {
         payment_method
        FROM orders
 
-       WHERE order_id = $1 AND order_status = '${ORDER_DELIVERED}'
+       WHERE order_id = $1
       `,
       [orderid],
     );

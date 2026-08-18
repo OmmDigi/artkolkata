@@ -82,11 +82,9 @@ export default function OrderListingPage() {
                         Open
                         <ExternalLink size={12} />
                       </Link>
-                      {order.invoice_avilable ? (
+                      {order.invoice_avilable && order.invoice_url ? (
                         <Link
-                          to={`${
-                            import.meta.env.VITE_API_BASE_URL
-                          }/api/v1/orders/invoice/${order.order_id}`}
+                          to={order.invoice_url}
                           target="__blank"
                           className="underline text-red-600 cursor-pointer flex items-center gap-1"
                         >
@@ -94,6 +92,14 @@ export default function OrderListingPage() {
                           <Download size={12} />
                         </Link>
                       ) : null}
+                      <Link
+                        to={order.payment_slip_url}
+                        target="__blank"
+                        className="underline text-blue-600 cursor-pointer flex items-center gap-1"
+                      >
+                        Payment slip
+                        <Download size={12} />
+                      </Link>
                     </div>
                   </TableCell>
                   <TableCell>{order.user_name}</TableCell>

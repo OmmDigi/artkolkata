@@ -24,10 +24,8 @@ import { ErrorHandler } from "../utils/ErrorHandler";
 import {
   COOKIE_KEY,
   ONLINE_PAYMENT,
-  ORDER_CONFIRMED,
   ORDER_DELIVERED,
   ORDER_PENDING,
-  ORDER_SHIPPED,
 } from "../constant";
 import { createToken } from "../services/jwt";
 import { sendEmail } from "../utils/sendEmail";
@@ -36,6 +34,7 @@ import { insertOtpToDatabase } from "../services/users.service";
 import { createOtp } from "../utils/createOtp";
 import { parsePagination } from "../utils/parsePagination";
 import { checkPermission } from "../utils/checkPermissions";
+import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
 
 // normal login system
 export const signUp = asyncErrorHandler(async (req, res) => {
@@ -741,22 +740,31 @@ export const getUserOrdersList = asyncErrorHandler(
         THEN true
         ELSE false
       END AS is_replaceable,
-      CASE
-       WHEN o.order_status = '${ORDER_DELIVERED}'
-       THEN true
-       ELSE false
-      END AS invoice_avilable,
+      -- Only an invoice uploaded from the CMS counts here. The generated
+      -- document is a payment slip, not an invoice, and every order gets one
+      -- regardless of this flag.
+      (o.invoice_document IS NOT NULL AND o.invoice_document <> '') AS invoice_avilable,
       o.waybill AS tracking_id,
-      CASE
-        WHEN o.order_status = '${ORDER_PENDING}' OR o.order_status = '${ORDER_CONFIRMED}' OR o.order_status = '${ORDER_SHIPPED}'
-        THEN true
-        ELSE false
-      END AS is_cancelable,
+      -- Cancelling is only offered while the order is still pending; after
+      -- confirmation the shipment is already booked with the courier.
+      (o.order_status = '${ORDER_PENDING}') AS is_cancelable,
       JSON_AGG(
         CASE
           WHEN oi.variant_info IS NOT NULL
           THEN JSON_BUILD_OBJECT(
           'product_name', oi.variant_info->>'product_name',
+          -- the live slug wins over the snapshot, so a link keeps working after
+          -- an admin edits the slug. The snapshot covers a deleted product, and
+          -- orders placed before the slug was snapshotted fall back to the live
+          -- lookup.
+          'product_slug', COALESCE(
+              (
+                SELECT slug
+                FROM products
+                WHERE id = (oi.variant_info->>'product_id')::int
+              ),
+              oi.variant_info->>'product_slug'
+            ),
           'quantity', oi.quantity,
           'sku', oi.variant_info->>'sku',
           'price', oi.variant_info->'price',
@@ -779,6 +787,14 @@ export const getUserOrdersList = asyncErrorHandler(
           )
           ELSE JSON_BUILD_OBJECT(
           'product_name', oi.product_info->>'name',
+          'product_slug', COALESCE(
+              (
+                SELECT slug
+                FROM products
+                WHERE id = (oi.product_info->>'id')::int
+              ),
+              oi.product_info->>'slug'
+            ),
           'quantity', oi.quantity,
           'sku', null,
           'images', oi.product_info->'images'->0,
@@ -800,6 +816,6 @@ export const getUserOrdersList = asyncErrorHandler(
       filterValues,
     );
 
-    httpResponse(res, 200, "User order list", rows);
+    httpResponse(res, 200, "User order list", withOrderDocumentUrls(rows));
   },
 );

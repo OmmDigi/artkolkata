@@ -189,7 +189,11 @@ export interface IOrderList {
   payment_status: string;
   order_status: string;
   order_date: string;
+  // True only when an invoice has been uploaded from the CMS; invoice_url is
+  // then set. The payment slip the app generates is always available.
   invoice_avilable: boolean;
+  invoice_url: string | null;
+  payment_slip_url: string;
 }
 
 export interface OrderResponse {
@@ -376,6 +380,9 @@ export interface ISiteInfo {
 export interface IBanner {
   id: number;
   image_url: string;
+  // device specific artwork, both optional : image_url is the fallback
+  mobile_image_url: string | null;
+  tablet_image_url: string | null;
   alt_text: string | null;
   link_url: string | null;
   position: number;

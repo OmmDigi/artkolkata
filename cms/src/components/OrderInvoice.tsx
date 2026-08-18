@@ -67,7 +67,11 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
   };
 
   const remove = () => {
-    if (!confirm("Remove the uploaded invoice? The generated one comes back."))
+    if (
+      !confirm(
+        "Remove the uploaded invoice? The customer is left with the generated payment slip only.",
+      )
+    )
       return;
 
     mutate({
@@ -88,8 +92,8 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
 
       <p className="text-sm text-gray-500">
         {uploaded
-          ? "The customer downloads this uploaded invoice. The generated one is not used."
-          : "No invoice uploaded, so the customer gets the automatically generated one once the order is delivered. Upload a file here to replace it and make it downloadable right away."}
+          ? "The customer can download this invoice. The generated payment slip stays available alongside it."
+          : "No invoice uploaded, so the customer only has the automatically generated payment slip. Upload a file here to give them a proper invoice."}
       </p>
 
       {uploaded ? (

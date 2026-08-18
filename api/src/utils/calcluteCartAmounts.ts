@@ -65,6 +65,9 @@ export const calcluteCartAmounts = async (
             p.name AS product_name,
             p.category_id AS product_category_id,
             p.name AS product_name,
+            -- snapshotted into variant_info so an order line can be linked back
+            -- to its product page
+            p.slug AS product_slug,
             p.weight_kg,
             p.length_cm,
             p.breadth_cm,

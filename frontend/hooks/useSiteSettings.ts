@@ -39,6 +39,9 @@ export interface ISiteInfo {
 export interface IBanner {
   id: number;
   image_url: string;
+  // device specific artwork, both optional : image_url is the fallback
+  mobile_image_url: string | null;
+  tablet_image_url: string | null;
   alt_text: string | null;
   link_url: string | null;
   position: number;
