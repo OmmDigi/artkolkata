@@ -36,25 +36,27 @@ export default function HeroSection() {
     <section className="w-full -mt-20 relative overflow-hidden">
       <div className="grid">
         {banners.map((banner, idx) => {
-          // device artwork is optional, the browser falls back to the desktop file
+          const imageClass = `w-full h-[600px] md:h-auto object-cover  transition-transform pt-20 ${
+            index === idx
+              ? "scale-105 duration-[6000ms] ease-out"
+              : "scale-100 duration-1000 ease-in"
+          }`;
+
           const image = (
-            <picture>
-              {banner.mobile_image_url ? (
-                <source
-                  media="(max-width: 767px)"
-                  srcSet={banner.mobile_image_url}
+            <>
+              {banner.mobile_image_url && (
+                <img
+                  src={banner.mobile_image_url}
+                  alt={banner.alt_text ?? "Banner"}
+                  className={`${imageClass} md:hidden block`}
                 />
-              ) : null}
+              )}
               <img
                 src={banner.image_url}
                 alt={banner.alt_text ?? "Banner"}
-                className={`w-full h-[600px] md:h-auto object-cover brightness-100 transition-transform pt-20 ${
-                  index === idx
-                    ? "scale-105 duration-[6000ms] ease-out"
-                    : "scale-100 duration-1000 ease-in"
-                }`}
+                className={`${imageClass} ${banner.mobile_image_url ? "hidden md:block" : "block"}`}
               />
-            </picture>
+            </>
           );
 
           return (

@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { useUserStore } from "@/store/useUserStore";
 import { useCartStore } from "@/store/useCartStore";
 import AddressManager from "./AddressManager";
+import Link from "next/link";
 
 export default function Profile() {
   const [activeTab, setActiveTab] = useState("account");
@@ -201,7 +202,11 @@ export default function Profile() {
                         <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
                           {order.ordered_products.map(
                             (item: any, index: number) => (
-                              <div key={index} className="flex gap-4">
+                              <Link
+                                href={`/product/${item?.product_slug}`}
+                                key={index}
+                                className="flex gap-4"
+                              >
                                 <img
                                   src={item?.images?.image}
                                   alt={item?.product_name}
@@ -221,7 +226,7 @@ export default function Profile() {
                                     Qty: {item.quantity}
                                   </p>
                                 </div>
-                              </div>
+                              </Link>
                             ),
                           )}
                         </div>

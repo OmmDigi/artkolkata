@@ -251,7 +251,9 @@ const ProductsPage = () => {
       <div className="border-b border-gray-200 py-4">
         <button
           onClick={() => toggleFilter(filterId)}
-          className="flex items-center justify-between w-full text-left"
+          className="flex items-center justify-between w-full text-left px-4 md:px-0
+    bg-gradient-to-b from-[#02F8C5] to-white
+    md:bg-none md:bg-white"
         >
           <h3 className="text-sm font-medium text-gray-900">{title}</h3>
           <ChevronDown
@@ -406,8 +408,8 @@ const ProductsPage = () => {
             <div className="flex justify-end gap-3">
               {/* Limit Select */}
               <div className="relative">
-                <select 
-                  value={limit} 
+                <select
+                  value={limit}
                   onChange={(e) => {
                     setLimit(Number(e.target.value));
                     setCurrentPage(1);
