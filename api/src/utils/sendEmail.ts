@@ -78,9 +78,9 @@ export const sendEmail = async (
     );
 
     mailOptions = {
-      from: `"Inquiry From Groceberry Website" <${sendForm}>`, // Sender address
+      from: `"Inquiry From Art Kolkata Website" <${sendForm}>`, // Sender address
       to, // List of recipients
-      subject: "Inquiry From Groceberry Website", // Subject line
+      subject: "Inquiry From Art Kolkata Website", // Subject line
       html,
     };
   }

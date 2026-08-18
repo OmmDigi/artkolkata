@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export async function fetchAllBlogSlugs(): Promise<string[]> {
-  const WP_API_BASE = `${process.env.WORDPRESS_HOST}/wp-json/custom/v1/posts?categories=Groceberry`;
+  const WP_API_BASE = `${process.env.WORDPRESS_HOST}/wp-json/custom/v1/posts?categories=ArtKolkata`;
   const PER_PAGE = 100;
 
   const slugs: string[] = [];
