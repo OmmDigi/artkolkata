@@ -48,6 +48,17 @@ const ProductPage = () => {
   const imageRef = useRef<HTMLDivElement | null>(null);
   const thumbnailRef = useRef<HTMLDivElement | null>(null);
   const reviewsRef = useRef<HTMLDivElement | null>(null);
+  const relatedScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollRelated = (direction: "left" | "right") => {
+    if (relatedScrollRef.current) {
+      const scrollAmount = 300;
+      relatedScrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#reviews") {
@@ -171,7 +182,6 @@ const ProductPage = () => {
   const relatedProducts = relatedData?.data || [];
   const relatedMapped = relatedProducts
     .filter((p: ApiProduct) => p.slug !== params?.slug)
-    .slice(0, 4)
     .map(mapApiProduct);
 
   const {
@@ -356,7 +366,7 @@ const ProductPage = () => {
   const getThumbnail = (img: any) => {
     if (img?.type === "video") {
       const match = img.image.match(
-        /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/
+        /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/,
       );
       const videoId = match ? match[1] : "";
       return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
@@ -958,25 +968,46 @@ const ProductPage = () => {
 
       {/* Related Products Section */}
       {relatedMapped.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 py-2">
+        <div className="max-w-7xl mx-auto px-4 py-2 relative">
           <h2 className="text-2xl font-bold text-black mb-6">
             Related Products
           </h2>
-          <div className="flex overflow-x-auto gap-4 md:gap-6 pb-4 snap-x snap-mandatory scrollbar-hide">
-            {relatedMapped.map((prod) => (
-              <div
-                key={prod.id}
-                className="min-w-[50vw] sm:min-w-[30vw] md:min-w-[25vw] lg:min-w-[20vw] snap-start flex-shrink-0"
-              >
-                <ProductCard product={prod} />
-              </div>
-            ))}
+          <div className="relative group">
+            <button
+              onClick={() => scrollRelated("left")}
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 bg-white shadow-lg border border-gray-200 rounded-full p-2 text-gray-700 hover:text-black hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex items-center justify-center cursor-pointer"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <div
+              ref={relatedScrollRef}
+              className="flex overflow-x-auto gap-4 md:gap-6 pb-4 snap-x snap-mandatory scrollbar-hide"
+            >
+              {relatedMapped.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="min-w-[50vw] sm:min-w-[30vw] md:min-w-[25vw] lg:min-w-[20vw] snap-start flex-shrink-0"
+                >
+                  <ProductCard product={prod} />
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => scrollRelated("right")}
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 bg-white shadow-lg border border-gray-200 rounded-full p-2 text-gray-700 hover:text-black hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex items-center justify-center cursor-pointer"
+            >
+              <ChevronRight size={24} />
+            </button>
           </div>
         </div>
       )}
 
       {/* Reviews section  */}
-      <div id="reviews" ref={reviewsRef} className="max-w-7xl mx-auto px-4 pb-8">
+      <div
+        id="reviews"
+        ref={reviewsRef}
+        className="max-w-7xl mx-auto px-4 pb-8"
+      >
         <h2 className="text-2xl font-bold text-black mb-6">Product Reviews</h2>
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="lg:w-1/3 h-auto bg-white p-5 rounded-lg border border-gray-200">
