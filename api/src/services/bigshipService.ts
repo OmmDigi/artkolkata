@@ -2,6 +2,16 @@ import axios, { AxiosInstance, AxiosError } from "axios";
 import logger from "../utils/logger";
 
 // ============================================================
+// Bigship "Unified Outbound API" (Bigship Direct), doc v1.4.
+//
+// This is a different product from the old api.bigship.in endpoints: new
+// host, every path under /api/outbound, success is reported as `status`
+// rather than `success`, orders are addressed by CustomGlobalOrderId instead
+// of by AWB, and the order is booked in three calls — create draft, fetch
+// courier rates for the draft, place it.
+// ============================================================
+
+// ============================================================
 // INTERFACES
 // ============================================================
 
@@ -71,7 +81,7 @@ export interface BigshipCreateOrderParams {
   customerCountry: string;
   paymentMethod: "COD" | "ONLINE";
   items: BigshipOrderItem[];
-  // One entry books B2C, more than one books B2B heavy.
+  // One entry books domestic_b2c, more than one books domestic_b2b.
   boxes: BigshipBox[];
   // B2B only, and mandatory there — data URI of the order invoice.
   invoiceDocument?: string;
@@ -84,28 +94,54 @@ export interface BigshipCreateOrderParams {
 // number and document.
 export const EWAYBILL_THRESHOLD = 50000;
 
+// Ids from "Get Payment Mode List" — fixed across accounts.
+const PAYMENT_MODE = { PREPAID: 1, COD: 2, TOPAY: 3 } as const;
+
+// Ids from "Get Risk Type List" — 1 Third Party Insurance, 2 Owner Risk,
+// 3 Carrier Risk. Owner Risk is the default when the courier offers it.
+const RISK_TYPE = { THIRD_PARTY: 1, OWNER: 2, CARRIER: 3 } as const;
+
+// Segment types the create-order / rate APIs accept. Hyperlocal is a separate
+// product we do not book.
+const SEGMENT = { B2C: "domestic_b2c", B2B: "domestic_b2b" } as const;
+
 // ============================================================
-// STATUS MAP — Bigship scan_status → Delhivery-format
-// (see "List of Scan Status in Tracking API" in the Bigship docs)
+// STATUS MAP — Bigship order_status/tag → Delhivery-format
+// (tracking API returns the tag, e.g. "In-Transit", "Delivered")
 // ============================================================
 
 const BIGSHIP_TO_DELHIVERY: Record<string, { statusType: string; status: string }> = {
+  "Order Placed":      { statusType: "UD", status: "Manifested" },
+  Manifested:          { statusType: "UD", status: "Manifested" },
   "Pickup Scheduled":  { statusType: "UD", status: "Manifested" },
+  "Pickup Pending":    { statusType: "UD", status: "Manifested" },
   "Not Picked":        { statusType: "UD", status: "Not Picked" },
+  "Picked Up":         { statusType: "UD", status: "In Transit" },
   "In-Transit":        { statusType: "UD", status: "In Transit" },
+  "In Transit":        { statusType: "UD", status: "In Transit" },
   "Out for Delivery":  { statusType: "UD", status: "Dispatched" },
+  "Out For Delivery":  { statusType: "UD", status: "Dispatched" },
   Delivered:           { statusType: "DL", status: "Delivered" },
   Undelivered:         { statusType: "UD", status: "Pending" },
   Cancelled:           { statusType: "CN", status: "Canceled" },
+  Canceled:            { statusType: "CN", status: "Canceled" },
   "RTO In Transit":    { statusType: "RT", status: "In Transit" },
+  "RTO In-Transit":    { statusType: "RT", status: "In Transit" },
+  RTO:                 { statusType: "RT", status: "In Transit" },
   "RTO Delivered":     { statusType: "DL", status: "RTO" },
   Lost:                { statusType: "CN", status: "Canceled" },
 };
 
-// scan_datetime / order_manifest_datetime come back as "DD-MM-YYYY HH:mm:ss" in IST
+// checkpoint_time comes back as a UTC ISO string on this API version; the
+// older "DD-MM-YYYY HH:mm:ss" IST form is still accepted here so a mixed
+// response does not poison the timeline.
 const parseBigshipDateTime = (value: string): string => {
-  const match = value.match(/^(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
-  if (!match) return new Date(value).toISOString();
+  const match = value.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/);
+
+  if (!match) {
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  }
 
   const [, day, month, year, hour, minute, second] = match;
   const istMs = Date.UTC(
@@ -120,39 +156,99 @@ const parseBigshipDateTime = (value: string): string => {
   return new Date(istMs - istOffsetMs).toISOString();
 };
 
+// MasterOrderDate is typed "Y-m-d H:i:s" in UTC, not ISO-8601.
+const toBigshipDateTime = (value: string): string => {
+  const parsed = new Date(value);
+  const date = isNaN(parsed.getTime()) ? new Date() : parsed;
+  return date.toISOString().slice(0, 19).replace("T", " ");
+};
+
 // ============================================================
 // SERVICE CLASS
 // ============================================================
 
+// Every setting is read from process.env at call time, never cached in the
+// constructor. index.ts calls dotenv.config() after its imports, and ES
+// imports run first — a constructor reading process.env here would capture
+// empty credentials and Bigship would answer "The username field is
+// required." on every call.
 class BigshipService {
-  private baseURL: string;
-  private userName: string;
-  private password: string;
-  private accessKey: string;
-  private pickupLocationId: string;
-  private returnLocationId: string;
-  private warehousePincode: string;
-  private defaultCategory: string;
   private cachedToken: CachedToken | null = null;
-  private api: AxiosInstance;
+  private apiClient: AxiosInstance | null = null;
 
-  constructor() {
-    this.baseURL = process.env.BIGSHIP_BASE_URL || "https://api.bigship.in";
-    this.userName = process.env.BIGSHIP_USER_NAME || "";
-    this.password = process.env.BIGSHIP_PASSWORD || "";
-    this.accessKey = process.env.BIGSHIP_ACCESS_KEY || "";
-    this.pickupLocationId = process.env.BIGSHIP_PICKUP_LOCATION_ID || "";
-    this.returnLocationId =
-      process.env.BIGSHIP_RETURN_LOCATION_ID || this.pickupLocationId;
-    this.warehousePincode = process.env.WAREHOUSE_PINCODE || "";
-    this.defaultCategory = process.env.BIGSHIP_DEFAULT_CATEGORY || "Others";
+  private get baseURL(): string {
+    return process.env.BIGSHIP_BASE_URL || "https://api.bigship.direct";
+  }
 
-    this.api = axios.create({ baseURL: this.baseURL });
+  private get userName(): string {
+    return process.env.BIGSHIP_USER_NAME || "";
+  }
+
+  private get password(): string {
+    return process.env.BIGSHIP_PASSWORD || "";
+  }
+
+  private get accessKey(): string {
+    return process.env.BIGSHIP_ACCESS_KEY || "";
+  }
+
+  private get pickupLocationId(): string {
+    return process.env.BIGSHIP_PICKUP_LOCATION_ID || "";
+  }
+
+  private get returnLocationId(): string {
+    return process.env.BIGSHIP_RETURN_LOCATION_ID || this.pickupLocationId;
+  }
+
+  private get warehousePincode(): string {
+    return process.env.WAREHOUSE_PINCODE || "";
+  }
+
+  // categoryId is required on every B2C product line. The panel's category
+  // ids are numeric on this API; "Others" is no longer accepted.
+  private get defaultCategoryId(): string {
+    return process.env.BIGSHIP_DEFAULT_CATEGORY_ID || "1";
+  }
+
+  private get defaultRiskTypeId(): number {
+    return parseInt(process.env.BIGSHIP_RISK_TYPE_ID || "", 10) || RISK_TYPE.OWNER;
+  }
+
+  // Built on first use, and rebuilt if the configured host ever changes.
+  private get api(): AxiosInstance {
+    if (!this.apiClient || this.apiClient.defaults.baseURL !== this.baseURL) {
+      this.apiClient = axios.create({ baseURL: this.baseURL });
+    }
+
+    return this.apiClient;
+  }
+
+  // Every endpoint reports success as `status`. Older deployments answered
+  // with `success`, so both are accepted rather than silently reading a
+  // truthy-looking payload as a failure.
+  private ok(payload: any): boolean {
+    const flag = payload?.status ?? payload?.success;
+    return flag === true || flag === 1 || flag === "1" || flag === "true";
+  }
+
+  // 422 responses carry the offending fields in `errors`, which is the only
+  // place that says what was actually wrong with the payload.
+  private errorOf(payload: any): string {
+    const fieldErrors = payload?.errors
+      ? Object.entries(payload.errors)
+          .map(([field, messages]) =>
+            `${field}: ${Array.isArray(messages) ? messages.join(", ") : messages}`,
+          )
+          .join(" | ")
+      : "";
+
+    return [payload?.message, fieldErrors].filter(Boolean).join(" — ") ||
+      "Bigship request failed";
   }
 
   // ============================================================
-  // AUTH — token is valid for 12 hours (per docs); cached with a
-  // 1 hr safety buffer and refreshed proactively.
+  // AUTH — the login response states its own expiry in tokenExpiringAt;
+  // cached with a 1 hr safety buffer and refreshed proactively.
   // ============================================================
   private async getToken(): Promise<string> {
     const now = Date.now();
@@ -162,32 +258,52 @@ class BigshipService {
       return this.cachedToken.token;
     }
 
-    const response = await this.api.post("/api/login/user", {
-      user_name: this.userName,
+    // Bigship answers a blank credential with a 422 naming the field rather
+    // than the cause, so say plainly which variable is missing instead.
+    const missing = (
+      [
+        ["BIGSHIP_USER_NAME", this.userName],
+        ["BIGSHIP_PASSWORD", this.password],
+        ["BIGSHIP_ACCESS_KEY", this.accessKey],
+      ] as const
+    )
+      .filter(([, value]) => !value)
+      .map(([name]) => name);
+
+    if (missing.length > 0) {
+      throw new Error(`Bigship credentials missing from env: ${missing.join(", ")}`);
+    }
+
+    const response = await this.api.post("/api/outbound/login", {
+      username: this.userName,
       password: this.password,
       access_key: this.accessKey,
     });
 
-    if (!response.data.success) {
-      throw new Error(response.data.message ?? "Bigship login failed");
+    if (!this.ok(response.data)) {
+      throw new Error(this.errorOf(response.data));
     }
 
     const token: string = response.data.data.token;
-    this.cachedToken = { token, expiresAt: now + 12 * 60 * 60 * 1000 };
+    const statedExpiry = Date.parse(response.data.data.tokenExpiringAt ?? "");
+
+    this.cachedToken = {
+      token,
+      expiresAt: isNaN(statedExpiry) ? now + 12 * 60 * 60 * 1000 : statedExpiry,
+    };
+
     return token;
   }
 
-  // Bigship binds the warehouse ids as System.Int64, but the seller panel shows
-  // them prefixed — "BSW142255" for warehouse 142255. Sending the prefixed form
-  // makes the whole request body fail to bind, which Bigship reports as the
-  // unhelpful "The req field is required". Accept either form, and fail here
-  // with the actual reason if the value is neither.
+  // Warehouse ids bind as integers, but the seller panel shows them prefixed —
+  // "BSW142255" for warehouse 142255. Accept either form, and fail here with
+  // the actual reason if the value is neither.
   private numericLocationId(value: string, envVar: string): number {
     const parsed = Number(value.trim().replace(/^BSW/i, ""));
 
     if (!value || !Number.isInteger(parsed) || parsed <= 0) {
       throw new Error(
-        `${envVar} must be a Bigship warehouse id (e.g. 142255 or BSW142255), but is "${value}".`,
+        `${envVar} must be a Bigship warehouse id (e.g. 258 or BSW258), but is "${value}".`,
       );
     }
 
@@ -195,22 +311,21 @@ class BigshipService {
   }
 
   // ------------------------------------------------------------
-  // FIELD SANITISERS — Bigship validates these strictly and answers
-  // any breach with a generic 400, so normalise before sending.
+  // FIELD SANITISERS — validation failures come back as a generic 422,
+  // so normalise the free-text fields before sending.
   // ------------------------------------------------------------
 
-  // Names: 3-25 chars, alphabets/dots/spaces only.
   private cleanName(value: string | undefined, fallback: string): string {
     const cleaned = (value ?? "")
       .replace(/[^A-Za-z. ]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-    return (cleaned.length >= 3 ? cleaned : fallback).slice(0, 25);
+    return (cleaned.length >= 3 ? cleaned : fallback).slice(0, 50);
   }
 
   // Address parts: alphanumeric, spaces and ' . , - / only.
-  private cleanAddress(value: string | undefined, max = 50): string {
+  private cleanAddress(value: string | undefined, max = 100): string {
     return (value ?? "")
       .replace(/[^A-Za-z0-9 '.,\-/]/g, " ")
       .replace(/\s+/g, " ")
@@ -224,25 +339,15 @@ class BigshipService {
     return digits.length > 12 ? digits.slice(-10) : digits;
   }
 
-  // product_name takes alphabets, spaces and - , / only — digits are rejected,
-  // so "Ganesh Idol 12 inch" has to go across as "Ganesh Idol inch".
+  // Product names go across as typed apart from characters that break the
+  // JSON-schema validation; unlike the old API, digits are allowed here.
   private cleanProductName(value: string | undefined): string {
     const cleaned = (value ?? "")
-      .replace(/[^A-Za-z ,/-]/g, " ")
+      .replace(/[^A-Za-z0-9 .,/-]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-    return cleaned.length > 0 ? cleaned.slice(0, 50) : "Item";
-  }
-
-  // The B2B rates API reports the risk a quote was priced at as "owner_risk" /
-  // "carrier_risk", but the manifest API only accepts "OwnerRisk" /
-  // "CarrierRisk". Anything unrecognised falls back to Bigship's own default.
-  private riskTypeOf(rateRiskTypeName: string | undefined): string {
-    return String(rateRiskTypeName ?? "").replace(/_/g, "").toLowerCase() ===
-      "carrierrisk"
-      ? "CarrierRisk"
-      : "OwnerRisk";
+    return cleaned.length > 0 ? cleaned.slice(0, 100) : "Item";
   }
 
   private async authHeaders() {
@@ -251,6 +356,67 @@ class BigshipService {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     };
+  }
+
+  // place-order is multipart for domestic shipments, so the stored documents
+  // (kept as data URIs) have to go across as real files.
+  private fileFromDataUri(
+    value: string | undefined,
+    fallbackName: string,
+  ): { blob: Blob; filename: string } | null {
+    if (!value) return null;
+
+    const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(value.trim());
+    const mime = match?.[1] || "application/pdf";
+    const payload = match ? match[3] : value.trim();
+    const isBase64 = match ? !!match[2] : true;
+
+    try {
+      const buffer = isBase64
+        ? Buffer.from(payload, "base64")
+        : Buffer.from(decodeURIComponent(payload), "utf8");
+
+      if (buffer.length === 0) return null;
+
+      const extension = mime.split("/")[1]?.split("+")[0] || "pdf";
+
+      return {
+        blob: new Blob([new Uint8Array(buffer)], { type: mime }),
+        filename: `${fallbackName}.${extension}`,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // The rate response lists every risk the quote could be priced at and flags
+  // the one actually used with isRisk. Echo that back when placing the order
+  // so we never ask for a risk the chosen courier does not offer.
+  private riskTypeIdOf(rate: any): number {
+    const selected = (rate?.riskCharges as any[] | undefined)?.find(
+      (risk) => risk?.isRisk === true,
+    );
+
+    const fromRate = parseInt(String(selected?.typeId ?? ""), 10);
+    if (Number.isInteger(fromRate) && fromRate > 0) return fromRate;
+
+    const byName = String(rate?.riskTypeName ?? "").toLowerCase();
+    if (byName.includes("carrier")) return RISK_TYPE.CARRIER;
+    if (byName.includes("third")) return RISK_TYPE.THIRD_PARTY;
+
+    return this.defaultRiskTypeId;
+  }
+
+  // Domestic quotes price into `total`; hyperlocal into `total_freight`, and
+  // the standalone calculator into `totalCharge`.
+  private rateTotal(rate: any): number {
+    const raw = rate?.total ?? rate?.totalCharge ?? rate?.total_freight ?? 0;
+    const parsed = parseFloat(String(raw));
+    return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+  }
+
+  private cheapestRate(rates: any[]): any {
+    return [...rates].sort((a, b) => this.rateTotal(a) - this.rateTotal(b))[0];
   }
 
   // ============================================================
@@ -270,43 +436,47 @@ class BigshipService {
       // couriers price on volumetric weight, so quoting a 10x10x10 box for a
       // bulky item undercharges the customer at checkout.
       const payload = {
-        shipment_category: "B2C",
-        payment_type: codRequired ? "COD" : "Prepaid",
-        pickup_pincode: this.warehousePincode,
-        destination_pincode: deliveryPincode,
-        shipment_invoice_amount: invoiceValue,
-        risk_type: "",
-        box_details: [
+        segment_type: SEGMENT.B2C,
+        sourcePincode: this.warehousePincode,
+        destPincode: deliveryPincode,
+        invoiceValue,
+        paymentModeId: codRequired ? PAYMENT_MODE.COD : PAYMENT_MODE.PREPAID,
+        ...(codRequired ? { codAmount: invoiceValue } : {}),
+        riskTypeId: this.defaultRiskTypeId,
+        // B2C is capped at a single box on this endpoint.
+        boxes: [
           {
-            each_box_dead_weight: Math.max(0.1, weight),
-            each_box_length: Math.ceil(dimensions?.length ?? 10),
-            each_box_width: Math.ceil(dimensions?.breadth ?? 10),
-            each_box_height: Math.ceil(dimensions?.height ?? 10),
-            box_count: 1,
+            no_of_box: 1,
+            box_length: Math.ceil(dimensions?.length ?? 10),
+            box_width: Math.ceil(dimensions?.breadth ?? 10),
+            box_height: Math.ceil(dimensions?.height ?? 10),
+            box_dead_weight: Math.max(0.1, weight),
           },
         ],
       };
 
-      const response = await this.api.post("/api/calculator", payload, { headers });
+      const response = await this.api.post(
+        "/api/outbound/user-rate-calculator",
+        payload,
+        { headers },
+      );
 
       const rates: any[] = response.data?.data ?? [];
 
-      if (!response.data.success || rates.length === 0) {
+      if (!this.ok(response.data) || rates.length === 0) {
         return { success: true, serviceable: false };
       }
 
-      const cheapest = rates.sort(
-        (a, b) => parseFloat(a.total_shipping_charges) - parseFloat(b.total_shipping_charges),
-      )[0];
+      const cheapest = this.cheapestRate(rates);
 
       return {
         success: true,
         serviceable: true,
-        shippingCharge: Math.ceil(parseFloat(cheapest.total_shipping_charges)),
-        courierId: parseInt(cheapest.courier_id, 10),
-        courierName: cheapest.courier_name,
+        shippingCharge: Math.ceil(this.rateTotal(cheapest)),
+        courierId: parseInt(String(cheapest.courier_partner_id ?? cheapest.courierId), 10),
+        courierName: cheapest.courierName,
         codAvailable: true,
-        estimatedDays: parseInt(cheapest.tat, 10) || undefined,
+        estimatedDays: parseInt(String(cheapest.tat), 10) || undefined,
       };
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -323,13 +493,13 @@ class BigshipService {
   }
 
   // ============================================================
-  // CREATE ORDER — add order -> get rates -> manifest -> fetch AWB
+  // CREATE ORDER — create draft -> courier rates -> place order
   //
-  // A single box books as B2C through api/order/add/single. Bigship caps B2C
-  // at exactly one box, so a multi-box shipment has to go the B2B "heavy"
-  // route instead: a different add endpoint, B2B rates, a manifest that wants
-  // a risk_type, and a mandatory invoice document. Everything else — auth,
-  // consignee, cheapest-courier pick, AWB fetch — is shared.
+  // A single box books as domestic_b2c. Bigship caps B2C at one box, so a
+  // multi-box shipment books as domestic_b2b instead: box product lines are
+  // replaced by a single ProductName, the placement needs a risk type and an
+  // invoice document, and an ewaybill above the threshold. Everything else —
+  // auth, consignee, cheapest-courier pick, AWB — is shared.
   // ============================================================
   async createOrder(params: BigshipCreateOrderParams): Promise<CreateOrderResult> {
     try {
@@ -364,12 +534,8 @@ class BigshipService {
         };
       }
 
-      const [rawFirst, ...rest] = (params.customerName ?? "").trim().split(/\s+/);
-      const firstName = this.cleanName(rawFirst, "Customer");
-      const lastName = this.cleanName(rest.join(" "), firstName);
+      const shippingName = this.cleanName(params.customerName, "Customer");
 
-      // address_line1 has a 10 character minimum, so top a short one up with
-      // the city rather than letting Bigship reject the whole order.
       let addressLine1 = this.cleanAddress(params.customerAddress);
       if (addressLine1.length < 10) {
         addressLine1 = this.cleanAddress(
@@ -377,187 +543,185 @@ class BigshipService {
         );
       }
 
-      // Anything past the 50 char cap spills into line2 instead of being lost.
-      const addressOverflow = this.cleanAddress(params.customerAddress).slice(
-        addressLine1.length,
-      );
-      const addressLine2 = this.cleanAddress(
-        params.customerAddress2 ?? addressOverflow,
-      );
-
       const email = params.customerEmail ?? "";
       const isValidEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 
-      // B2B carries no money on the boxes or the products — Bigship requires
-      // every each_box_/each_product_ amount to be 0 there and reads the value
-      // off the invoice document instead. B2C is the opposite: the box total
-      // has to reconcile exactly with shipment_invoice_amount.
-      const productDetails = params.items.map((item) => ({
-        product_category: this.defaultCategory,
-        product_sub_category: "",
-        product_name: this.cleanProductName(item.name),
-        product_quantity: item.units,
-        each_product_invoice_amount: isB2B ? 0 : item.sellingPrice * item.units,
-        each_product_collectable_amount:
-          !isB2B && isCod ? item.sellingPrice * item.units : 0,
-        hsn: (item.hsn ?? "").replace(/\D/g, ""),
+      // B2C prices the shipment off the product lines, and Bigship checks that
+      // MasterOrderInvoiceAmount equals the sum of every totalAmount.
+      const products = params.items.map((item) => {
+        const lineTotal = item.units * item.sellingPrice;
+
+        return {
+          productName: this.cleanProductName(item.name),
+          hsn: (item.hsn ?? "").replace(/\D/g, ""),
+          qty: item.units,
+          amount: item.sellingPrice,
+          totalAmount: lineTotal,
+          collectableAmount: isCod ? lineTotal : 0,
+          categoryId: this.defaultCategoryId,
+        };
+      });
+
+      // Every box declares its own dimension block. The admin keys the boxes
+      // in by hand and never says which item went where, so on B2C the full
+      // item list rides on the single box; B2B carries no product lines at
+      // all and is invoiced on the attached document instead.
+      const boxPayload = boxes.map((box) => ({
+        weight_unit: "kg",
+        dimension_unit: "cm",
+        noOfBoxes: 1,
+        dimensions: [
+          {
+            length: Math.ceil(box.length),
+            breadth: Math.ceil(box.breadth),
+            height: Math.ceil(box.height),
+            weight: Math.max(0.1, box.weight),
+          },
+        ],
+        ...(isB2B ? {} : { products }),
       }));
 
-      // Bigship wants product_details on every box, but the admin keys the
-      // boxes in by hand and never says which item went where. The full item
-      // list rides on the first box; the rest declare one line naming the same
-      // goods so the manifest reads sensibly. Harmless because B2B zeroes all
-      // the amounts anyway — this is a description, not an invoice.
-      const filler = [
-        {
-          product_category: this.defaultCategory,
-          product_sub_category: "",
-          product_name: this.cleanProductName(params.items[0]?.name),
-          product_quantity: 1,
-          each_product_invoice_amount: 0,
-          each_product_collectable_amount: 0,
-          hsn: "",
-        },
-      ];
-
-      const boxDetails = boxes.map((box, index) => ({
-        each_box_dead_weight: Math.max(0.1, box.weight),
-        each_box_length: Math.ceil(box.length),
-        each_box_width: Math.ceil(box.breadth),
-        each_box_height: Math.ceil(box.height),
-        each_box_invoice_amount: isB2B ? 0 : invoiceAmount,
-        each_box_collectable_amount: !isB2B && isCod ? invoiceAmount : 0,
-        box_count: 1,
-        product_details: index === 0 ? productDetails : filler,
-      }));
-
-      const addOrderPayload = {
-        shipment_category: isB2B ? "b2b" : "b2c",
-        warehouse_detail: {
-          pickup_location_id: this.numericLocationId(
-            this.pickupLocationId,
-            "BIGSHIP_PICKUP_LOCATION_ID",
-          ),
-          return_location_id: this.numericLocationId(
-            this.returnLocationId,
-            "BIGSHIP_RETURN_LOCATION_ID",
-          ),
-        },
-        consignee_detail: {
-          first_name: firstName,
-          last_name: lastName,
-          company_name: "",
-          contact_number_primary: this.cleanPhone(params.customerPhone),
-          contact_number_secondary: "",
-          email_id: isValidEmail ? email : "",
-          // consignee_address is nested inside consignee_detail, not a sibling
-          consignee_address: {
-            address_line1: addressLine1,
-            address_line2: addressLine2,
-            address_landmark: this.cleanAddress(params.customerLandmark ?? "N A"),
-            pincode: params.customerPincode,
-          },
-        },
-        order_detail: {
-          // Docs require UTC DateTime format
-          invoice_date: new Date(params.orderDate).toISOString(),
-          invoice_id: params.orderNumber,
-          payment_type: isCod ? "COD" : "Prepaid",
-          shipment_invoice_amount: invoiceAmount,
-          total_collectable_amount: isCod ? invoiceAmount : 0,
-          box_details: boxDetails,
-          // ewaybill_number and document_detail belong to order_detail
-          ewaybill_number: (params.ewaybillNumber ?? "").replace(/\D/g, ""),
-          document_detail: {
-            invoice_document_file: params.invoiceDocument ?? "",
-            ewaybill_document_file: params.ewaybillDocument ?? "",
-          },
-        },
+      const createOrderPayload = {
+        segment_type: isB2B ? SEGMENT.B2B : SEGMENT.B2C,
+        MasterOrderPickUpLocation: this.numericLocationId(
+          this.pickupLocationId,
+          "BIGSHIP_PICKUP_LOCATION_ID",
+        ),
+        MasterOrderReturnLocation: this.numericLocationId(
+          this.returnLocationId,
+          "BIGSHIP_RETURN_LOCATION_ID",
+        ),
+        MasterOrderDate: toBigshipDateTime(params.orderDate),
+        MasterOrderPaymentMode: isCod ? PAYMENT_MODE.COD : PAYMENT_MODE.PREPAID,
+        OrderInvoiceNo: params.orderNumber,
+        MasterOrderInvoiceAmount: invoiceAmount,
+        MasterOrderCollectableAmount: isCod ? String(invoiceAmount) : "",
+        // Start::Receiver information
+        MasterOrderShippingName: shippingName,
+        MasterOrderShippingEmail: isValidEmail ? email : "",
+        MasterOrderShippingMobileNo: this.cleanPhone(params.customerPhone),
+        MasterOrderShippingAddress: addressLine1,
+        MasterOrderShippingAddress2: this.cleanAddress(params.customerAddress2 ?? ""),
+        MasterOrderShippingLandmark: this.cleanAddress(params.customerLandmark ?? "N A"),
+        MasterOrderShippingZipCode: params.customerPincode,
+        MasterOrderShippingCity: params.customerCity,
+        MasterOrderShippingState: params.customerState,
+        MasterOrderShippingCountry: params.customerCountry || "India",
+        // End::Receiver information
+        totalNumOfBoxes: boxes.length,
+        // B2B has no per-box product lines, so the goods are named once.
+        ...(isB2B
+          ? { ProductName: this.cleanProductName(params.items[0]?.name) }
+          : {}),
+        boxes: boxPayload,
       };
 
-      const addHeaders = await this.authHeaders();
-      const addResponse = await this.api.post(
-        isB2B ? "/api/order/add/heavy" : "/api/order/add/single",
-        addOrderPayload,
-        { headers: addHeaders },
+      const createHeaders = await this.authHeaders();
+      const createResponse = await this.api.post(
+        "/api/outbound/create-order",
+        createOrderPayload,
+        { headers: createHeaders },
       );
 
-      if (!addResponse.data.success) {
-        return { success: false, error: addResponse.data.message };
+      if (!this.ok(createResponse.data)) {
+        return { success: false, error: this.errorOf(createResponse.data) };
       }
 
-      const systemOrderIdMatch = String(addResponse.data.data).match(/(\d+)/);
-      if (!systemOrderIdMatch) {
-        return { success: false, error: "Unable to parse system_order_id from Bigship response" };
-      }
-      const systemOrderId = systemOrderIdMatch[1];
+      const orderId = String(
+        createResponse.data.data?.CustomGlobalOrderId ??
+          createResponse.data.data?.MasterCustomOrderId ??
+          "",
+      ).trim();
 
-      logger.info({
-        message: "Bigship order added",
-        systemOrderId,
-        category: isB2B ? "b2b" : "b2c",
-        boxes: boxes.length,
-      });
-
-      // Get serviceable couriers + rates for this order, pick the cheapest
-      const rateHeaders = await this.authHeaders();
-      const rateResponse = await this.api.get("/api/order/shipping/rates", {
-        headers: rateHeaders,
-        params: {
-          shipment_category: isB2B ? "b2b" : "b2c",
-          system_order_id: systemOrderId,
-        },
-      });
-
-      const rates: any[] = rateResponse.data?.data ?? [];
-
-      if (!rateResponse.data.success || rates.length === 0) {
+      if (!orderId) {
         return {
           success: false,
-          error: rateResponse.data.message ?? "No courier serviceable for this order",
+          error: "Unable to read CustomGlobalOrderId from Bigship response",
         };
       }
 
-      const cheapest = rates.sort(
-        (a, b) => parseFloat(a.total_shipping_charges) - parseFloat(b.total_shipping_charges),
-      )[0];
-
-      // Manifest the order with the cheapest serviceable courier. B2B also
-      // needs a risk_type, and Bigship rejects a risk the chosen courier does
-      // not offer — so echo back the one the quote we picked was priced at
-      // rather than forcing a default onto every courier.
-      const manifestHeaders = await this.authHeaders();
-      const manifestResponse = await this.api.post(
-        isB2B ? "/api/order/manifest/heavy" : "/api/order/manifest/single",
-        {
-          system_order_id: parseInt(systemOrderId, 10),
-          courier_id: cheapest.courier_id,
-          ...(isB2B ? { risk_type: this.riskTypeOf(cheapest.risk_type_name) } : {}),
-        },
-        { headers: manifestHeaders },
-      );
-
-      if (!manifestResponse.data.success) {
-        return { success: false, error: manifestResponse.data.message };
-      }
-
-      // Fetch the AWB assigned during manifesting (shipment_data_id 1 = AWB)
-      const awbHeaders = await this.authHeaders();
-      const awbResponse = await this.api.post("/api/shipment/data", null, {
-        headers: awbHeaders,
-        params: { shipment_data_id: 1, system_order_id: systemOrderId },
+      logger.info({
+        message: "Bigship draft order created",
+        orderId,
+        segment: isB2B ? SEGMENT.B2B : SEGMENT.B2C,
+        boxes: boxes.length,
       });
 
-      if (!awbResponse.data.success) {
-        return { success: false, error: awbResponse.data.message };
+      // Serviceable couriers + rates for the draft, cheapest wins. Bigship
+      // requires this call before the order can be placed.
+      const rateHeaders = await this.authHeaders();
+      const rateResponse = await this.api.post(
+        "/api/outbound/courier-wise-shipment-cost",
+        { MasterCustomOrderId: orderId },
+        { headers: rateHeaders },
+      );
+
+      const rates: any[] = rateResponse.data?.data?.calculatedRates ?? [];
+
+      if (!this.ok(rateResponse.data) || rates.length === 0) {
+        return {
+          success: false,
+          error:
+            this.errorOf(rateResponse.data) ??
+            "No courier serviceable for this order",
+        };
       }
 
-      logger.info({ message: "Bigship order manifested", systemOrderId, awb: awbResponse.data.data?.master_awb });
+      const cheapest = this.cheapestRate(rates);
+
+      // Domestic placement is multipart — the invoice and ewaybill go across
+      // as files, not as base64 in a JSON body.
+      const form = new FormData();
+      form.append("MasterCustomOrderId", orderId);
+      form.append("courierId", String(cheapest.courierId));
+      form.append("riskTypeId", String(this.riskTypeIdOf(cheapest)));
+
+      const invoiceFile = this.fileFromDataUri(
+        params.invoiceDocument,
+        `invoice-${params.orderNumber}`,
+      );
+
+      if (invoiceFile) {
+        form.append("invoiceType", "uploaded");
+        form.append("InvoiceData", invoiceFile.blob, invoiceFile.filename);
+      }
+
+      if (isB2B && invoiceAmount >= EWAYBILL_THRESHOLD) {
+        const ewaybillFile = this.fileFromDataUri(
+          params.ewaybillDocument,
+          `ewaybill-${params.orderNumber}`,
+        );
+
+        form.append("EwaybillNo", (params.ewaybillNumber ?? "").replace(/\D/g, ""));
+
+        if (ewaybillFile) {
+          form.append("EwayBillData", ewaybillFile.blob, ewaybillFile.filename);
+        }
+      }
+
+      const token = await this.getToken();
+      const placeResponse = await this.api.post("/api/outbound/place-order", form, {
+        // Content-Type (with its multipart boundary) is set by axios here.
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!this.ok(placeResponse.data)) {
+        return { success: false, error: this.errorOf(placeResponse.data) };
+      }
+
+      const awb = placeResponse.data.data?.awb_assigned;
+
+      logger.info({
+        message: "Bigship order placed",
+        orderId,
+        courierId: cheapest.courierId,
+        awb,
+      });
 
       return {
         success: true,
-        bigshipOrderId: systemOrderId,
-        awbCode: String(awbResponse.data.data.master_awb),
+        bigshipOrderId: orderId,
+        awbCode: awb != null ? String(awb) : undefined,
       };
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -573,25 +737,28 @@ class BigshipService {
   }
 
   // ============================================================
-  // GET WAREHOUSE LIST — the numeric warehouse_id returned here is what
-  // BIGSHIP_PICKUP_LOCATION_ID must be set to. The seller panel shows the
-  // same id prefixed with "BSW".
+  // GET WAREHOUSE LIST — the numeric warehouseId returned here is what
+  // BIGSHIP_PICKUP_LOCATION_ID must be set to. perPage must be a multiple
+  // of 5 and at most 25.
   // ============================================================
-  async getWarehouseList(pageIndex = 1, pageSize = 50) {
+  async getWarehouseList(page = 1, perPage = 25, segmentType = "local") {
     try {
       const headers = await this.authHeaders();
-      const response = await this.api.get("/api/warehouse/get/list", {
+      const size = Math.min(25, Math.max(5, Math.round(perPage / 5) * 5));
+
+      const response = await this.api.get("/api/outbound/get-warehouse-list", {
         headers,
-        params: { page_index: pageIndex, page_size: pageSize },
+        params: { page, perPage: size, segment_type: segmentType },
       });
 
-      if (!response.data.success) {
-        return { success: false, error: response.data.message };
+      if (!this.ok(response.data)) {
+        return { success: false, error: this.errorOf(response.data) };
       }
 
       return {
         success: true,
-        warehouses: response.data.data?.result_data ?? [],
+        warehouses: response.data.data?.warehouse ?? [],
+        total: response.data.data?.total ?? 0,
       };
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -603,42 +770,86 @@ class BigshipService {
   }
 
   // ============================================================
-  // CANCEL ORDER (by AWB)
+  // REFERENCE DATA — payment modes and risk types, whose ids the
+  // create/place payloads are built from.
   // ============================================================
-  async cancelOrder(awb: string): Promise<CancelOrderResult> {
+  async getPaymentModes(segmentType: string = SEGMENT.B2C) {
     try {
       const headers = await this.authHeaders();
-      const response = await this.api.put("/api/order/cancel", [awb], { headers });
-
-      const result = response.data?.data?.[0];
-      const cancelled = result?.cancel_response === "Successfully Cancelled";
-
-      return {
-        success: !!response.data.success && cancelled,
-        message: result?.cancel_response ?? response.data.message,
-      };
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      return {
-        success: false,
-        error: axiosError.response?.data ?? axiosError.message,
-      };
-    }
-  }
-
-  // ============================================================
-  // TRACK SHIPMENT (by AWB)
-  // ============================================================
-  async trackShipment(awb: string): Promise<TrackShipmentResult> {
-    try {
-      const headers = await this.authHeaders();
-      const response = await this.api.get("/api/tracking", {
+      const response = await this.api.get("/api/outbound/get-payment-mode", {
         headers,
-        params: { tracking_type: "awb", tracking_id: awb },
+        params: { segment_type: segmentType },
       });
 
-      if (!response.data.success && !response.data.data) {
-        return { success: false, error: response.data.message };
+      if (!this.ok(response.data)) {
+        return { success: false, error: this.errorOf(response.data) };
+      }
+
+      return { success: true, paymentModes: response.data.data ?? [] };
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      return { success: false, error: axiosError.response?.data ?? axiosError.message };
+    }
+  }
+
+  async getRiskTypes() {
+    try {
+      const headers = await this.authHeaders();
+      const response = await this.api.get("/api/outbound/domestic/risk-types", {
+        headers,
+      });
+
+      if (!this.ok(response.data)) {
+        return { success: false, error: this.errorOf(response.data) };
+      }
+
+      return { success: true, riskTypes: response.data.data ?? [] };
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      return { success: false, error: axiosError.response?.data ?? axiosError.message };
+    }
+  }
+
+  // ============================================================
+  // CANCEL ORDER — keyed on the Bigship order id (CustomGlobalOrderId)
+  // stored as orders.bigship_order_id, not on the AWB.
+  // ============================================================
+  async cancelOrder(bigshipOrderId: string): Promise<CancelOrderResult> {
+    try {
+      const headers = await this.authHeaders();
+      const response = await this.api.post(
+        "/api/outbound/cancel-order",
+        { CustomGlobalOrderId: String(bigshipOrderId) },
+        { headers },
+      );
+
+      if (!this.ok(response.data)) {
+        return { success: false, error: this.errorOf(response.data) };
+      }
+
+      return { success: true, message: response.data.message };
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      return {
+        success: false,
+        error: axiosError.response?.data ?? axiosError.message,
+      };
+    }
+  }
+
+  // ============================================================
+  // TRACK SHIPMENT — also keyed on the Bigship order id.
+  // ============================================================
+  async trackShipment(bigshipOrderId: string): Promise<TrackShipmentResult> {
+    try {
+      const headers = await this.authHeaders();
+      const response = await this.api.get("/api/outbound/track-order", {
+        headers,
+        params: { CustomGlobalOrderId: String(bigshipOrderId) },
+      });
+
+      if (!this.ok(response.data) && !response.data?.data) {
+        return { success: false, error: this.errorOf(response.data) };
       }
 
       return { success: true, trackingData: response.data.data };
@@ -652,7 +863,62 @@ class BigshipService {
   }
 
   // ============================================================
-  // NORMALIZE TRACKING — converts one Bigship scan event into the
+  // ORDER DETAIL + DOCUMENTS
+  // ============================================================
+  async getOrderDetail(bigshipOrderId: string) {
+    try {
+      const headers = await this.authHeaders();
+      const response = await this.api.get("/api/outbound/order-shipment-details", {
+        headers,
+        params: { MasterCustomOrderId: String(bigshipOrderId) },
+      });
+
+      if (!this.ok(response.data)) {
+        return { success: false, error: this.errorOf(response.data) };
+      }
+
+      return { success: true, order: response.data.data };
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      return { success: false, error: axiosError.response?.data ?? axiosError.message };
+    }
+  }
+
+  // Returns a URL to the document on Bigship's storage, not the bytes.
+  async downloadShipmentDocument(
+    bigshipOrderId: string,
+    documentType: "invoice" | "label" | "ewaybill" | "manifest",
+  ) {
+    try {
+      const headers = await this.authHeaders();
+      const response = await this.api.get(
+        "/api/outbound/download-shipment-documents",
+        {
+          headers,
+          params: {
+            CustomGlobalOrderId: String(bigshipOrderId),
+            document_type: documentType,
+          },
+        },
+      );
+
+      if (!this.ok(response.data)) {
+        return { success: false, error: this.errorOf(response.data) };
+      }
+
+      return {
+        success: true,
+        url: response.data.data?.AttachmentData,
+        mimeType: response.data.data?.File_extention,
+      };
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      return { success: false, error: axiosError.response?.data ?? axiosError.message };
+    }
+  }
+
+  // ============================================================
+  // NORMALIZE TRACKING — converts one Bigship checkpoint into the
   // Delhivery-shaped object the webhook_data table + trackOrder
   // query already understand, so no query changes needed.
   // ============================================================
@@ -674,7 +940,9 @@ class BigshipService {
         Status: {
           Status: mapped.status,
           StatusType: mapped.statusType,
-          StatusDateTime: scanDateTime ? parseBigshipDateTime(scanDateTime) : new Date().toISOString(),
+          StatusDateTime: scanDateTime
+            ? parseBigshipDateTime(scanDateTime)
+            : new Date().toISOString(),
           StatusLocation: location ?? "",
           Instructions: remarks ?? "",
         },
@@ -685,16 +953,22 @@ class BigshipService {
   // Builds the full chronological (oldest -> newest) list of normalized
   // status events from a trackShipment() response, for backfilling
   // webhook_data since Bigship has no webhook push in this API version.
-  normalizeTrackingHistory(trackingData: any, awb: string) {
-    const histories: any[] = trackingData?.scan_histories ?? [];
+  // tracking_histories comes back newest-first.
+  normalizeTrackingHistory(trackingData: any, awb?: string) {
+    const histories: any[] =
+      trackingData?.tracking_histories ?? trackingData?.scan_histories ?? [];
+
+    const waybill = String(awb ?? trackingData?.tracking_number ?? "");
 
     return [...histories].reverse().map((entry) =>
       this.normalizeStatusEvent(
-        awb,
-        entry.scan_status,
-        entry.scan_datetime,
-        entry.scan_location,
-        entry.scan_remarks,
+        waybill,
+        entry.order_status ?? entry.tag ?? entry.scan_status,
+        entry.checkpoint_time ?? entry.scan_datetime,
+        // Domestic checkpoints carry a place name; hyperlocal only sends
+        // coordinates, which are not worth rendering as a location.
+        entry.scan_location ?? entry.location_name ?? "",
+        entry.message ?? entry.scan_remarks,
       ),
     );
   }

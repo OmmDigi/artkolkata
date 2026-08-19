@@ -125,13 +125,18 @@ export const createOrder = asyncErrorHandler(
 
       if (!tokenInfo) throw new ErrorHandler(400, "User info is required!");
 
-      const { priceAfterDiscount, couponDiscount, subTotal, productsInfo, varientsInfo } =
-        await calcluteCartAmounts(
-          value.product.varient_ids,
-          value.product.product_ids,
-          value.product.code,
-          client,
-        );
+      const {
+        priceAfterDiscount,
+        couponDiscount,
+        subTotal,
+        productsInfo,
+        varientsInfo,
+      } = await calcluteCartAmounts(
+        value.product.varient_ids,
+        value.product.product_ids,
+        value.product.code,
+        client,
+      );
 
       const cartDimensionInputs: IShipmentDimensionInput[] = [];
       for (const v of value.product.varient_ids) {
@@ -157,7 +162,10 @@ export const createOrder = asyncErrorHandler(
       );
 
       if (!serviceability.success) {
-        throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
+        throw new ErrorHandler(
+          500,
+          "Unable to verify delivery availability. Try again.",
+        );
       }
 
       if (!serviceability.serviceable) {
@@ -336,12 +344,17 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     };
   }>(VGetPriceBreakdown, req.body ?? {});
 
-  const { priceAfterDiscount, couponDiscount, subTotal, productsInfo, varientsInfo } =
-    await calcluteCartAmounts(
-      value.product.varient_ids,
-      value.product.product_ids,
-      value.product.code,
-    );
+  const {
+    priceAfterDiscount,
+    couponDiscount,
+    subTotal,
+    productsInfo,
+    varientsInfo,
+  } = await calcluteCartAmounts(
+    value.product.varient_ids,
+    value.product.product_ids,
+    value.product.code,
+  );
 
   const cartDimensionInputs: IShipmentDimensionInput[] = [];
   for (const v of value.product.varient_ids) {
@@ -362,8 +375,15 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     cartDimensions,
   );
 
+  // console.log("ERRRO____");
+  // console.log(JSON.stringify(serviceability));
+  // console.log("ERRRO____");
+
   if (!serviceability.success) {
-    throw new ErrorHandler(500, "Unable to verify delivery availability. Try again.");
+    throw new ErrorHandler(
+      500,
+      "Unable to verify delivery availability. Try again.",
+    );
   }
 
   // same rule createOrder will apply, so the cart preview and the placed order match
@@ -585,7 +605,8 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
     [orderId],
   );
 
-  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0)
+    throw new ErrorHandler(404, "Order information not found!");
 
   if (rows[0].bigship_order_id) {
     throw new ErrorHandler(
@@ -614,7 +635,9 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
     `,
     [
       JSON.stringify(value.boxes),
-      value.ewaybill_number === undefined ? null : value.ewaybill_number || null,
+      value.ewaybill_number === undefined
+        ? null
+        : value.ewaybill_number || null,
       value.ewaybill_document === undefined
         ? null
         : value.ewaybill_document || null,
@@ -645,7 +668,8 @@ const assertReadyToConfirm = async (orderId: number) => {
     [orderId],
   );
 
-  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0)
+    throw new ErrorHandler(404, "Order information not found!");
 
   const order = rows[0];
 
@@ -744,7 +768,10 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         shipment.skipped
           ? REASON_MESSAGE[shipment.skipped]
           : "Order status updated, but the Bigship shipment could not be booked. Confirm the order again to retry.",
-        { shipment_booked: false, reason: shipment.skipped ?? "booking_failed" },
+        {
+          shipment_booked: false,
+          reason: shipment.skipped ?? "booking_failed",
+        },
       );
     }
 
@@ -846,7 +873,7 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
   // if (value.status != ORDER_CANCELLED)
   //   throw new ErrorHandler(403, "Not allowed");
 
-  let bigshipWaybill: string | null = null;
+  let bigshipOrderId: string | null = null;
 
   await doTransition(async (client) => {
     if (value.order_id) {
@@ -858,7 +885,7 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
         -- shipment is booked with the courier, so cancelling is a support job,
         -- not something the customer can do from their account.
         WHERE order_number = $2 AND order_status = '${ORDER_PENDING}'
-        RETURNING order_id, waybill
+        RETURNING order_id, bigship_order_id
         `,
         [ORDER_CANCELLED, value.order_id],
       );
@@ -870,7 +897,7 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
         );
 
       const dbOrderId = rows[0].order_id;
-      bigshipWaybill = rows[0].waybill ?? null;
+      bigshipOrderId = rows[0].bigship_order_id ?? null;
 
       await client.query(
         "UPDATE order_items SET status = $1 WHERE order_id = $2",
@@ -879,13 +906,14 @@ export const doCancel = asyncErrorHandler(async (req, res) => {
     }
   });
 
-  // Cancel on Bigship if the shipment was already created
-  if (bigshipWaybill) {
-    const cancelResponse = await BigshipService.cancelOrder(bigshipWaybill);
+  // Cancel on Bigship if the shipment was already created. Bigship cancels on
+  // the order id it issued (CustomGlobalOrderId), not on the AWB.
+  if (bigshipOrderId) {
+    const cancelResponse = await BigshipService.cancelOrder(bigshipOrderId);
     if (!cancelResponse.success) {
       logger.error({
         message: "Bigship cancel failed (order already cancelled in DB)",
-        bigshipWaybill,
+        bigshipOrderId,
         error: cancelResponse.error,
       });
     }
@@ -910,7 +938,8 @@ export const uploadOrderInvoice = asyncErrorHandler(async (req, res) => {
     [value.invoice_document, orderId],
   );
 
-  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0)
+    throw new ErrorHandler(404, "Order information not found!");
 
   httpResponse(res, 200, "Invoice uploaded");
 });
@@ -925,7 +954,8 @@ export const deleteOrderInvoice = asyncErrorHandler(async (req, res) => {
     [orderId],
   );
 
-  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0)
+    throw new ErrorHandler(404, "Order information not found!");
 
   httpResponse(res, 200, "Uploaded invoice removed");
 });
@@ -954,7 +984,10 @@ export const downloadInvoice = asyncErrorHandler(async (req, res) => {
   const mime = header.match(/^data:([^;]+);base64$/)?.[1];
 
   if (!base64 || !mime) {
-    throw new ErrorHandler(500, "The uploaded invoice for this order is unreadable");
+    throw new ErrorHandler(
+      500,
+      "The uploaded invoice for this order is unreadable",
+    );
   }
 
   const extension = mime === "application/pdf" ? "pdf" : "jpg";
@@ -1094,18 +1127,24 @@ interface ITrack {
 async function syncBigshipTracking(orderNumber: string) {
   try {
     const { rows, rowCount } = await pool.query(
-      "SELECT waybill FROM orders WHERE order_number = $1",
+      "SELECT waybill, bigship_order_id FROM orders WHERE order_number = $1",
       [orderNumber],
     );
 
-    if (rowCount === 0 || !rows[0].waybill) return;
+    // Bigship tracks on the order id it issued, but webhook_data is keyed on
+    // the AWB, so an order needs both before it can be synced.
+    if (rowCount === 0 || !rows[0].waybill || !rows[0].bigship_order_id) return;
 
     const waybill: string = rows[0].waybill;
+    const bigshipOrderId: string = rows[0].bigship_order_id;
 
-    const result = await BigshipService.trackShipment(waybill);
+    const result = await BigshipService.trackShipment(bigshipOrderId);
     if (!result.success || !result.trackingData) return;
 
-    const events = BigshipService.normalizeTrackingHistory(result.trackingData, waybill);
+    const events = BigshipService.normalizeTrackingHistory(
+      result.trackingData,
+      waybill,
+    );
     if (events.length === 0) return;
 
     await pool.query("DELETE FROM webhook_data WHERE waybill = $1", [waybill]);
@@ -1149,7 +1188,11 @@ async function syncBigshipTracking(orderNumber: string) {
       );
     });
   } catch (err) {
-    logger.error({ message: "syncBigshipTracking failed", orderNumber, error: err });
+    logger.error({
+      message: "syncBigshipTracking failed",
+      orderNumber,
+      error: err,
+    });
   }
 }
 
