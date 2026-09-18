@@ -14,8 +14,11 @@ import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getRequest, postRequest } from "@/lib/fetcher";
 import { toast } from "react-toastify";
+import { useSiteInfo } from "@/hooks/useSiteSettings";
 
 const CheckoutPage = () => {
+  const { data: siteInfo } = useSiteInfo();
+
   const [shipDifferent, setShipDifferent] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "COD">(
     "ONLINE",
@@ -50,6 +53,19 @@ const CheckoutPage = () => {
   const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
     "new",
   );
+
+  useEffect(() => {
+    const methods = (siteInfo as any)?.payment_methods;
+    if (methods) {
+      if (methods.online_enabled && !methods.cod_enabled) {
+        setPaymentMethod("ONLINE");
+      } else if (methods.cod_enabled && !methods.online_enabled) {
+        setPaymentMethod("COD");
+      }
+    }
+  }, [siteInfo]);
+
+  console.log("siteInfo", siteInfo);
 
   const { data: profileData } = useQuery({
     queryKey: ["userProfileCheckout"],
@@ -526,7 +542,15 @@ const CheckoutPage = () => {
                 </h2>
               </div>
               <div className="flex flex-col sm:flex-row justify-around gap-4 sm:gap-6">
-                {["ONLINE", "COD"].map((method) => (
+                {["ONLINE", "COD"]
+                  .filter((method) => {
+                    const methods = (siteInfo as any)?.payment_methods;
+                    if (!methods) return true; // Default to showing both if no siteInfo yet
+                    if (method === "ONLINE") return methods.online_enabled;
+                    if (method === "COD") return methods.cod_enabled;
+                    return true;
+                  })
+                  .map((method) => (
                   <label
                     key={method}
                     className={`flex flex-1 items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
@@ -580,10 +604,10 @@ const CheckoutPage = () => {
                             className="flex-shrink-0"
                           >
                             <img
-                              src={
+                              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${
                                 item?.product?.images?.[0]?.image ||
                                 item?.product?.image1
-                              }
+                              }`}
                               alt={
                                 item?.product?.images?.[0]?.alt_tag ||
                                 item?.product?.name
@@ -663,7 +687,9 @@ const CheckoutPage = () => {
 
                 {couponDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-green-600">
-                    <span>Coupon discount{couponCode ? ` (${couponCode})` : ""}</span>
+                    <span>
+                      Coupon discount{couponCode ? ` (${couponCode})` : ""}
+                    </span>
                     <span className="font-semibold">
                       -₹{couponDiscountAmount.toFixed(2)}
                     </span>
@@ -682,7 +708,9 @@ const CheckoutPage = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Shipping</span>
                   <span className="font-semibold text-green-600">
-                    {shippingCharge > 0 ? `₹${shippingCharge.toFixed(2)}` : "Free"}
+                    {shippingCharge > 0
+                      ? `₹${shippingCharge.toFixed(2)}`
+                      : "Free"}
                   </span>
                 </div>
 
@@ -725,11 +753,13 @@ const CheckoutPage = () => {
                 </p>
               )}
 
-              {isPincodeReady && !isLoadingBreakdown && breakdownErrorMessage && (
-                <p className="mt-2 text-xs text-red-600">
-                  {breakdownErrorMessage}
-                </p>
-              )}
+              {isPincodeReady &&
+                !isLoadingBreakdown &&
+                breakdownErrorMessage && (
+                  <p className="mt-2 text-xs text-red-600">
+                    {breakdownErrorMessage}
+                  </p>
+                )}
 
               {breakdown && !isServiceable && (
                 <p className="mt-2 text-xs text-red-600">

@@ -41,7 +41,7 @@ export default function page() {
     <main className="*:font-spartan bg-gray-50 text-black">
       <section className="w-full relative bg-gray-100  overflow-hidden">
         {/* <Image
-          src={"bg-breadcrumb_1920x.jpg"}
+          src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${"bg-breadcrumb_1920x.jpg"}`}
           alt="Banner image"
           className="size-full"
           height={1920}

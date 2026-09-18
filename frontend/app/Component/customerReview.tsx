@@ -73,7 +73,7 @@ const TestimonialComponent: FC<TestimonialProps> = ({
         <div className="flex items-center gap-4">
           {testimonial.image && (
             <img
-              src={testimonial.image}
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${testimonial.image}`}
               alt={testimonial.name}
               className="w-12 h-12 rounded-full object-cover"
             />
@@ -126,7 +126,7 @@ const TestimonialComponent: FC<TestimonialProps> = ({
             <div className="flex items-center gap-4">
               {currentTestimonial.image && (
                 <img
-                  src={currentTestimonial.image}
+                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${currentTestimonial.image}`}
                   alt={currentTestimonial.name}
                   className="w-12 h-12 rounded-full object-cover"
                 />
@@ -214,7 +214,7 @@ const TestimonialComponent: FC<TestimonialProps> = ({
               <div className="flex items-center gap-3 pt-6 border-t">
                 {testimonial.image && (
                   <img
-                    src={testimonial.image}
+                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${testimonial.image}`}
                     alt={testimonial.name}
                     className="w-10 h-10 rounded-full object-cover"
                   />

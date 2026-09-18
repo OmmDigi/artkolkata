@@ -1,7 +1,12 @@
 "use client";
 
+import { useSiteInfo } from "@/hooks/useSiteSettings";
+
 const Marquee = () => {
-  const text = "Festive sale 50% off";
+  const { data: siteInfo } = useSiteInfo();
+
+  const text =
+    (siteInfo as any)?.ribbon_section?.text || "Festive sale 20% off";
 
   return (
     <nav className="w-full bg-black overflow-hidden">

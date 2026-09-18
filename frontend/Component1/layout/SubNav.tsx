@@ -156,7 +156,7 @@ export default function SubNav() {
               >
                 {category.image ? (
                   <img
-                    src={category.image}
+                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
                     alt={category.alt_tag || category.name || "Category"}
                     className="w-12 h-12 object-cover rounded shadow-sm"
                   />

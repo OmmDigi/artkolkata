@@ -73,7 +73,7 @@ export default function Navbar() {
   const { data: siteInfo } = useSiteInfo();
 
   useEffect(() => {
-    const fullText = "End of Summer Sale is Live";
+    const fullText = (siteInfo as any)?.ribbon_section?.text || "Festive sale 20% off";
     let currentCharIdx = 0;
     let isDeleting = false;
     let timeoutId: NodeJS.Timeout;
@@ -103,7 +103,7 @@ export default function Navbar() {
     timeoutId = setTimeout(type, 500);
 
     return () => clearTimeout(timeoutId);
-  }, []);
+  }, [siteInfo]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -289,7 +289,7 @@ export default function Navbar() {
                 className="text-2xl font-bold text-gray-900 transition pointer-events-auto"
               >
                 <img
-                  src={siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}
+                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}`}
                   alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
                   className="h-12 md:h-16 object-contain"
                 />
@@ -379,7 +379,7 @@ export default function Navbar() {
                               <div className="flex items-center space-x-3 p-3">
                                 {category.image && (
                                   <img
-                                    src={category.image}
+                                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
                                     alt={category.alt_tag || category.name}
                                     className="w-16 h-16 object-cover rounded"
                                   />
@@ -437,7 +437,7 @@ export default function Navbar() {
                           className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                         >
                           <img
-                            src={item?.images?.[0]?.image || item?.image1}
+                            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image || item?.image1}`}
                             className="w-12 h-12 object-cover rounded border"
                             alt={item.name}
                           />
@@ -591,7 +591,7 @@ export default function Navbar() {
                       className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                     >
                       <img
-                        src={item?.images?.[0]?.image || item?.image1}
+                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image || item?.image1}`}
                         className="w-12 h-12 object-cover rounded border"
                         alt={item.name}
                       />

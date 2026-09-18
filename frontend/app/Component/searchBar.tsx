@@ -88,7 +88,7 @@ export default function SearchBar() {
                 className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg transition cursor-pointer"
               >
                 <img
-                  src={item?.images?.[0]?.image}
+                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image}`}
                   className="w-12 h-12 object-cover rounded-lg border"
                   alt={item.name}
                 />

@@ -1,7 +1,7 @@
 import { postRequest } from "@/lib/fetcher";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, FC, ChangeEvent, FormEvent } from "react";
 import { toast } from "react-toastify";
 import { useUserStore } from "../../../../store/useUserStore";
@@ -54,6 +54,7 @@ const SignIn: FC<SignInProps> = ({
   onOpenOtp,
 }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const setUser = useUserStore((state) => state.setUser);
 
   const [form, setForm] = useState<FormState>({ email: "", password: "" });
@@ -72,7 +73,8 @@ const SignIn: FC<SignInProps> = ({
         name: res.data.user?.name,
         email: res.data.user?.email,
       });
-      router.push("/");
+      const redirectUrl = searchParams.get("redirect") || "/";
+      router.push(redirectUrl);
       toast.success("Signed in successfully!");
     },
 

@@ -46,7 +46,7 @@ const BodyBanner: React.FC<BannerProps> = ({
           {/* Image */}
           {/* <div className="w-full  mb-8">
             <img
-              src={imageUrl}
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${imageUrl}`}
               alt="Product showcase"
               className="w-full h-full"
             />

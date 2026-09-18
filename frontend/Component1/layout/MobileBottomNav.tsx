@@ -136,7 +136,7 @@ const MobileBottomNav = () => {
                       <div className="w-20 h-20 rounded-sm bg-gray-100 overflow-hidden border border-gray-200">
                         {category.image ? (
                           <img
-                            src={category.image}
+                            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
                             alt={category.alt_tag ?? categoryName}
                             className="w-full h-full object-cover"
                           />

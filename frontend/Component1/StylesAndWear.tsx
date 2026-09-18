@@ -176,7 +176,7 @@ export default function StylesAndWear() {
                       }`}
                     >
                       <Image
-                        src={image.src}
+                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${image.src}`}
                         alt={image.alt}
                         fill
                         className="object-cover w-20 h-20"

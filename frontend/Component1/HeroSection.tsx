@@ -46,13 +46,13 @@ export default function HeroSection() {
             <>
               {banner.mobile_image_url && (
                 <img
-                  src={banner.mobile_image_url}
+                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${banner.mobile_image_url}`}
                   alt={banner.alt_text ?? "Banner"}
                   className={`${imageClass} md:hidden block`}
                 />
               )}
               <img
-                src={banner.image_url}
+                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${banner.image_url}`}
                 alt={banner.alt_text ?? "Banner"}
                 className={`${imageClass} ${banner.mobile_image_url ? "hidden md:block" : "block"}`}
               />

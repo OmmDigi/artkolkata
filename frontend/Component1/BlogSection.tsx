@@ -77,7 +77,7 @@ export default function BlogSection() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
               <div className="relative h-96 md:h-100 overflow-hidden bg-gray-200 order-2 md:order-1">
                 <img
-                  src={blogPosts[0].image}
+                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blogPosts[0].image}`}
                   alt={blogPosts[0].title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
@@ -123,7 +123,7 @@ export default function BlogSection() {
               >
                 <div className="relative w-50 h-80 overflow-hidden bg-gray-300">
                   <img
-                    src={post.image}
+                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${post.image}`}
                     alt={post.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />

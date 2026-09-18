@@ -1,6 +1,6 @@
 import { postRequest } from "@/lib/fetcher";
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useRef, useState, FC, FormEvent, ChangeEvent } from "react";
 import { toast } from "react-toastify";
 
@@ -29,6 +29,7 @@ interface ErrorResponse {
 
 const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [otp, setOtp] = useState<string[]>(Array(4).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -41,7 +42,8 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
     onSuccess: (data: OtpResponse) => {
       toast.success("OTP Verified Successfully!");
       if (onOtpVerified) onOtpVerified();
-      router.push("/");
+      const redirectUrl = searchParams.get("redirect") || "/";
+      router.push(redirectUrl);
     },
     onError: (err: ErrorResponse) => {
       toast.error(err?.response?.data?.message || "Invalid OTP, try again!");

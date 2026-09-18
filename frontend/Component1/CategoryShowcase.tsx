@@ -65,7 +65,7 @@ export default function CategoryShowcase() {
               >
                 <div className="relative w-20 h-20 md:w-32 md:h-32  overflow-hidden bg-gray-100 border border-gray-200 shadow-sm transition duration-300 hover:shadow-lg ">
                   <img
-                    src={imageSrc}
+                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${imageSrc}`}
                     alt={category.alt_tag ?? categoryName}
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                   />

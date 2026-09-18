@@ -208,7 +208,7 @@ export default function Profile() {
                                 className="flex gap-4"
                               >
                                 <img
-                                  src={item?.images?.image}
+                                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.image}`}
                                   alt={item?.product_name}
                                   className="w-16 h-16 rounded object-cover border border-gray-100"
                                 />

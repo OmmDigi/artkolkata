@@ -162,7 +162,7 @@ export default function AboutPage() {
           </div>
           <div className="relative h-96 md:h-full min-h-[400px] rounded-2xl overflow-hidden shadow-xl">
             <img
-              src="/about/office.png"
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/about/office.png`}
               alt="Art Kolkata Office"
               className="w-full h-full object-cover"
             />
@@ -175,7 +175,7 @@ export default function AboutPage() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
           <div className="relative h-96 md:h-full min-h-[400px] rounded-2xl overflow-hidden order-last md:order-first shadow-xl">
             <img
-              src="/about/Factory final.png"
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/about/Factory final.png`}
               alt="Art Kolkata Factory"
               className="w-full h-full object-cover"
             />
@@ -302,7 +302,7 @@ export default function AboutPage() {
               >
                 <div className="relative h-80 overflow-hidden bg-gradient-to-b from-gray-100 to-gray-200 flex justify-center items-end pt-4">
                   <img
-                    src={member.image}
+                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${member.image}`}
                     alt={member.name}
                     className="w-auto h-[95%] object-cover group-hover:scale-105 transition-transform duration-500 drop-shadow-xl"
                   />

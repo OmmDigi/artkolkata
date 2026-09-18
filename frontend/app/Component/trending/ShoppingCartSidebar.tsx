@@ -95,10 +95,8 @@ const ShoppingCartSidebar = ({
                       className="flex-shrink-0"
                     >
                       <img
-                        src={
-                          item?.product?.images?.[0]?.image ||
-                          item?.product?.image1
-                        }
+                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.product?.images?.[0]?.image ||
+                          item?.product?.image1}`}
                         alt={
                           item?.product?.images?.[0]?.alt_tag ||
                           item?.product?.name

@@ -61,7 +61,7 @@ const Segment: React.FC<CategoryImageProps> = ({
                     </div>
                     <div className="cover-img flex-shrink-0 w-full overflow-hidden">
                       <img
-                        src={category.imageUrl}
+                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.imageUrl}`}
                         alt={category.name}
                         className="w-full h-auto object-cover
                          transition-transform duration-300 group-hover:scale-105"

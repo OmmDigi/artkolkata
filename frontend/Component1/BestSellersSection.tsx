@@ -101,7 +101,7 @@ function BestSellerCard({ product }: { product: BestSellerProduct }) {
         {/* Image Container */}
         <div className="relative w-full h-full">
           <Image
-            src={hoveredImage ? product.image2 : product.image1}
+            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${hoveredImage ? product.image2 : product.image1}`}
             alt={product.name}
             fill
             className="object-cover transition-opacity duration-300"
@@ -125,7 +125,7 @@ function BestSellerCard({ product }: { product: BestSellerProduct }) {
             }`}
           >
             <Image
-              src={product.image1}
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${product.image1}`}
               alt={`${product.name} view 1`}
               width={32}
               height={32}
@@ -139,7 +139,7 @@ function BestSellerCard({ product }: { product: BestSellerProduct }) {
             }`}
           >
             <Image
-              src={product.image2}
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${product.image2}`}
               alt={`${product.name} view 2`}
               width={32}
               height={32}

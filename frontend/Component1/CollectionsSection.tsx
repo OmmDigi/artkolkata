@@ -65,7 +65,7 @@ function CollectionCard({
       <div className="flex-1 relative">
         <div className="relative w-full aspect-square md:aspect-video rounded-2xl overflow-hidden bg-gray-200">
           <Image
-            src={collection.images[currentImageIndex] || collection.image}
+            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${collection.images[currentImageIndex] || collection.image}`}
             alt={collection.name}
             fill
             className="object-cover"

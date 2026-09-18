@@ -74,7 +74,7 @@ export default function BlogPage() {
             >
               <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
                 <img
-                  src={blog.cover_image || "/placeholder-image.jpg"}
+                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blog.cover_image || "/placeholder-image.jpg"}`}
                   alt={blog.title}
                   className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                 />
@@ -87,7 +87,7 @@ export default function BlogPage() {
                   {blog.title}
                 </h3>
                 <p className="text-gray-600 line-clamp-3 text-sm leading-relaxed mb-6 flex-1">
-                  {blog.excerpt ||
+                  {blog.short_description || blog.excerpt ||
                     "Read more about this topic in our detailed blog post."}
                 </p>
 

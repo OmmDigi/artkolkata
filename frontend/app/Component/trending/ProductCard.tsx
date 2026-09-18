@@ -59,7 +59,7 @@ const ProductCard = ({
           >
             <div className="relative w-full h-full">
               <Image
-                src={currentImage ? currentImage : image}
+                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${currentImage ? currentImage : image}`}
                 alt={product.name}
                 fill
                 className="object-cover transition-opacity duration-300"

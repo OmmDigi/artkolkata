@@ -141,7 +141,7 @@ export default function Footer() {
               className="text-2xl font-bold text-gray-900 transition"
             >
               <img
-                src={siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}
+                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}`}
                 alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
                 className="h-16 brightness-0 invert object-contain"
               />

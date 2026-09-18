@@ -19,6 +19,7 @@ export interface Product {
   image2: string;
   price: number;
   originalPrice: number;
+  tag?: string;
 }
 
 interface ApiCategory {
@@ -41,6 +42,8 @@ export interface ApiProduct {
   category?: any;
   category_slug?: string;
   category_id?: string | number;
+  tag?: string;
+  tags?: string[];
 }
 
 export const mapApiProduct = (item: ApiProduct): Product => {
@@ -60,6 +63,7 @@ export const mapApiProduct = (item: ApiProduct): Product => {
     image2,
     price,
     originalPrice,
+    tag: item.tag || item.tags?.[0] || undefined,
   };
 };
 
@@ -97,9 +101,14 @@ export function ProductCard({ product }: { product: Product }) {
         onMouseEnter={() => setHoveredImage(true)}
         onMouseLeave={() => setHoveredImage(false)}
       >
+        {product.tag && (
+          <div className="absolute top-2 left-2 z-20 bg-black/80 text-white px-2 py-1 text-xs font-bold rounded shadow">
+            {product.tag}
+          </div>
+        )}
         <Link href={product.href} className="block w-full h-full relative">
           <Image
-            src={hoveredImage ? product.image2 : product.image1}
+            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${hoveredImage ? product.image2 : product.image1}`}
             alt={product.name}
             fill
             className="object-cover transition-opacity duration-300"
@@ -300,7 +309,6 @@ export default function ShopSection() {
     if (gridCols === 5) return "lg:min-w-[18%]";
     return "lg:min-w-[23%]";
   };
-  console.log("productsData", productsData);
 
   return (
     <section className="w-full bg-white py-3 md:py-10 px-2 md:px-12">

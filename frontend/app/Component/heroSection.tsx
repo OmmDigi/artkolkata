@@ -69,7 +69,7 @@ const HeroSlideshow = () => {
           >
             {/* Background Image */}
             <Image
-              src={slide.image}
+              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${slide.image}`}
               alt={slide.title}
               fill
               priority={index === 0}

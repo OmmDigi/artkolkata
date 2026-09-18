@@ -25,6 +25,7 @@ import {
 } from "@/Component1/ShopSection";
 
 import { CollapsibleDescription } from "@/app/Component/CollapsibleDescription";
+import ProductReviewSummary from "@/app/Component/ProductReviewSummary";
 
 const ProductPage = () => {
   const [mainImage, setMainImage] = useState<any>(null);
@@ -49,11 +50,22 @@ const ProductPage = () => {
   const thumbnailRef = useRef<HTMLDivElement | null>(null);
   const reviewsRef = useRef<HTMLDivElement | null>(null);
   const relatedScrollRef = useRef<HTMLDivElement | null>(null);
+  const mostPopularScrollRef = useRef<HTMLDivElement | null>(null);
 
   const scrollRelated = (direction: "left" | "right") => {
     if (relatedScrollRef.current) {
       const scrollAmount = 300;
       relatedScrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  const scrollMostPopular = (direction: "left" | "right") => {
+    if (mostPopularScrollRef.current) {
+      const scrollAmount = 300;
+      mostPopularScrollRef.current.scrollBy({
         left: direction === "left" ? -scrollAmount : scrollAmount,
         behavior: "smooth",
       });
@@ -178,9 +190,22 @@ const ProductPage = () => {
       ),
     enabled: !!fullProduct?.category_slug,
   });
+  const { data: mostPopularData } = useQuery({
+    queryKey: ["Most Popular Products"],
+    queryFn: () =>
+      getRequest<{ data: ApiProduct[] }>(
+        `/api/v1/products?tag=${encodeURI("Best Seller")}&limit=-1`,
+      ),
+  });
+  console.log("mostPopularData", mostPopularData);
 
   const relatedProducts = relatedData?.data || [];
   const relatedMapped = relatedProducts
+    .filter((p: ApiProduct) => p.slug !== params?.slug)
+    .map(mapApiProduct);
+
+  const mostPopularProducts = mostPopularData?.data || [];
+  const mostPopularMapped = mostPopularProducts
     .filter((p: ApiProduct) => p.slug !== params?.slug)
     .map(mapApiProduct);
 
@@ -196,31 +221,6 @@ const ProductPage = () => {
     enabled: !!fullProduct?.id,
   });
   const productReview = productReviewData as any;
-
-  const handleSubmitReview = async () => {
-    if (!rating || !comment.trim()) {
-      toast.error("Please provide a rating and comment.");
-      return;
-    }
-    const newReview = {
-      stars: rating,
-      message: comment,
-      product_id: fullProduct?.id,
-    };
-
-    try {
-      const response: any = await postRequest({
-        url: "/api/v1/products/reviews",
-        body: newReview,
-      });
-      toast.success(response?.message || "Review submitted successfully!");
-      mutateProductReview();
-      setRating(1);
-      setComment("");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to submit review");
-    }
-  };
 
   const trimMessage = (message: string, wordCount: number) => {
     if (!message) return "";
@@ -436,7 +436,7 @@ const ProductPage = () => {
                         }`}
                       >
                         <img
-                          src={getThumbnail(img)}
+                          src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(img)}`}
                           className="w-full h-full object-contain bg-white"
                           alt=""
                         />
@@ -477,7 +477,7 @@ const ProductPage = () => {
                   {mainImage && (
                     <>
                       <img
-                        src={getThumbnail(mainImage)}
+                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(mainImage)}`}
                         className="w-full h-full object-contain"
                         alt="Product"
                       />
@@ -575,7 +575,7 @@ const ProductPage = () => {
                               onClick={() => openModal(img)}
                             >
                               <img
-                                src={getThumbnail(img)}
+                                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(img)}`}
                                 className="w-full h-full object-contain bg-gray-100"
                                 alt={`Product ${idx}`}
                               />
@@ -897,7 +897,7 @@ const ProductPage = () => {
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
                     <img
-                      src="/icons/icon-cod.png"
+                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-cod.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Pay on Delivery"
                     />
@@ -910,7 +910,7 @@ const ProductPage = () => {
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
                     <img
-                      src="/icons/icon-free-shipping.png"
+                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-free-shipping.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Free Delivery"
                     />
@@ -923,7 +923,7 @@ const ProductPage = () => {
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
                     <img
-                      src="/icons/icon-secure-payment.png"
+                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-secure-payment.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Secure transaction"
                     />
@@ -936,7 +936,7 @@ const ProductPage = () => {
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
                     <img
-                      src="/icons/icon-top-brand._CB562506657_.png"
+                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-top-brand._CB562506657_.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Top Brand"
                     />
@@ -949,7 +949,7 @@ const ProductPage = () => {
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
                     <img
-                      src="/icons/icon-warranty._CB485935626_.png"
+                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-warranty._CB485935626_.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="1 Year Warranty"
                     />
@@ -1002,133 +1002,42 @@ const ProductPage = () => {
         </div>
       )}
 
-      {/* Reviews section  */}
-      <div
-        id="reviews"
-        ref={reviewsRef}
-        className="max-w-7xl mx-auto px-4 pb-8"
-      >
-        <h2 className="text-2xl font-bold text-black mb-6">Product Reviews</h2>
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="lg:w-1/3 h-auto bg-white p-5 rounded-lg border border-gray-200">
-            <h2 className="text-lg font-bold mb-3 text-gray-800">
-              Write a Review
-            </h2>
-
-            {/* Rating Stars */}
-            <div className="flex gap-1 mb-3">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setRating(star)}
-                  className={`text-2xl outline-none ${
-                    star <= rating ? "text-amber-500" : "text-gray-300"
-                  }`}
+      {mostPopularMapped.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 py-2 relative">
+          <h2 className="text-2xl font-bold text-black mb-6">
+            Most Popular Products
+          </h2>
+          <div className="relative group">
+            <button
+              onClick={() => scrollMostPopular("left")}
+              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 bg-white shadow-lg border border-gray-200 rounded-full p-2 text-gray-700 hover:text-black hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex items-center justify-center cursor-pointer"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <div
+              ref={mostPopularScrollRef}
+              className="flex overflow-x-auto gap-4 md:gap-6 pb-4 snap-x snap-mandatory scrollbar-hide"
+            >
+              {mostPopularMapped.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="min-w-[50vw] sm:min-w-[30vw] md:min-w-[25vw] lg:min-w-[20vw] snap-start flex-shrink-0"
                 >
-                  ★
-                </button>
+                  <ProductCard product={prod} />
+                </div>
               ))}
             </div>
-
-            {/* Comment Input */}
-            <textarea
-              disabled={!isLoggedIn}
-              className="w-full border border-gray-300 rounded p-2 mb-3 text-sm focus:outline-none focus:border-gray-500 text-black"
-              placeholder={
-                isLoggedIn
-                  ? "Write your review..."
-                  : "Please log in to write a review."
-              }
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={3}
-            />
-
             <button
-              disabled={!isLoggedIn}
-              onClick={handleSubmitReview}
-              className={`w-full py-2 ${
-                isLoggedIn ? "bg-black  " : "bg-gray-300"
-              } text-white rounded font-medium text-sm transition-colors cursor-pointer`}
+              onClick={() => scrollMostPopular("right")}
+              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 bg-white shadow-lg border border-gray-200 rounded-full p-2 text-gray-700 hover:text-black hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex items-center justify-center cursor-pointer"
             >
-              Submit Review
+              <ChevronRight size={24} />
             </button>
           </div>
-
-          {/* Reviews Table */}
-          {productReview?.data?.length > 0 && (
-            <div className="lg:w-2/3 bg-white p-5 rounded-lg border border-gray-200 overflow-hidden">
-              <h3 className="text-lg font-bold mb-3 text-gray-800">
-                Customer Reviews
-              </h3>
-
-              <div className="overflow-x-auto overflow-y-auto max-h-[280px] pr-2">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-gray-600 border-b border-gray-200 bg-gray-50 sticky top-0 z-10 shadow-sm">
-                    <tr>
-                      <th className="py-2 px-3 font-medium">Rating</th>
-                      <th className="py-2 px-3 font-medium">Comment</th>
-                      <th className="py-2 px-3 font-medium">Date</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {productReview?.data?.map((reating: any, index: number) => (
-                      <tr
-                        key={index}
-                        className="border-b border-gray-100 hover:bg-gray-50 transition"
-                      >
-                        <td className="py-2 px-3 text-amber-500 text-lg">
-                          {"★".repeat(reating.stars)}
-                        </td>
-
-                        <td
-                          className="py-2 px-3 cursor-pointer text-gray-700 hover:text-black"
-                          onClick={() => {
-                            setPopupMessage(reating.message);
-                            setShowPopup(true);
-                          }}
-                        >
-                          {trimMessage(reating.message, 10)}
-                        </td>
-                        <td className="py-2 px-3 text-gray-500 text-xs">
-                          {new Date(reating.created_at).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {showPopup && (
-                <div
-                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-                  onClick={() => setShowPopup(false)}
-                >
-                  <div
-                    className="bg-white p-5 rounded-lg max-w-sm w-[90%] shadow-xl relative"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
-                      onClick={() => setShowPopup(false)}
-                    >
-                      <X size={20} />
-                    </button>
-
-                    <h3 className="text-lg text-gray-700 font-bold mb-2">
-                      Review
-                    </h3>
-                    <p className="text-gray-700 text-sm leading-relaxed">
-                      {popupMessage}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
-      </div>
+      )}
+
+      <ProductReviewSummary fullProduct={fullProduct} />
 
       {/* Image Modal */}
       {isModalOpen && zoomMedia && (
@@ -1160,7 +1069,7 @@ const ProductPage = () => {
               </div>
             ) : (
               <img
-                src={zoomMedia.image}
+                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${zoomMedia.image}`}
                 className="w-full object-contain max-h-[85vh]"
                 alt="Zoomed product"
               />
