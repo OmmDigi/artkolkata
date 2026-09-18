@@ -1185,3 +1185,48 @@ ON cart (user_id, product_id, COALESCE(variant_id, 0));
 
 CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart(user_id);
 CREATE INDEX IF NOT EXISTS idx_cart_product_id ON cart(product_id);
+
+-- ============================================================
+-- SITE PAGES — the store's legal/policy pages
+--
+-- Terms and conditions, privacy policy, return and refund policy. One row per
+-- page, keyed by the slug the storefront links to, with the body stored as
+-- Editor.js output exactly like blogs.content_json — same editor in the CMS,
+-- same renderer on the website.
+--
+-- The three rows are seeded below and the api exposes no create or delete:
+-- an admin edits the content of a page that always exists, so a footer link
+-- can never point at a slug that was removed.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS site_pages (
+    id SERIAL PRIMARY KEY,
+
+    -- what the storefront url ends in, and the only handle the api takes
+    slug TEXT UNIQUE NOT NULL,
+
+    title TEXT NOT NULL,
+
+    -- Editor.js OutputData, same shape as blogs.content_json
+    content_json JSONB,
+
+    meta_title TEXT,
+    meta_description TEXT,
+
+    -- 'draft' hides the body from the storefront while a long legal document
+    -- is being rewritten; the seeded rows start published so the links work
+    -- from the first deploy
+    status TEXT NOT NULL DEFAULT 'published',
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_pages_slug ON site_pages(slug);
+
+-- The fixed set. ON CONFLICT DO NOTHING so re-running this file never
+-- overwrites content an admin has already written.
+INSERT INTO site_pages (slug, title, status) VALUES
+  ('terms-and-conditions',   'Terms and Conditions',      'published'),
+  ('privacy-policy',         'Privacy Policy',            'published'),
+  ('return-and-refund-policy','Return and Refund Policy', 'published')
+ON CONFLICT (slug) DO NOTHING;

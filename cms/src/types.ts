@@ -1,3 +1,5 @@
+import type { OutputData } from "@editorjs/editorjs";
+
 export interface IResponse<T = null> {
   statusCode: number;
   message: string;
@@ -767,4 +769,24 @@ export interface IAnalyticsOrderStatus {
   order_status: IAnalyticsBreakdownRow[];
   payment_status: IAnalyticsBreakdownRow[];
   payment_method: IAnalyticsBreakdownRow[];
+}
+
+/**
+ * One of the store's legal pages — terms, privacy, returns and refunds. The
+ * set is fixed and seeded by the api: the CMS edits content, it never creates
+ * or deletes a page.
+ */
+export interface ISitePage {
+  id: number;
+  slug: string;
+  title: string;
+  /** Editor.js OutputData, same shape as a blog's content_json */
+  content_json: OutputData | null;
+  meta_title: string | null;
+  meta_description: string | null;
+  status: "draft" | "published";
+  /** meta_title, falling back to the page title */
+  resolved_meta_title: string;
+  updated_at: string;
+  updated_at_label: string | null;
 }

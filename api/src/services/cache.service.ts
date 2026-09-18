@@ -16,6 +16,7 @@ export const CACHE_TAGS = {
   REVIEWS: "reviews",
   BLOGS: "blogs",
   SITE_INFO: "site-info",
+  SITE_PAGES: "site-pages",
   BANNERS: "banners",
   SHIPPING_RULES: "shipping-rules",
   SITEMAP: "sitemap",
