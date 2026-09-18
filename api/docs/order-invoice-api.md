@@ -9,9 +9,9 @@ An order can have **three different downloadable documents**, and they are not t
 | --- | --- | --- | --- |
 | **Invoice** | Either a PDF/JPEG an admin uploads from the CMS, or a PDF the CMS generates (§7) | Once one of the two exists | `invoice_url` (`null` until then) |
 | **Packing slip** | A PDF the CMS generates from the order record | Once generated. **Admin only** | `packing_slip_url` (`null` until then) |
-| **Payment slip** | An HTML page the API renders from the order record | **Always**, for every order, at every status | `payment_slip_url` (never `null`) |
+| **Payment slip** | A PDF the API renders from the order record. Generated and stored automatically the moment the payment turns `PAID` | **Always**, for every order, at every status | `payment_slip_url` (never `null`) |
 
-The payment slip is **not an invoice** — it is a record of what was ordered and what was paid, and it predates the generated invoice. It is still served, unchanged, for every order.
+The payment slip is **not an invoice** — it is the receipt for money received. A paid order's slip is titled `PAYMENT RECEIPT`, carries a receipt number and a PAID stamp, and is the document the customer is offered on the payment result page. An unpaid order gets the same page titled `PAYMENT SLIP`, with no receipt number, no stamp and a line stating in words that it is not a receipt.
 
 All three can exist at the same time and none of them replaces another. When both an uploaded and a generated invoice exist, `invoice_url` serves the **uploaded** one: an admin who uploads a file with the Generate button sitting next to it means that file to be the invoice.
 
@@ -28,8 +28,9 @@ Read this before wiring the UI.
    - The CMS list also gets `invoice_uploaded` and `invoice_generated` when it needs to tell the two apart.
 3. **Do not build these URLs by hand any more.** The API sends both, absolute and ready to open. Stop concatenating `${API_BASE_URL}/api/v1/orders/invoice/${order_id}`.
 4. **The `DELIVERED` gate on the generated document is gone.** A `PENDING` or `CANCELLED` order now has a working payment slip.
-5. **`is_cancelable` is now `PENDING` only** (was `PENDING | CONFIRMED | SHIPPED`). See [§2](#is_cancelable--changed).
-6. **`ordered_products[].product_slug` added** on the storefront order list. See [§2](#ordered_productsproduct_slug--added).
+5. **The payment slip is a PDF now, not an HTML page.** `GET /orders/payment-slip/:orderid` used to render a page that saved itself with html2pdf in the browser; it returns `application/pdf` directly (`Content-Disposition: inline`). Opening it in a new tab still works and is still the right thing to do — but anything that assumed HTML, or waited for the client-side save, can go.
+6. **`is_cancelable` is now `PENDING` only** (was `PENDING | CONFIRMED | SHIPPED`). See [§2](#is_cancelable--changed).
+7. **`ordered_products[].product_slug` added** on the storefront order list. See [§2](#ordered_productsproduct_slug--added).
 
 ---
 
@@ -279,19 +280,56 @@ Error bodies use the standard envelope with `success: false`:
 
 ## 4. Download the payment slip — `GET /orders/payment-slip/:orderid`
 
-Public (no token). New endpoint. Available for **every** order regardless of `order_status` or `payment_status`.
+Public (no token). Available for **every** order regardless of `order_status` or `payment_status`.
 
-Returns an **HTML page** (server-rendered [invoice.ejs](../views/invoice.ejs)), not JSON and not a file stream. The page auto-triggers a client-side PDF save as `payment-slip-{order_number}.pdf` via html2pdf once it loads.
+Returns a **PDF**, rendered by the API with [@react-pdf/renderer](https://react-pdf.org/):
 
-So: open it in a new tab (`window.open(order.payment_slip_url)` or `<a target="_blank">`). Do **not** `fetch()` it and expect JSON.
+```
+Content-Type: application/pdf
+Content-Disposition: inline; filename="payment-slip-PAY-100017.pdf"
+```
+
+`inline`, because this opens from a "view your receipt" link far more often than it is filed away — the browser shows it in its own viewer and the customer can still save it. Open it in a new tab (`window.open(order.payment_slip_url)` or `<a target="_blank">`). Do **not** `fetch()` it and expect JSON.
+
+**A paid order is served its stored receipt**, generated the moment the payment turned `PAID` — by the gateway webhook or status poll for an online order, and by the admin marking a COD order paid. Nothing has to be pressed. An order paid before this existed, or one whose generate failed at the time, is generated and stored on its first download.
+
+**An unpaid order is served a slip rendered on the spot** and stored nowhere: no receipt number, no stamp, and the closing line says it is not a receipt. A COD order says the amount is payable on delivery.
 
 | Status | When |
 | --- | --- |
-| `200` | HTML payment slip rendered |
-| `400` | Missing `:orderid` |
+| `200` | PDF returned |
+| `400` | Invalid `:orderid` |
 | `404` | `"Order information not found!"` |
 
-Content on the slip: order number, order date, total, payment method (`Cash on delivery` / `Online Paid`), line items with quantity and price, subtotal, shipping charge, billing address and shipping address.
+What it prints: the letterhead (§7), receipt number and date, order number and date, payment status and instrument (`UPI`, `Cash on delivery` …), the amount with its transaction reference and the GST inside it, the amount in words, the line items with combo contents, the full price breakdown, the customer's name, contact and billing address, and — only when paid — the PAID stamp.
+
+### `POST /orders/:orderid/payment-slip/generate` (CMS only)
+
+Permission **`1-5`**. Regenerates a paid order's receipt from the order as it stands now and replaces the stored file — for an admin who has corrected something the slip prints. **The receipt number and date are kept**, for the same reason the invoice number is.
+
+**Response 200**
+
+```json
+{
+  "statusCode": 200,
+  "message": "Payment slip generated",
+  "success": true,
+  "data": {
+    "receipt_number": "PAY-100017",
+    "payment_slip_url": "https://api.luvlettecurves.in/api/v1/orders/payment-slip/128"
+  },
+  "key": [],
+  "totalPage": 0
+}
+```
+
+| Status | When |
+| --- | --- |
+| `200` | Receipt regenerated and stored |
+| `400` | Invalid `:orderid`, or the order has not been paid so there is no receipt to generate |
+| `403` | Missing or insufficient token |
+| `404` | `"Order information not found!"` |
+| `502` | The upload server refused or could not be reached |
 
 ---
 
@@ -423,7 +461,7 @@ Content-Disposition: attachment; filename="packing-slip-ORD2026081774213.pdf"
 
 ### What the documents print
 
-Both share one letterhead, and most of it comes from **Site Info in the CMS** — change it there and the next generated document says so:
+All three — invoice, packing slip and payment slip — share one letterhead, and most of it comes from **Site Info in the CMS** — change it there and the next generated document says so:
 
 | Printed | Source |
 | --- | --- |
@@ -446,10 +484,10 @@ Money is read from the order's `price_breakdown` snapshot, so an invoice always 
 
 Column `orders.invoice_document TEXT` ([database.sql](../src/config/database.sql)) holds the **uploaded** file as a data URI. The same file is what a B2B (multi-box) shipment is booked to Bigship with, which is why the upload is restricted to PDF/JPEG.
 
-The generated documents are not stored in the row — only their paths are, in `orders.invoice_pdf_url` and `orders.packing_slip_url`, alongside `invoice_number`, `invoice_generated_at` and `packing_slip_generated_at`. The files themselves live in the upload server's private area under `order-documents/`, reachable only with `PRIVATE_FILE_ACCESS_TOKEN`, which only the API holds. A regenerate stores the new path first and deletes the superseded file afterwards.
+The generated documents are not stored in the row — only their paths are, in `orders.invoice_pdf_url`, `orders.packing_slip_url` and `orders.payment_slip_url`, alongside `invoice_number`, `invoice_generated_at`, `packing_slip_generated_at`, `receipt_number` and `payment_slip_generated_at`. `receipt_number` comes from its own sequence (`receipt_number_seq`, `PAY-100001` upwards), as `invoice_number` does. The files themselves live in the upload server's private area under `order-documents/`, reachable only with `PRIVATE_FILE_ACCESS_TOKEN`, which only the API holds. A regenerate stores the new path first and deletes the superseded file afterwards.
 
 ---
 
 ## Open item — auth on the download routes
 
-Both `GET /orders/invoice/:orderid` and `GET /orders/payment-slip/:orderid` are currently **unauthenticated**, and `:orderid` is a sequential integer. (`GET /orders/:orderid/packing-slip` is not: it requires `1-5`.) The payment slip shows the customer's name, address, phone and email, so anyone can enumerate order ids and read them. This existed before for delivered orders; it now covers every order. Flag to backend if the frontend flow can accommodate a token on these routes.
+Both `GET /orders/invoice/:orderid` and `GET /orders/payment-slip/:orderid` are currently **unauthenticated**, and `:orderid` is a sequential integer. (`GET /orders/:orderid/packing-slip` is not: it requires `1-5`.) The payment slip shows the customer's name, address, phone and email, so anyone can enumerate order ids and read them. This existed before for delivered orders; it now covers every order, and the receipt also names the payment instrument and the gateway's payment id. Flag to backend if the frontend flow can accommodate a token on these routes.

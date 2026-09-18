@@ -1047,6 +1047,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number
   WHERE invoice_number IS NOT NULL;
 
 -- ------------------------------------------------------------
+-- Payment slip
+--
+-- The receipt for money actually received, generated the moment a payment
+-- turns PAID and kept from then on. receipt_number is allotted once and
+-- survives a regenerate for the same reason invoice_number does: a customer
+-- holding PAY-100023 must not be handed a second copy under another number.
+--
+-- A slip is also rendered for an order that has not been paid yet, because the
+-- route has always answered for every order at any status — that one carries no
+-- receipt number and no paid stamp, and is not stored.
+-- ------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS receipt_number_seq START WITH 100001;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(30);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_slip_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_slip_generated_at TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_receipt_number
+  ON orders(receipt_number)
+  WHERE receipt_number IS NOT NULL;
+
+-- ------------------------------------------------------------
 -- Customer email log
 --
 -- Which of the customer-facing order emails have already gone out, one row per

@@ -4,8 +4,10 @@
 //   invoice_url      the invoice — either one an admin uploaded from the CMS or
 //                    one the CMS generated as a PDF, whichever is on file. Null
 //                    until someone does one of the two.
-//   payment_slip_url the html page the app renders from the order record. Always
-//                    available, at any status, and never an invoice.
+//   payment_slip_url the payment slip PDF the app renders from the order record.
+//                    Always available, at any status, and never an invoice — a
+//                    paid order gets its stored receipt, and an unpaid one a
+//                    slip stating what is owed.
 //   packing_slip_url the generated packing slip PDF. Admin-only, and null until
 //                    it is generated.
 export interface IOrderDocumentUrls {

@@ -225,6 +225,7 @@
       }
 
       .download-receipt {
+        display: inline-block;
         color: #ff6900;
         font-size: 14px;
         margin-top: 20px;
@@ -321,9 +322,18 @@
         >
       </div>
 
-      <!-- <p class="download-receipt" onclick="downloadReceipt()">
-        📄 Download Receipt
-      </p> -->
+      <%# The receipt is generated the moment the payment turns PAID, so by the
+          time this page renders there is a PDF waiting behind this link. An
+          older token carries no order id and simply shows no button. %>
+      <% if (typeof paymentSlipUrl !== 'undefined' && paymentSlipUrl) { %>
+      <a
+        class="download-receipt"
+        href="<%= paymentSlipUrl %>"
+        target="_blank"
+        rel="noopener"
+        >📄 Download Receipt</a
+      >
+      <% } %>
 
       <% } else { %>
       <!-- FAILED STATE -->
@@ -383,16 +393,6 @@
     </div>
 
     <script>
-      function downloadReceipt() {
-        // Implement receipt download functionality
-        alert(
-          "Receipt download will be implemented based on your backend logic",
-        );
-
-        // Example implementation:
-        // window.location.href = '/download-receipt?paymentId=<%= paymentId || "" %>';
-      }
-
       // Optional: Send confirmation email for successful payments
       ("<% if (status === 'success') { %>");
       function sendConfirmationEmail() {

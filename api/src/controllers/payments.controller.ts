@@ -17,27 +17,32 @@ import {
   VUpdatePaymentStatus,
 } from "../validator/payment.validator";
 import { CustomRequest } from "../types";
+import { ensurePaymentSlip } from "../services/documents/generatePaymentSlip";
 
 /**
- * Whether the order behind a gateway payment was placed without an account.
+ * The order behind a gateway payment: which row it is, and whether it was
+ * placed without an account.
  *
- * The result page needs it because the two cases end in different places: an
- * account holder is sent to their order history, and a guest has none, so they
- * go to the guest confirmation page instead — which reads the order token the
- * storefront saved before it handed the customer to the gateway.
+ * The result page needs both. The guest flag decides where the "view your
+ * order" button goes — an account holder to their order history, a guest to the
+ * confirmation page, which reads the order token the storefront saved before it
+ * handed the customer to the gateway. The row id is what the receipt link is
+ * built from, since the gateway only ever names its own order id.
  *
- * Never throws. A lookup that fails only costs the "view your order" button
- * pointing at the account page, and that must not turn a successful payment
- * into an error screen.
+ * Never throws. A lookup that fails costs the customer a button, and that must
+ * not turn a successful payment into an error screen.
  */
-const isGuestPaymentOrder = async (
+const lookupPaymentOrder = async (
   providerOrderId: string | null | undefined,
-): Promise<boolean> => {
-  if (!providerOrderId) return false;
+): Promise<{ orderId: number | null; isGuest: boolean }> => {
+  if (!providerOrderId) return { orderId: null, isGuest: false };
 
   try {
-    const { rows } = await pool.query<{ is_guest_order: boolean }>(
-      `SELECT COALESCE(o.is_guest_order, false) AS is_guest_order
+    const { rows } = await pool.query<{
+      order_id: number;
+      is_guest_order: boolean;
+    }>(
+      `SELECT o.order_id, COALESCE(o.is_guest_order, false) AS is_guest_order
          FROM payments p
          JOIN orders o ON o.order_id = p.order_id
         WHERE p.provider_order_id = $1
@@ -46,11 +51,25 @@ const isGuestPaymentOrder = async (
       [providerOrderId],
     );
 
-    return rows[0]?.is_guest_order === true;
+    return {
+      orderId: rows[0]?.order_id ?? null,
+      isGuest: rows[0]?.is_guest_order === true,
+    };
   } catch {
-    return false;
+    return { orderId: null, isGuest: false };
   }
 };
+
+/**
+ * The receipt link the result page offers a customer who has just paid.
+ *
+ * Null for an order that could not be resolved — the page then simply has no
+ * receipt button, which is better than one that 404s.
+ */
+const paymentSlipUrl = (orderId: number | null): string | null =>
+  orderId
+    ? `${process.env.API_BASE_URL}/api/v1/orders/payment-slip/${orderId}`
+    : null;
 
 /**
  * The page a Razorpay checkout runs in. Razorpay has no hosted page for this
@@ -105,14 +124,17 @@ export const verifyPayment = asyncErrorHandler(async (req, res) => {
   // is slow or lost should not leave a paid order sitting at PENDING.
   await recordPaymentEvent(snapshot);
 
+  const order = await lookupPaymentOrder(snapshot.providerOrderId);
+
   const token = createToken({
     pi: snapshot.providerPaymentId ?? "",
     oi: snapshot.providerOrderId,
     pa: snapshot.amount,
     ps: snapshot.status === "PAID" ? "success" : "failed",
     m: snapshot.status === "PAID" ? "" : snapshot.message,
-    // carried in the token because paymentResultPage renders from it alone
-    g: await isGuestPaymentOrder(snapshot.providerOrderId),
+    // both carried in the token because paymentResultPage renders from it alone
+    g: order.isGuest,
+    oid: order.orderId,
   });
 
   httpResponse(
@@ -138,6 +160,7 @@ export const paymentResultPage = asyncErrorHandler(async (req, res) => {
     ps: string;
     m: string;
     g?: boolean;
+    oid?: number | null;
   }>(token.toString());
 
   if (error || !data) throw new ErrorHandler(400, "Invalid token!");
@@ -149,6 +172,9 @@ export const paymentResultPage = asyncErrorHandler(async (req, res) => {
       orderId: data.oi,
       amount: data.pa,
       isGuestOrder: data.g === true,
+      // A token minted before the receipt existed carries no order id, so the
+      // page it renders simply has no receipt button.
+      paymentSlipUrl: paymentSlipUrl(data.oid ?? null),
     });
   }
 
@@ -162,6 +188,11 @@ export const paymentResultPage = asyncErrorHandler(async (req, res) => {
   });
 });
 
+/**
+ * The COD half of payment status: an admin recording that the cash came in.
+ * Online orders are refused here on purpose — theirs is written from the
+ * gateway's own notification, which is the version that can be trusted.
+ */
 export const updatePaymentStatus = asyncErrorHandler(async (req, res) => {
   const value = doValidate(VUpdatePaymentStatus, {
     ...req.params,
@@ -185,6 +216,11 @@ export const updatePaymentStatus = asyncErrorHandler(async (req, res) => {
       value.orderid,
     ]);
   });
+
+  // A COD order reaches PAID here rather than through a gateway webhook, so
+  // this is where its receipt is made. After the commit, and fire and forget —
+  // see ensurePaymentSlip.
+  if (value.status === "PAID") ensurePaymentSlip(Number(value.orderid));
 
   httpResponse(res, 200, "Payment status successfully updated");
 });
@@ -211,7 +247,7 @@ export const checkPaymentStatus = asyncErrorHandler(async (req, res) => {
 
   await recordPaymentEvent(snapshot);
 
-  const isGuestOrder = await isGuestPaymentOrder(snapshot.providerOrderId);
+  const order = await lookupPaymentOrder(snapshot.providerOrderId);
 
   if (snapshot.status === "PAID") {
     return res.render("payment-result", {
@@ -219,7 +255,8 @@ export const checkPaymentStatus = asyncErrorHandler(async (req, res) => {
       paymentId: snapshot.providerPaymentId,
       orderId: snapshot.providerOrderId,
       amount: snapshot.amount,
-      isGuestOrder,
+      isGuestOrder: order.isGuest,
+      paymentSlipUrl: paymentSlipUrl(order.orderId),
     });
   }
 
@@ -229,7 +266,7 @@ export const checkPaymentStatus = asyncErrorHandler(async (req, res) => {
     paymentId: snapshot.providerPaymentId,
     orderId: snapshot.providerOrderId,
     amount: snapshot.amount,
-    isGuestOrder,
+    isGuestOrder: order.isGuest,
   });
 });
 

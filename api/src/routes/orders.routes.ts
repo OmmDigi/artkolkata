@@ -13,6 +13,7 @@ import {
   downloadPaymentSlip,
   generateOrderInvoice,
   generateOrderPackingSlip,
+  generateOrderPaymentSlip,
   getOrderList,
   getPriceBreakdown,
   getSingleOrderInfo,
@@ -91,6 +92,14 @@ orderRoutes
     rateLimits.adminWrite,
     isAuthorizedV2(["1-5"]),
     emailOrderInvoice,
+  )
+  // Regenerate. The slip itself is made automatically the moment the payment
+  // turns PAID — this is for an admin who has corrected something it prints.
+  .post(
+    "/:orderid/payment-slip/generate",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-5"]),
+    generateOrderPaymentSlip,
   )
   .post(
     "/:orderid/packing-slip/generate",
