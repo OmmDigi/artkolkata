@@ -64,6 +64,8 @@ const getOrderEmailData = async (orderId: number) => {
     `
     SELECT
       o.order_number,
+      -- Parked by staff. Nothing about a draft is told to the customer.
+      COALESCE(o.is_draft, false) AS is_draft,
       TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
       o.total_amount,
       o.payment_method,
@@ -106,6 +108,9 @@ const getOrderEmailData = async (orderId: number) => {
 
   return {
     recipient,
+    // Parked by staff: the caller stops here rather than mailing the customer
+    // about an order that, as far as the business is concerned, did not happen.
+    isDraft: order.is_draft === true,
     templateData: {
       customerName: shipping.name ?? order.account_name ?? "Customer",
       // order-confirmed.html prints the address back to the customer, so it is
@@ -151,6 +156,22 @@ export const sendOrderEmail = async (orderId: number, type: EmailType) => {
     if (!order.recipient) {
       logger.error({
         message: "Customer email skipped, order has no email address",
+        order_id: orderId,
+        email_type: type,
+      });
+      return;
+    }
+
+    /**
+     * A parked order tells the customer nothing. Returned before the claim on
+     * purpose: the log row is what makes an email once-only, so claiming here
+     * would silently burn the send for good. Left unclaimed, the email the
+     * order is owed still goes out the first time it moves after it is
+     * restored.
+     */
+    if (order.isDraft) {
+      logger.info({
+        message: "Customer email skipped, order is a draft",
         order_id: orderId,
         email_type: type,
       });

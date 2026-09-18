@@ -256,5 +256,20 @@ const ALL_OPTION = { text: "All", value: FILTER_ALL };
  * is not a status anything can be moved to.
  */
 export const ORDER_STATUS_FILTER = [ALL_OPTION, ...ORDER_STATUS];
+
+/**
+ * Which pile of orders the list is showing.
+ *
+ * Not a status: a draft keeps whatever status it had, so this is its own
+ * dropdown. The two views never overlap — live orders hide drafts, the draft
+ * view shows nothing else — so a count taken from either one is honest.
+ */
+export const ORDER_VIEW_LIVE = "live";
+export const ORDER_VIEW_DRAFT = "draft";
+
+export const ORDER_VIEW_FILTER = [
+  { text: "Live Orders", value: ORDER_VIEW_LIVE },
+  { text: "Drafts", value: ORDER_VIEW_DRAFT },
+];
 export const PAYMENT_STATUS_FILTER = [ALL_OPTION, ...PAYMENT_STATUS];
 export const CUSTOMER_TYPE_FILTER = [ALL_OPTION, ...CUSTOMER_TYPE];

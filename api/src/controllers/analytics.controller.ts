@@ -29,6 +29,11 @@ import { resolveDateRange } from "../utils/resolveDateRange";
  * NON_REVENUE_ORDER_STATUSES, and passed to every query as a parameter — so
  * the KPI card, the chart and the best-seller list can never disagree about
  * whether a cancelled order happened.
+ *
+ * Draft orders are left out of all four, the status breakdown included. Staff
+ * park an order precisely because it should not count — a test, a duplicate, a
+ * phone order keyed in wrong — so it is dropped before any of these numbers is
+ * taken, and restoring it brings it back into every window it belongs to.
  */
 
 /**
@@ -80,6 +85,7 @@ export const getDashboardKpi = asyncErrorHandler(async (req, res) => {
       WHERE o.created_at >= ${WINDOW_START}
         AND o.created_at <  ${WINDOW_END}
         AND COALESCE(o.order_status, 'PENDING') <> ALL($3::text[])
+        AND COALESCE(o.is_draft, false) = false
     ),
 
     sales AS (
@@ -121,9 +127,13 @@ export const getDashboardKpi = asyncErrorHandler(async (req, res) => {
         COALESCE(SUM(p.refunded_amount), 0) AS refunded_amount,
         COUNT(*)::int                       AS refund_count
       FROM payments p
+      JOIN orders o ON o.order_id = p.order_id
       WHERE p.refunded_at >= ${WINDOW_START}
         AND p.refunded_at <  ${WINDOW_END}
         AND COALESCE(p.refunded_amount, 0) > 0
+        -- a parked order contributes no sales, so its refund must not be
+        -- divided into them either
+        AND COALESCE(o.is_draft, false) = false
     )
 
     SELECT * FROM sales, units, customers, refunds
@@ -224,6 +234,7 @@ export const getSalesTimeseries = asyncErrorHandler(async (req, res) => {
       WHERE o.created_at >= ${WINDOW_START}
         AND o.created_at <  ${WINDOW_END}
         AND COALESCE(o.order_status, 'PENDING') <> ALL($7::text[])
+        AND COALESCE(o.is_draft, false) = false
       GROUP BY 1
     ),
 
@@ -239,6 +250,7 @@ export const getSalesTimeseries = asyncErrorHandler(async (req, res) => {
       WHERE o.created_at >= ${WINDOW_START}
         AND o.created_at <  ${WINDOW_END}
         AND COALESCE(o.order_status, 'PENDING') <> ALL($7::text[])
+        AND COALESCE(o.is_draft, false) = false
         AND COALESCE(oi.status, 'PENDING')      <> ALL($7::text[])
       GROUP BY 1
     )
@@ -336,6 +348,7 @@ export const getTopProducts = asyncErrorHandler(async (req, res) => {
       AND o.created_at <  ${WINDOW_END}
       AND COALESCE(o.order_status, 'PENDING') <> ALL($3::text[])
       AND COALESCE(oi.status, 'PENDING')      <> ALL($3::text[])
+      AND COALESCE(o.is_draft, false) = false
 
     GROUP BY 1, 2
     ORDER BY units_sold DESC, revenue DESC
@@ -383,6 +396,9 @@ export const getOrderStatusBreakdown = asyncErrorHandler(async (req, res) => {
       FROM orders
       WHERE created_at >= ${WINDOW_START}
         AND created_at <  ${WINDOW_END}
+        -- the one exclusion this endpoint does keep: a parked order is not
+        -- waiting in the pipeline, it is not in the pipeline at all
+        AND COALESCE(is_draft, false) = false
     )
 
     SELECT 'order_status' AS dimension, order_status AS value,

@@ -5,7 +5,7 @@ import EditorJS, {
 } from "@editorjs/editorjs";
 import Header from "@editorjs/header";
 import List from "@editorjs/list";
-import ImageTool from "@editorjs/image";
+// import ImageTool from "@editorjs/image";
 import Quote from "@editorjs/quote";
 import Table from "@editorjs/table";
 import Code from "@editorjs/code";
@@ -15,8 +15,8 @@ import TextColor from "./editor-tools/TextColor";
 import EditorToolbar from "./EditorToolbar";
 import { Label } from "./ui/label";
 import "./editor.css";
-import { uploadFiles } from "@/utils/uploadFiles";
-import { isAssetUrl } from "@/utils/assetUrl";
+// import { uploadFiles } from "@/utils/uploadFiles";
+// import { isAssetUrl } from "@/utils/assetUrl";
 
 interface EditorProps {
   onSave?: (data: OutputData) => void;
@@ -83,40 +83,40 @@ export default function Editor({ onSave, label, initData }: EditorProps) {
             },
           },
         },
-        image: {
-          class: ImageTool,
-          config: {
-            uploader: {
-              async uploadByFile(file: File) {
-                const { data, error } = await uploadFiles({
-                  files: [file],
-                  folder: "/product-editor-asset",
-                });
+        // image: {
+        //   class: ImageTool,
+        //   config: {
+        //     uploader: {
+        //       async uploadByFile(file: File) {
+        //         const { data, error } = await uploadFiles({
+        //           files: [file],
+        //           folder: "/editor-asset",
+        //         });
 
-                if (error || data.length === 0) {
-                  alert("Uploading failed try again");
-                  return { success: 0 };
-                }
+        //         if (error || data.length === 0) {
+        //           alert("Uploading failed try again");
+        //           return { success: 0 };
+        //         }
 
-                return {
-                  success: 1,
-                  file: {
-                    url: data[0].url,
-                  },
-                };
-              },
-              // lets the editor take an image that is already hosted elsewhere
-              async uploadByUrl(url: string) {
-                if (!isAssetUrl(url)) {
-                  alert("Enter a full image url, for example https://cdn.site.com/a.jpg");
-                  return { success: 0 };
-                }
+        //         return {
+        //           success: 1,
+        //           file: {
+        //             url: data[0].url,
+        //           },
+        //         };
+        //       },
+        //       // lets the editor take an image that is already hosted elsewhere
+        //       async uploadByUrl(url: string) {
+        //         if (!isAssetUrl(url)) {
+        //           alert("Enter a full image url, for example https://cdn.site.com/a.jpg");
+        //           return { success: 0 };
+        //         }
 
-                return { success: 1, file: { url: url.trim() } };
-              },
-            },
-          },
-        },
+        //         return { success: 1, file: { url: url.trim() } };
+        //       },
+        //     },
+        //   },
+        // },
         paragraph: {
           class: Paragraph as any,
           inlineToolbar: true,

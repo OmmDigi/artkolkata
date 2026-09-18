@@ -17,6 +17,7 @@ import {
   getOrderList,
   getPriceBreakdown,
   getSingleOrderInfo,
+  setOrderDraft,
   trackOrder,
   updateOrderStatus,
   updateShipmentBoxes,
@@ -59,6 +60,14 @@ orderRoutes
     downloadPaymentSlip,
   )
   .patch("/", rateLimits.adminWrite, isAuthorizedV2(["1-5"]), updateOrderStatus)
+  // Parking an order takes stock back and hides it from the customer, so it is
+  // an admin write like any status change.
+  .patch(
+    "/:orderid/draft",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-5"]),
+    setOrderDraft,
+  )
   .put(
     "/:orderid/shipment-boxes",
     rateLimits.adminWrite,

@@ -43,6 +43,7 @@ import {
   VGetPriceBreakdown,
   VReturnOrder,
   VTrackOrder,
+  VSetOrderDraft,
   VUpdateOrderStatus,
   VUpdateShipmentBoxes,
   VUploadOrderInvoice,
@@ -581,6 +582,18 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
     filterValues.push(req.query.ostatus);
   }
 
+  /**
+   * Drafts are parked orders — a test, a duplicate, a phone order keyed in
+   * wrong — and they are off every screen but the one that asks for them.
+   * ?draft=true is that screen: it shows drafts and nothing else, so the two
+   * views never overlap and a total taken from either one is honest.
+   */
+  if (req.query.draft === "true") {
+    filter += ` AND o.is_draft = true`;
+  } else {
+    filter += ` AND COALESCE(o.is_draft, false) = false`;
+  }
+
   // "Show me only the orders nobody was logged in for." Read off the order, not
   // the customer, so a guest who has since made an account does not quietly
   // drop out of the list.
@@ -601,6 +614,9 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
          -- staff can tell at a glance that there is no account behind the
          -- order and the only contact details are the ones on it.
          COALESCE(o.is_guest_order, false) AS is_guest_order,
+         -- Parked by staff: the CMS badges it and offers Restore instead of
+         -- Move to draft.
+         COALESCE(o.is_draft, false) AS is_draft,
          o.total_amount,
          o.payment_status,
          o.payment_method,
@@ -653,6 +669,10 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         -- staff reach the customer: there is no account to look up, only the
         -- address snapshot on the order itself.
         COALESCE(is_guest_order, false) AS is_guest_order,
+        -- Parked by staff. Hidden from the customer and from every analytics
+        -- window while it is true; see setOrderDraft.
+        COALESCE(is_draft, false) AS is_draft,
+        TO_CHAR(drafted_at, 'DD Mon YYYY') AS drafted_at,
         order_number,
         subtotal,
         discount,
@@ -1070,6 +1090,114 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
   }
 
   httpResponse(res, 200, "Order status successfully updated");
+});
+
+/**
+ * Park an order, or bring it back. Admin only.
+ *
+ * A draft is an order that should not count: a test order, a duplicate, a phone
+ * order keyed in wrong. It is a flag beside order_status rather than a status of
+ * its own, so the order keeps whatever it already was and restoring it puts it
+ * back exactly where it sat — nothing has to guess a status, and the courier
+ * webhook, which writes order_status from the newest scan, cannot wipe the mark.
+ *
+ * Drafting gives the stock back, because a parked order is not holding anything
+ * for anyone; restoring takes it out again if the status it returns to is one
+ * that owns stock. manageStock decides both from stock_decreased, so a double
+ * press cannot move a quantity twice.
+ *
+ * The customer stops seeing the order entirely (see customerOrders.service),
+ * its status emails stay unsent (see sendOrderEmail) and every analytics window
+ * ignores it — the three reasons an order gets parked in the first place.
+ */
+export const setOrderDraft = asyncErrorHandler(async (req: CustomRequest, res) => {
+  const orderId = Number(req.params.orderid);
+
+  if (!Number.isInteger(orderId) || orderId <= 0)
+    throw new ErrorHandler(400, "Order id is required!");
+
+  const value = doValidate<{ is_draft: boolean }>(
+    VSetOrderDraft,
+    req.body ?? {},
+  );
+
+  const { rows, rowCount } = await pool.query(
+    "SELECT order_status, COALESCE(is_draft, false) AS is_draft FROM orders WHERE order_id = $1",
+    [orderId],
+  );
+
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+
+  const order = rows[0];
+
+  // Already where it is being asked to go. Said plainly rather than run again:
+  // the stock move is guarded by stock_decreased, but there is no reason to
+  // restamp drafted_at because someone pressed the button twice.
+  if (order.is_draft === value.is_draft)
+    return httpResponse(
+      res,
+      200,
+      value.is_draft ? "Order is already a draft" : "Order is not a draft",
+      { is_draft: order.is_draft },
+    );
+
+  await doTransition(async (client) => {
+    if (value.is_draft) {
+      // PENDING is the "nobody is holding this stock" side of manageStock, and
+      // it only gives anything back when the order had actually taken it.
+      await manageStock({
+        order_status: ORDER_PENDING,
+        orderid: orderId,
+        client,
+      });
+
+      await client.query(
+        `
+         UPDATE orders
+         SET is_draft = true,
+             drafted_at = CURRENT_TIMESTAMP,
+             drafted_by = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $1
+        `,
+        [orderId, req.token_info?.id ?? null],
+      );
+    } else {
+      await client.query(
+        `
+         UPDATE orders
+         SET is_draft = false,
+             drafted_at = NULL,
+             drafted_by = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $1
+        `,
+        [orderId],
+      );
+
+      // Back to fulfilment: whatever status it kept decides whether it owns
+      // stock again. A restored PENDING order takes nothing, exactly as a
+      // freshly placed one does.
+      await manageStock({
+        order_status: order.order_status ?? ORDER_PENDING,
+        orderid: orderId,
+        client,
+      });
+    }
+  });
+
+  // Quantities moved, and they are part of a product's cached response. After
+  // the commit, for the same reason updateOrderStatus does it there.
+  await invalidateCache(CACHE_TAGS.PRODUCTS);
+
+  httpResponse(
+    res,
+    200,
+    value.is_draft
+      ? "Order moved to draft. It is hidden from the customer and left out of the dashboard."
+      : "Order restored from draft.",
+    { is_draft: value.is_draft },
+  );
 });
 
 //this endpoint for user only
@@ -2028,7 +2156,10 @@ export const trackOrder = asyncErrorHandler(async (req, res) => {
         OR wd.waybill = r.waybill
         OR wd.waybill = r.replacement_waybill
 
+      -- A parked order is not out there being delivered, so tracking it says
+      -- nothing rather than showing stale scans.
       WHERE o.order_number = $1
+        AND COALESCE(o.is_draft, false) = false
       GROUP BY o.order_id;
     `,
     [value.order_number],

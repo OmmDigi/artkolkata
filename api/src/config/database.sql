@@ -1252,3 +1252,26 @@ INSERT INTO site_pages (slug, title, status) VALUES
   ('privacy-policy',         'Privacy Policy',            'published'),
   ('return-and-refund-policy','Return and Refund Policy', 'published')
 ON CONFLICT (slug) DO NOTHING;
+
+-- ============================================================
+-- DRAFT ORDERS
+--
+-- A draft is an order staff have parked: a test order, a duplicate, a phone
+-- order that was keyed in wrong. It is a flag beside the status rather than a
+-- status of its own, because the order keeps whatever it already was —
+-- restoring it puts it back exactly where it sat, and the courier webhook,
+-- which writes order_status straight from the newest scan, can never wipe the
+-- draft mark by doing its job.
+--
+-- Everything that counts or shows orders reads this column: the CMS list hides
+-- drafts unless asked for them, the customer-facing queries drop them outright,
+-- the status emails stay unsent, and every analytics window ignores them.
+-- ============================================================
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_draft BOOLEAN DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS drafted_at TIMESTAMP;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS drafted_by INT REFERENCES users(id);
+
+-- Partial: drafts are the rare row, and the only query that asks for them by
+-- this column is the CMS draft view. Every other query filters them out, which
+-- a sequential scan handles just as well.
+CREATE INDEX IF NOT EXISTS idx_orders_is_draft ON orders(is_draft) WHERE is_draft;
