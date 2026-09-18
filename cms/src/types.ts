@@ -150,6 +150,25 @@ export interface Variant {
   available: boolean;
 }
 
+// One product that a combo contains. product_id/variant_id/quantity are what
+// the form posts back; everything else is looked up by the API for display, so
+// the picker can show what was chosen without refetching each child.
+export interface IProductBundleItem {
+  product_id: number;
+  // null means the whole product rather than one specific variant of it
+  variant_id: number | null;
+  quantity: number;
+
+  name: string;
+  slug: string | null;
+  sku: string | null;
+  // "Red / 20g" when a variant was chosen
+  variant_label: string | null;
+  price: string | null;
+  available_quantity: number;
+  image: string | null;
+}
+
 export interface IProducts {
   id: number;
   sku_id: string;
@@ -185,6 +204,9 @@ export interface IProducts {
     type: MediaType;
   }[];
   isAlreadyOrdered : boolean
+  // the other products this one ships with, when it is a combo. Empty array for
+  // an ordinary product.
+  bundle_items: IProductBundleItem[];
 }
 
 export interface IOrderList {
@@ -422,6 +444,10 @@ export interface IUsers {
   // be logged into. It becomes an ordinary account the moment the customer
   // sets a password.
   is_guest: boolean;
+
+  // live cart snapshot, so an abandoned cart shows up in the list screen
+  cart_item_count: number;
+  cart_total: number;
 }
 
 export interface IUserProfile extends IUsers {
@@ -445,6 +471,31 @@ export interface IUserWishlistItem {
   min_price: string | null;
   max_price: string | null;
   image: string | null;
+}
+
+export interface IUserCartItem {
+  cart_id: number;
+  quantity: number;
+  added_at: string;
+  updated_at: string;
+  variant_id: number | null;
+  product_id: number;
+  product_name: string;
+  product_slug: string | null;
+  product_status: number;
+  variant_sku: string | null;
+  unit_price: number;
+  line_total: number;
+  category_name: string | null;
+  variations: { name: string; value: string }[];
+  image: string | null;
+}
+
+export interface IUserCart {
+  items: IUserCartItem[];
+  total_items: number;
+  total_quantity: number;
+  cart_total: number;
 }
 
 export type InputOptions = {

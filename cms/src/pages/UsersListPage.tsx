@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CUSTOMER_TYPE } from "@/constant";
+import { CUSTOMER_TYPE_FILTER, FILTER_ALL } from "@/constant";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import type { IError, IResponse, IUsers } from "@/types";
 import { api } from "@/utils/api";
@@ -102,11 +102,16 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
           {role === "User" ? (
             <SelectInput
               label="Customer Type"
-              options={CUSTOMER_TYPE}
-              defaultValue={searchParams.get("customer_type") ?? undefined}
+              options={CUSTOMER_TYPE_FILTER}
+              value={searchParams.get("customer_type") ?? FILTER_ALL}
               onValueChange={(value) =>
                 setSearchParams((prev) => {
-                  prev.set("customer_type", value);
+                  // "All" is the absence of a filter, so drop the parameter.
+                  if (value === FILTER_ALL) {
+                    prev.delete("customer_type");
+                  } else {
+                    prev.set("customer_type", value);
+                  }
                   prev.delete("page");
                   return prev;
                 })
@@ -139,6 +144,8 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
                 <TableHead>USER PHONE NUMBER</TableHead>
                 <TableHead>ROLE</TableHead>
                 <TableHead>IS VERIFIED</TableHead>
+                {/* Staff never have a cart, so the column is customers only. */}
+                {role === "User" ? <TableHead>CART</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -193,6 +200,22 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
                       </span>
                     )}
                   </TableCell>
+
+                  {role === "User" ? (
+                    <TableCell>
+                      {user.cart_item_count > 0 ? (
+                        <span>
+                          {user.cart_item_count} item
+                          {user.cart_item_count === 1 ? "" : "s"}
+                          <span className="ml-2 font-semibold">
+                            ₹{Number(user.cart_total ?? 0).toFixed(2)}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">Empty</span>
+                      )}
+                    </TableCell>
+                  ) : null}
 
                   {/* <TableCell>{order.order_date}</TableCell> */}
                 </TableRow>

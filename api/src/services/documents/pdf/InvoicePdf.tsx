@@ -3,6 +3,7 @@ import { ICompanyInfo } from "../../../utils/companyInfo";
 import { IOrderDocumentData } from "../orderDocumentData";
 import {
   AddressBlock,
+  BundleContents,
   formatDate,
   formatMoney,
   Letterhead,
@@ -71,7 +72,16 @@ const InvoicePdf = ({ data, company, invoiceNumber, invoiceDate }: IProps) => (
             style={styles.tableRow}
             wrap={false}
           >
-            <Text style={styles.cellProduct}>{item.name}</Text>
+            {/* A combo's contents are listed but never priced: the combo is one
+                charged line, and putting amounts next to what is inside it
+                would read as a second set of charges. */}
+            <View style={styles.cellProduct}>
+              <Text>{item.name}</Text>
+              <BundleContents
+                items={item.bundleItems}
+                lineQuantity={item.quantity}
+              />
+            </View>
             <Text style={styles.cellQuantity}>{item.quantity}</Text>
             <Text style={styles.cellPrice}>{formatMoney(item.price)}</Text>
           </View>

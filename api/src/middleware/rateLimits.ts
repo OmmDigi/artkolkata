@@ -294,6 +294,13 @@ export const rateLimits = {
     windowSeconds: 60,
   }),
 
+  /** cart writes are click-driven too : quantity steppers fire in bursts */
+  cart: rateLimit({
+    name: "cart",
+    limit: 120,
+    windowSeconds: 60,
+  }),
+
   /** address book writes from the storefront account pages */
   accountWrite: rateLimit({
     name: "account-write",

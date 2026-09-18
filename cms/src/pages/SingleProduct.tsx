@@ -1,3 +1,4 @@
+import ComboProducts from "@/components/ComboProducts";
 import Editor from "@/components/Editor";
 import LabelInput from "@/components/LabelInput";
 import LabelTextArea from "@/components/LabelTextArea";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import type {
   ImageTypes,
+  IProductBundleItem,
   IProductTag,
   ISubCategory,
   Option,
@@ -51,6 +53,8 @@ export default function SingleProduct() {
   const [productSlug, setProductSlug] = useState<string | null>(null);
   const [productTags, setProductTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
+  // the other products this one contains, when it is a combo
+  const [bundleItems, setBundleItems] = useState<IProductBundleItem[]>([]);
 
   const { categoryData, isCategoryFetching } = useCategory({ limit: -1 });
 
@@ -172,6 +176,7 @@ export default function SingleProduct() {
     setHasVarient(product.available_quantity <= 0);
     setProductSlug(product.slug ?? null);
     setProductTags(Object.keys(product.tags ?? {}));
+    setBundleItems(product.bundle_items ?? []);
   }, [dataUpdatedAt, isProductFetching]);
 
   const handleFormSubmit = (formData: FormData) => {
@@ -222,6 +227,13 @@ export default function SingleProduct() {
     }
 
     payload["tags"] = productTags;
+    // only the three columns the API stores; the rest of each row is display
+    // data it looked up for the picker
+    payload["bundle_items"] = bundleItems.map((item) => ({
+      product_id: item.product_id,
+      variant_id: item.variant_id,
+      quantity: item.quantity,
+    }));
     payload["description_json"] = editorData.current;
 
     if (isNewProduct) {
@@ -269,7 +281,7 @@ export default function SingleProduct() {
           }}
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-            <div className="col-span-2 space-y-7">
+            <div className="col-span-2 min-w-0 space-y-7">
               <Section>
                 <SelectInput
                   name="product_for"
@@ -496,7 +508,7 @@ export default function SingleProduct() {
               </Section>
             </div>
 
-            <div className="sticky top-0 h-fit space-y-7">
+            <div className="sticky top-0 h-fit min-w-0 space-y-7">
               <Section>
                 <SelectInput
                   required
@@ -593,6 +605,16 @@ export default function SingleProduct() {
                   type="number"
                   placeholder="0"
                   defaultValue={productData[0]?.position ?? 0}
+                />
+              </Section>
+
+              <Section>
+                <ComboProducts
+                  currentProductId={
+                    isNewProduct ? undefined : Number(params?.id)
+                  }
+                  value={bundleItems}
+                  onChange={setBundleItems}
                 />
               </Section>
 

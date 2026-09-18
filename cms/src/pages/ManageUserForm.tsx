@@ -73,13 +73,13 @@ export default function ManageUserForm({ userid, userData, role }: IProps) {
         required
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
         <SelectInput
           name="is_verified"
           label="Is Verified"
           options={[
-            { text: "True", value: "true" },
-            { text: "False", value: "false" },
+            { text: "Yes", value: "true" },
+            { text: "No", value: "false" },
           ]}
           defaultValue={String(userData?.is_verified)}
         />
@@ -87,10 +87,19 @@ export default function ManageUserForm({ userid, userData, role }: IProps) {
           name="is_active"
           label="Is Active"
           options={[
-            { text: "True", value: "true" },
-            { text: "False", value: "false" },
+            { text: "Yes", value: "true" },
+            { text: "No", value: "false" },
           ]}
           defaultValue={String(userData?.is_active)}
+        />
+        <SelectInput
+          name="is_guest"
+          label="Guest Account"
+          options={[
+            { text: "Yes", value: "true" },
+            { text: "No", value: "false" },
+          ]}
+          defaultValue={String(userData?.is_guest)}
         />
       </div>
 

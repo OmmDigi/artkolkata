@@ -1,6 +1,7 @@
 import path from "path";
 import { Font, StyleSheet, Text, View, Image } from "@react-pdf/renderer";
 import { ICompanyInfo } from "../../../utils/companyInfo";
+import { IOrderDocumentBundleItem } from "../orderDocumentData";
 
 // The four PDF core fonts have no rupee sign — pdfkit's WinAnsi tables stop at
 // the euro — so every amount would come out as a box. Roboto is bundled in
@@ -144,6 +145,18 @@ export const styles = StyleSheet.create({
     width: 93,
   },
 
+  /* --------------------------- combo contents --------------------------- */
+  // Indented under the combo's own name, smaller and grey, so the eye reads
+  // them as part of that line rather than as more things being charged for.
+  bundleList: {
+    marginTop: 3,
+    paddingLeft: 9,
+  },
+  bundleItem: {
+    fontSize: 8,
+    color: "#5c5c5c",
+  },
+
   /* ------------------------------- totals -------------------------------- */
   totals: {
     marginLeft: "auto",
@@ -232,3 +245,38 @@ export const AddressBlock = ({
     {phone ? <Text>{phone}</Text> : null}
   </View>
 );
+
+/**
+ * The contents of a combo, printed under the line that sold it.
+ *
+ * Quantities are shown as what is actually in the parcel — the combo's own
+ * quantity already multiplied in — because the person reading this is either
+ * packing the box or checking what arrived in it, and neither of them should
+ * have to do the multiplication.
+ *
+ * Renders nothing at all for an ordinary product, so every table can call it
+ * on every row without asking first.
+ */
+export const BundleContents = ({
+  items,
+  lineQuantity,
+}: {
+  items: IOrderDocumentBundleItem[];
+  lineQuantity: number;
+}) => {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <View style={styles.bundleList}>
+      {items.map((item, index) => (
+        <Text key={`${item.sku ?? item.name}-${index}`} style={styles.bundleItem}>
+          {"\u2022 "}
+          {item.name}
+          {item.variantLabel ? ` (${item.variantLabel})` : ""}
+          {" \u00d7 "}
+          {item.quantity * lineQuantity}
+        </Text>
+      ))}
+    </View>
+  );
+};

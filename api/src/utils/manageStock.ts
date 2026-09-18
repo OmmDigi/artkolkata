@@ -40,7 +40,12 @@ const manageQuantity = async ({
         quantity,
         variant_info->>'id' AS variant_id,
         variant_info->>'sku' AS variant_sku,
-        product_info->>'id' AS product_id
+        product_info->>'id' AS product_id,
+        -- what a combo line also puts in (or takes out of) the box. Read from
+        -- the snapshot taken at checkout, never from the combo as it stands
+        -- today: a cancellation has to give back exactly what the sale took,
+        -- even if the combo has been edited since.
+        COALESCE(variant_info->'bundle_items', product_info->'bundle_items', '[]'::jsonb) AS bundle_items
        FROM order_items WHERE ${
          orderid ? "order_id = $1" : "order_item_id = $1"
        }
@@ -48,92 +53,106 @@ const manageQuantity = async ({
     [orderid ?? orderitemid]
   );
 
-  const productIdAndQuantity: { id: number; quantity: number }[] = [];
-  // const varientIdAndQuantity: { id: number; quantity: number }[] = [];
-  const varientSkuAndQuantity : {sku : string, quantity: number}[] = [];
+  // Keyed and summed rather than collected into a list: the same product can
+  // reach here several times — on its own line and inside two different combos
+  // — and the UPDATE ... FROM (VALUES ...) below applies one row per id, so
+  // duplicates would silently lose every copy but one.
+  const productQuantityById = new Map<number, number>();
+  const varientQuantityBySku = new Map<string, number>();
+  const varientQuantityById = new Map<number, number>();
+
+  const addTo = <K>(map: Map<K, number>, key: K, quantity: number) =>
+    map.set(key, (map.get(key) ?? 0) + quantity);
 
   for (const item of rows) {
+    const lineQuantity = Number(item.quantity);
+
     if (item.product_id != null) {
-      productIdAndQuantity.push({
-        id: item.product_id,
-        quantity: item.quantity,
-      });
+      addTo(productQuantityById, Number(item.product_id), lineQuantity);
     }
-    // if (item.variant_id != null) {
-    //   varientIdAndQuantity.push({
-    //     id: item.variant_id,
-    //     quantity: item.quantity,
-    //   });
-    // }
 
     if (item.variant_sku != null) {
-      varientSkuAndQuantity.push({
-        sku : item.variant_sku,
-        quantity : item.quantity
-      })
+      addTo(varientQuantityBySku, item.variant_sku as string, lineQuantity);
+    }
+
+    // one combo sold consumes `quantity` of each child, so the child moves by
+    // its own quantity times however many combos the line was for
+    for (const child of (item.bundle_items ?? []) as any[]) {
+      const childQuantity = Number(child.quantity ?? 1) * lineQuantity;
+      if (!Number.isFinite(childQuantity) || childQuantity <= 0) continue;
+
+      if (child.variant_id != null) {
+        // by id, not sku: a variant sku is optional, and the id is what the
+        // combo was built against
+        addTo(varientQuantityById, Number(child.variant_id), childQuantity);
+        continue;
+      }
+
+      if (child.product_id != null) {
+        addTo(productQuantityById, Number(child.product_id), childQuantity);
+      }
     }
   }
 
-  if (productIdAndQuantity.length != 0) {
-    const valuesQuery = productIdAndQuantity
+  const sign = actiontype == "increase" ? "+" : "-";
+
+  if (productQuantityById.size != 0) {
+    const entries = [...productQuantityById.entries()];
+    const valuesQuery = entries
       .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
       .join(",");
 
     await pgClient.query(
       `
           UPDATE products AS p
-            SET available_quantity = (p.available_quantity ${
-              actiontype == "increase" ? "+" : "-"
-            } v.available_quantity::int)
+            SET available_quantity = (p.available_quantity ${sign} v.available_quantity::int)
             FROM (
               VALUES
                 ${valuesQuery}
             ) AS v(id, available_quantity)
           WHERE p.id = v.id::int;
           `,
-      productIdAndQuantity.flatMap((item) => [item.id, item.quantity])
+      entries.flatMap(([id, quantity]) => [id, quantity])
     );
   }
 
-  // if (varientIdAndQuantity.length != 0) {
-  //   const valuesQuery = varientIdAndQuantity
-  //     .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
-  //     .join(",");
+  if (varientQuantityById.size != 0) {
+    const entries = [...varientQuantityById.entries()];
+    const valuesQuery = entries
+      .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
+      .join(",");
 
-  //   await pgClient.query(
-  //     `
-  //         UPDATE product_variants AS pv
-  //           SET quantity = (pv.quantity ${
-  //             actiontype == "increase" ? "+" : "-"
-  //           } v.quantity::int)
-  //           FROM (
-  //             VALUES
-  //               ${valuesQuery}
-  //           ) AS v(id, quantity)
-  //         WHERE pv.id = v.id::int;
-  //         `,
-  //     varientIdAndQuantity.flatMap((item) => [item.id, item.quantity])
-  //   );
-  // }
+    await pgClient.query(
+      `
+          UPDATE product_variants AS pv
+            SET quantity = (pv.quantity ${sign} v.quantity::int)
+            FROM (
+              VALUES
+                ${valuesQuery}
+            ) AS v(id, quantity)
+          WHERE pv.id = v.id::int;
+          `,
+      entries.flatMap(([id, quantity]) => [id, quantity])
+    );
+  }
 
-  if (varientSkuAndQuantity.length != 0) {
-    const valuesQuery = varientSkuAndQuantity
+  if (varientQuantityBySku.size != 0) {
+    const entries = [...varientQuantityBySku.entries()];
+    const valuesQuery = entries
       .map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2}::int)`)
       .join(",");
 
     await pgClient.query(
       `
           UPDATE product_variants AS pv
-            SET quantity = (pv.quantity ${
-              actiontype == "increase" ? "+" : "-"
-            } v.quantity::int)
+            SET quantity = (pv.quantity ${sign} v.quantity::int)
             FROM (
               VALUES
                 ${valuesQuery}
             ) AS v(sku, quantity)
           WHERE pv.sku = v.sku;
           `,
-      varientSkuAndQuantity.flatMap((item) => [item.sku, item.quantity])
+      entries.flatMap(([sku, quantity]) => [sku, quantity])
     );
   }
 

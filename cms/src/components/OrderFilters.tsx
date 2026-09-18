@@ -3,13 +3,28 @@ import { Button } from "./ui/button";
 import { RotateCcw, Search } from "lucide-react";
 import LabelInput from "./LabelInput";
 import SelectInput from "./SelectInput";
-import { CUSTOMER_TYPE, ORDER_STATUS, PAYMENT_STATUS } from "@/constant";
+import {
+  CUSTOMER_TYPE_FILTER,
+  FILTER_ALL,
+  ORDER_STATUS_FILTER,
+  PAYMENT_STATUS_FILTER,
+} from "@/constant";
 
 export default function OrderFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // "All" means no filter at all, so the parameter leaves the URL rather than
+  // going to the API as an empty value it would have to special case.
+  const applyFilter = (key: string, value: string) => {
+    const newSearchParams = new URLSearchParams();
+    if (value !== FILTER_ALL) {
+      newSearchParams.set(key, value);
+    }
+    setSearchParams(newSearchParams);
+  };
+
   return (
-    <div className="flex items-end justify-between">
+    <div className="flex flex-wrap items-end gap-3">
       <form
         key={searchParams.get("orderid")}
         onSubmit={(e) => {
@@ -24,7 +39,7 @@ export default function OrderFilters() {
           newSearchParams.set("orderid", orderId);
           setSearchParams(newSearchParams);
         }}
-        className="inline-flex items-end gap-1.5"
+        className="flex items-end gap-1.5 shrink-0"
       >
         <LabelInput
           label="Order ID"
@@ -56,7 +71,7 @@ export default function OrderFilters() {
 
           setSearchParams(newSearchParams);
         }}
-        className="flex items-end gap-1.5"
+        className="flex items-end gap-1.5 shrink-0"
       >
         <LabelInput label="From Date" type="date" name="from" />
         <LabelInput label="To Date" type="date" name="to" />
@@ -66,39 +81,31 @@ export default function OrderFilters() {
       </form>
 
       <SelectInput
-        onValueChange={(value) => {
-          const newSearchParams = new URLSearchParams();
-          newSearchParams.set("pstatus", value);
-          setSearchParams(newSearchParams);
-        }}
+        className="w-40 shrink-0"
+        onValueChange={(value) => applyFilter("pstatus", value)}
         label="Payment Status"
-        options={PAYMENT_STATUS}
-        defaultValue={searchParams.get("pstatus") ?? PAYMENT_STATUS[0].value}
+        options={PAYMENT_STATUS_FILTER}
+        value={searchParams.get("pstatus") ?? FILTER_ALL}
       />
 
       <SelectInput
-        onValueChange={(value) => {
-          const newSearchParams = new URLSearchParams();
-          newSearchParams.set("ostatus", value);
-          setSearchParams(newSearchParams);
-        }}
+        className="w-40 shrink-0"
+        onValueChange={(value) => applyFilter("ostatus", value)}
         label="Order Status"
-        options={ORDER_STATUS}
-        defaultValue={searchParams.get("ostatus") ?? ORDER_STATUS[0].value}
+        options={ORDER_STATUS_FILTER}
+        value={searchParams.get("ostatus") ?? FILTER_ALL}
       />
 
       <SelectInput
-        onValueChange={(value) => {
-          const newSearchParams = new URLSearchParams();
-          newSearchParams.set("customer_type", value);
-          setSearchParams(newSearchParams);
-        }}
+        className="w-40 shrink-0"
+        onValueChange={(value) => applyFilter("customer_type", value)}
         label="Customer"
-        options={CUSTOMER_TYPE}
-        defaultValue={searchParams.get("customer_type") ?? CUSTOMER_TYPE[0].value}
+        options={CUSTOMER_TYPE_FILTER}
+        value={searchParams.get("customer_type") ?? FILTER_ALL}
       />
 
       <Button
+        className="shrink-0"
         title="Reset filter"
         onClick={() => {
           setSearchParams({});

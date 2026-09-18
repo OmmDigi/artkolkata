@@ -11,6 +11,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import SingleUserAddressInfo from "./SingleUserAddressInfo";
 import UserOrdersItem from "./UserOrdersItem";
 import SingleUserWishlist from "./SingleUserWishlist";
+import SingleUserCart from "./SingleUserCart";
 import ManageUserForm from "./ManageUserForm";
 import { SIDEBAR_OPTIONS } from "@/constant";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -132,6 +133,14 @@ export default function SingleUserPage({ role }: IProps) {
                   <Label className="text-xl mb-5 block">Wishlist</Label>
 
                   <SingleUserWishlist userid={userid} />
+                </Section>
+              )}
+
+              {userid != "new" && role !== "Employee" && (
+                <Section>
+                  <Label className="text-xl mb-5 block">Cart</Label>
+
+                  <SingleUserCart userid={userid} />
                 </Section>
               )}
 

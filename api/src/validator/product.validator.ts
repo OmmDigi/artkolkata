@@ -121,6 +121,23 @@ export const VAddProducts = Joi.object({
     }),
   ),
 
+  // the other products this one physically contains, when it is a combo. An
+  // empty array (or the field left out entirely) is an ordinary product, which
+  // is what every existing CMS payload sends.
+  bundle_items: Joi.array()
+    .items(
+      Joi.object({
+        product_id: Joi.number().required().label("Combo product"),
+        // null means the whole product rather than one of its variants
+        variant_id: Joi.number().optional().allow(null).label("Combo variant"),
+        quantity: Joi.number().integer().min(1).optional().default(1)
+          .label("Combo item quantity"),
+      }),
+    )
+    .optional()
+    .default([])
+    .label("Combo products"),
+
   product_for: Joi.string()
     .required()
     .valid("b2b", "b2c", "both")
@@ -215,6 +232,23 @@ export const VUpdateProducts = Joi.object({
         .label("Varient images"),
     }),
   ),
+
+  // the other products this one physically contains, when it is a combo. An
+  // empty array (or the field left out entirely) is an ordinary product, which
+  // is what every existing CMS payload sends.
+  bundle_items: Joi.array()
+    .items(
+      Joi.object({
+        product_id: Joi.number().required().label("Combo product"),
+        // null means the whole product rather than one of its variants
+        variant_id: Joi.number().optional().allow(null).label("Combo variant"),
+        quantity: Joi.number().integer().min(1).optional().default(1)
+          .label("Combo item quantity"),
+      }),
+    )
+    .optional()
+    .default([])
+    .label("Combo products"),
 
   product_for: Joi.string()
     .required()

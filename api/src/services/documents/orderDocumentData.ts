@@ -8,6 +8,18 @@ import { IPriceBreakdown } from "../../utils/buildPriceBreakdown";
 // One order, flattened into exactly what the invoice and the packing slip
 // print. Both documents read the same object: the slip ignores the money, the
 // invoice uses all of it, and neither of them touches the database itself.
+// One product that went inside a combo. It carries no price of its own: the
+// combo was sold and charged as a single line, and these are printed only so
+// the reader knows what that line contained.
+export interface IOrderDocumentBundleItem {
+  name: string;
+  sku: string | null;
+  // "Red / 20g" when the combo named a specific variant, otherwise null
+  variantLabel: string | null;
+  // per one combo — multiplied by the line quantity for display
+  quantity: number;
+}
+
 export interface IOrderDocumentItem {
   name: string;
   sku: string | null;
@@ -15,6 +27,9 @@ export interface IOrderDocumentItem {
   // unit price, GST inclusive, as it was at checkout
   price: number;
   lineTotal: number;
+  // what was inside, when this line was a combo. Empty for every ordinary
+  // product, which is what makes it safe to render unconditionally.
+  bundleItems: IOrderDocumentBundleItem[];
 }
 
 export interface IOrderDocumentData {
@@ -139,7 +154,15 @@ export const getOrderDocumentData = async (
        WHEN oi.variant_info IS NOT NULL
        THEN oi.variant_info->>'sku'
        ELSE null
-      END AS sku
+      END AS sku,
+
+      -- the combo contents frozen onto the line at checkout, so a document
+      -- reprinted later lists what actually went in the box
+      COALESCE(
+       oi.variant_info->'bundle_items',
+       oi.product_info->'bundle_items',
+       '[]'::jsonb
+      ) AS bundle_items
 
      FROM order_items oi
      WHERE oi.order_id = $1
@@ -179,6 +202,12 @@ export const getOrderDocumentData = async (
       quantity: num(item.quantity),
       price: num(item.price),
       lineTotal: num(item.subtotal ?? num(item.price) * num(item.quantity)),
+      bundleItems: ((item.bundle_items ?? []) as any[]).map((child) => ({
+        name: child.name ?? "",
+        sku: child.sku ?? null,
+        variantLabel: child.variant_label ?? null,
+        quantity: num(child.quantity) || 1,
+      })),
     })),
 
     subtotal,

@@ -21,6 +21,7 @@ import { settingsRoute } from "./routes/settings.routes";
 import { shippingRoutes } from "./routes/shipping.routes";
 import { blogRoutes } from "./routes/blog.routes";
 import { wishlistRoutes } from "./routes/wishlist.routes";
+import { cartRoutes } from "./routes/cart.routes";
 import { analyticsRoutes } from "./routes/analytics.routes";
 import { initEmailProvider, supportEmail } from "./services/email";
 import { rateLimits } from "./middleware/rateLimits";
@@ -166,6 +167,7 @@ app.use(`${API_PREFIX}/settings`, settingsRoute);
 app.use(`${API_PREFIX}/shipping`, shippingRoutes);
 app.use(`${API_PREFIX}/blogs`, blogRoutes);
 app.use(`${API_PREFIX}/wishlist`, wishlistRoutes);
+app.use(`${API_PREFIX}/cart`, cartRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
 
 app.get("/", (_, res) => {

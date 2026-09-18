@@ -3,6 +3,7 @@ import { ICompanyInfo } from "../../../utils/companyInfo";
 import { IOrderDocumentData } from "../orderDocumentData";
 import {
   AddressBlock,
+  BundleContents,
   formatDate,
   Letterhead,
   MetaRow,
@@ -51,7 +52,16 @@ const PackingSlipPdf = ({ data, company }: IProps) => (
             style={styles.tableRow}
             wrap={false}
           >
-            <Text style={styles.cellProduct}>{item.name}</Text>
+            {/* The combo and the things inside it stay in one cell, so a page
+                break can never leave the contents stranded under the wrong
+                product — the whole row moves or none of it does. */}
+            <View style={styles.cellProduct}>
+              <Text>{item.name}</Text>
+              <BundleContents
+                items={item.bundleItems}
+                lineQuantity={item.quantity}
+              />
+            </View>
             <Text style={styles.cellQuantityRight}>{item.quantity}</Text>
           </View>
         ))}

@@ -63,7 +63,7 @@ export const SIDEBAR_OPTIONS = {
         },
         {
           id: "1-11",
-          title: "Registered Users",
+          title: "Customers",
           url: "/users",
         },
         {
@@ -240,3 +240,21 @@ export const CUSTOMER_TYPE = [
     value: "guest",
   },
 ];
+
+/**
+ * The value the "All" entry of every filter dropdown carries. Radix refuses an
+ * empty string as an item value, so "all" stands in for "no filter" and the
+ * filter drops the query parameter instead of sending it.
+ */
+export const FILTER_ALL = "all";
+
+const ALL_OPTION = { text: "All", value: FILTER_ALL };
+
+/**
+ * Filter-only copies of the lists above. The originals stay clean because the
+ * same arrays drive the dropdowns that set a real status on an order, and "All"
+ * is not a status anything can be moved to.
+ */
+export const ORDER_STATUS_FILTER = [ALL_OPTION, ...ORDER_STATUS];
+export const PAYMENT_STATUS_FILTER = [ALL_OPTION, ...PAYMENT_STATUS];
+export const CUSTOMER_TYPE_FILTER = [ALL_OPTION, ...CUSTOMER_TYPE];

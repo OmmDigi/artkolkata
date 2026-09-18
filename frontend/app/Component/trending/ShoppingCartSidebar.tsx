@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, ShoppingBag, ShoppingCart, TrashIcon } from "lucide-react";
 import Link from "next/link";
 import { useCartStore } from "@/store/useCartStore";
 import { PiShoppingCartSimpleLight } from "react-icons/pi";
+import { useIsLoggedIn } from "@/hooks/useUserStore";
+import { useRouter } from "next/navigation";
+import CustomImage from "@/Component1/CustomImage";
 
 interface CartVariation {
   name: string;
@@ -13,14 +16,27 @@ interface CartVariation {
 }
 
 interface ShoppingCartSidebarProps {
-  variant?: "default" | "amazon";
+  variant?: "default" | "amazon" | "mobileNav";
 }
 
 const ShoppingCartSidebar = ({
   variant = "default",
 }: ShoppingCartSidebarProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const { removeFromCart, updateQuantity, cart } = useCartStore();
+  const isLoggedIn = useIsLoggedIn();
+  const router = useRouter();
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const handleCheckout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsOpen(false);
+    router.push("/checkout");
+  };
 
   const changeQty = (item: any, diff: number) => {
     const newQty = item.quantity + diff;
@@ -34,13 +50,17 @@ const ShoppingCartSidebar = ({
   const deleteItem = (item: any) => {
     removeFromCart(item.id, item.variantId);
   };
-  const subtotal = cart.reduce(
+  const subtotal = isMounted ? cart.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
     0,
-  );
+  ) : 0;
 
-  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-
+  const totalItems = isMounted ? cart.reduce((sum, item) => sum + item.quantity, 0) : 0;
+  const getFullUrl = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("//")) return url;
+    return `${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL || ""}${url}`;
+  };
   const portalContent = (
     <>
       {/* Overlay */}
@@ -94,13 +114,16 @@ const ShoppingCartSidebar = ({
                       href={`/product/${item?.product?.slug}`}
                       className="flex-shrink-0"
                     >
-                      <img
-                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.product?.images?.[0]?.image ||
-                          item?.product?.image1}`}
+                      <CustomImage
+                        src={getFullUrl(
+                          item?.product?.images?.[0]?.image ||
+                            item?.product?.image1,
+                        )}
                         alt={
                           item?.product?.images?.[0]?.alt_tag ||
                           item?.product?.name
                         }
+                        sizes="80px"
                         className="w-20 h-24 object-cover rounded"
                       />
                     </Link>
@@ -197,13 +220,12 @@ const ShoppingCartSidebar = ({
                 >
                   View cart
                 </a> */}
-                <Link
-                  href="/checkout"
-                  onClick={() => setIsOpen(false)}
-                  className="block w-full py-3 px-4 bg-[#02F8C5] text-black text-center text-sm font-medium rounded   transition-colors"
+                <button
+                  onClick={handleCheckout}
+                  className="block w-full py-3 px-4 bg-gray-900 text-white text-center text-sm font-medium rounded   transition-colors"
                 >
                   Checkout
-                </Link>
+                </button>
               </div>
             </div>
           )}
@@ -217,10 +239,14 @@ const ShoppingCartSidebar = ({
       {/* Cart Toggle Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="relative flex items-center py-2 text-sm font-medium text-gray-900 hover:text-gray-700 transition-colors"
+        className={
+          variant === "mobileNav"
+            ? "w-full h-full flex flex-col items-center justify-center"
+            : "relative flex items-center py-2 text-sm font-medium text-gray-900 hover:text-gray-700 transition-colors"
+        }
       >
         {variant === "amazon" ? (
-          <div className="flex items-center text-gray-800 hover:text-orange-500 transition-colors">
+          <div className="flex items-center text-gray-700 hover:text-orange-500 transition-colors">
             <div className="relative flex items-end">
               <PiShoppingCartSimpleLight
                 className=" w-6 h-6  md:w-8 md:h-8"
@@ -233,6 +259,18 @@ const ShoppingCartSidebar = ({
             <span className="hidden md:block font-bold mt-3 ml-1 text-sm">
               Cart
             </span>
+          </div>
+        ) : variant === "mobileNav" ? (
+          <div className="flex flex-col items-center justify-center w-full h-full space-y-1 text-gray-700 hover:text-black">
+            <div className="relative">
+              <ShoppingCart className="w-6 h-6" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {totalItems}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] font-medium leading-none">Cart</span>
           </div>
         ) : (
           <div className="relative">

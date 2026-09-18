@@ -7,10 +7,12 @@ import {
 } from "@/components/ui/select";
 import { Label } from "./ui/label";
 import type { InputOptions } from "@/types";
+import { cn } from "@/lib/utils";
 
 
 interface IProps {
   label?: string;
+  className?: string;
   options: InputOptions[];
   name?: string;
   placeholder?: string;
@@ -24,9 +26,9 @@ interface IProps {
 
 export default function SelectInput(props: IProps) {
   return (
-    <div className="grid gap-3">
+    <div className={cn("grid gap-3", props.className)}>
       {props.label ? (
-        <Label className="font-semibold">{props.label}</Label>
+        <Label className="font-semibold whitespace-nowrap">{props.label}</Label>
       ) : null}
 
       <Select

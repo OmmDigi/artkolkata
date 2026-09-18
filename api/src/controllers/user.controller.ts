@@ -154,9 +154,9 @@ export const login = asyncErrorHandler(async (req, res) => {
 
   httpResponse(res, 200, "Successfully login", {
     [COOKIE_KEY]: token,
-    user : {
-      name : userName,
-      email : userEmail
+    user: {
+      name: userName,
+      email: userEmail,
     },
     permissions: rows[0].permissions,
   });
@@ -389,8 +389,25 @@ export const getUserList = asyncErrorHandler(async (req, res) => {
       is_active,
       -- NULL on every row that predates guest checkout, and those are all real
       -- accounts, so it is coalesced rather than passed through raw.
-      COALESCE(is_guest, false) AS is_guest
+      COALESCE(is_guest, false) AS is_guest,
+
+      -- what the customer is sitting on right now, so an abandoned cart is
+      -- visible from the list instead of only on the user page
+      COALESCE(cart_stat.total_quantity, 0)::int AS cart_item_count,
+      COALESCE(cart_stat.cart_total, 0)::float AS cart_total
      FROM users 
+
+     LEFT JOIN LATERAL (
+       SELECT
+         SUM(c.quantity) AS total_quantity,
+         SUM(c.quantity * COALESCE(pv.price, p.price)) AS cart_total
+       FROM cart c
+       INNER JOIN products p ON p.id = c.product_id
+       LEFT JOIN product_variants pv ON pv.id = c.variant_id
+       -- a product turned private is not something the customer can still buy
+       WHERE c.user_id = users.id AND p.status = 1
+     ) cart_stat ON TRUE
+
      ${filter}
      ORDER BY id DESC
      ${TO_STRING}
@@ -440,6 +457,7 @@ export const getSingleUser = asyncErrorHandler(
           u.is_verified,
           u.is_active,
           u.role,
+          u.is_guest,
           COALESCE(at.user_address, '[]'::json) AS user_address,
           up.permissions
         FROM users u
@@ -456,11 +474,15 @@ export const getSingleUser = asyncErrorHandler(
     );
     if (rowCount == 0) throw new ErrorHandler(404, "User not found");
 
-    const decodedPassword = decrypt(rows[0].password);
-    if (decodedPassword.isError)
-      throw new ErrorHandler(500, "Unable to decrypt user password");
+    let decodedPassword: string | undefined = undefined;
+    if (rows[0].password) {
+      const decryptData = decrypt(rows[0].password);
+      if (decryptData.isError)
+        throw new ErrorHandler(500, "Unable to decrypt user password");
 
-    rows[0].password = decodedPassword.decrypted;
+      decodedPassword = decryptData.decrypted;
+    }
+    rows[0].password = decodedPassword;
 
     httpResponse(res, 200, "Singe Users info", rows[0]);
   },

@@ -167,6 +167,74 @@ export const getSingleProduct = async (productIdSlug: any, userRole : Role) => {
 
      
 
+    // 4. Combo contents — the other products that physically go in the box.
+    // Empty for an ordinary product, which is nearly all of them.
+    //
+    // Name, image and price are read live rather than snapshotted, because this
+    // is the editable record of the combo: the CMS form repopulates from it and
+    // the storefront lists what is inside. The frozen copy that documents and
+    // stock corrections use is taken separately, at checkout.
+    const bundleResult = await client.query(
+      `
+       SELECT
+        b.child_product_id AS product_id,
+        b.child_variant_id AS variant_id,
+        b.quantity,
+        b.position,
+        cp.name AS product_name,
+        cp.slug AS product_slug,
+        cp.sku_id AS product_sku,
+        COALESCE(cv.price, cp.price) AS price,
+        COALESCE(cv.sku, cp.sku_id) AS sku,
+        COALESCE(cv.quantity, cp.available_quantity) AS available_quantity,
+        COALESCE(
+          (
+            SELECT pvi.image
+            FROM product_variant_images pvi
+            WHERE pvi.product_variant_id = cv.id
+              AND COALESCE(pvi.type, 'image') = 'image'
+            ORDER BY pvi.position ASC
+            LIMIT 1
+          ),
+          (
+            SELECT pi.image
+            FROM product_images pi
+            WHERE pi.product_id = cp.id
+              AND COALESCE(pi.type, 'image') = 'image'
+            ORDER BY pi.position ASC
+            LIMIT 1
+          )
+        ) AS image,
+        -- "Red / 20g", the same words the variant is picked by in the CMS
+        (
+          SELECT STRING_AGG(pov.value, ' / ' ORDER BY po.position ASC)
+          FROM variant_option_values vov
+          JOIN product_option_values pov ON pov.id = vov.option_value_id
+          JOIN product_options po ON po.id = pov.option_id
+          WHERE vov.variant_id = cv.id
+        ) AS variant_label
+       FROM product_bundle_items b
+       JOIN products cp ON cp.id = b.child_product_id
+       LEFT JOIN product_variants cv ON cv.id = b.child_variant_id
+       WHERE b.parent_product_id = $1
+       ORDER BY b.position ASC, b.id ASC
+      `,
+      [productId],
+    );
+
+    product.bundle_items = bundleResult.rows.map((row: any) => ({
+      product_id: row.product_id,
+      variant_id: row.variant_id,
+      quantity: row.quantity,
+      name: row.product_name,
+      slug: row.product_slug,
+      sku: row.sku,
+      variant_label: row.variant_label,
+      price: row.price?.toString() ?? null,
+      available_quantity: row.available_quantity,
+      image: row.image,
+    }));
+
     product.variants = variants;
     product.options = options;
     //this opration will only happen if calling by product.id not by slug mainly for the cms call

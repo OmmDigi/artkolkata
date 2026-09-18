@@ -1823,7 +1823,14 @@ export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
          WHEN oi.variant_info IS NOT NULL
          THEN oi.variant_info->'images'->0
          ELSE oi.product_info->'images'->0
-        END AS images
+        END AS images,
+
+        -- what a combo line contained, frozen at checkout
+        COALESCE(
+         oi.variant_info->'bundle_items',
+         oi.product_info->'bundle_items',
+         '[]'::jsonb
+        ) AS bundle_items
 
        FROM order_items oi
 
@@ -1843,6 +1850,13 @@ export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
         name: item.product_name,
         quantity: item.quantity,
         total: item.price,
+        // empty for an ordinary product, so the template can loop
+        // unconditionally
+        bundleItems: ((item.bundle_items ?? []) as any[]).map((child) => ({
+          name: child.name ?? "",
+          variantLabel: child.variant_label ?? null,
+          quantity: num(child.quantity) || 1,
+        })),
       })),
 
       subtotal,

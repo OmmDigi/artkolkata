@@ -1095,3 +1095,93 @@ CREATE INDEX IF NOT EXISTS idx_users_is_guest ON users(is_guest) WHERE is_guest 
 -- this flag, so it has to mean "how it was placed", not "what the customer is
 -- now".
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_guest_order BOOLEAN DEFAULT false;
+
+-- ============================================================
+-- COMBO PRODUCTS (product_bundle_items)
+--
+-- A combo is an ordinary product row that also carries a list of other
+-- products which physically go in the same box. The client builds one by
+-- creating the combo as a normal product and picking the existing products it
+-- contains, so nothing about pricing, images, SEO or discounts changes: the
+-- combo is priced and sold as one line, and this table only records what is
+-- inside it.
+--
+-- Two things read it. Stock: selling one combo also consumes each child, so a
+-- product's available_quantity stays true whether it sold on its own or inside
+-- a combo. Documents: the invoice, packing slip and payment slip print the
+-- contents underneath the combo line, because the person packing the parcel has
+-- to know what to put in it.
+--
+-- A child is deliberately allowed to be a specific variant rather than the
+-- whole product — "Lip Balm / Red 20g" is what goes in the box, and the packer
+-- and the stock count both need that precision. child_variant_id NULL means the
+-- product itself, the same distinction order_items already draws between
+-- product_info and variant_info.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_bundle_items (
+    id SERIAL PRIMARY KEY,
+
+    -- the combo this row belongs to. Dropping the combo drops its contents;
+    -- the child products themselves are untouched.
+    parent_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+
+    -- what goes in the box. RESTRICT, not CASCADE: silently emptying a combo
+    -- because someone deleted one of its products would ship a half parcel.
+    -- deleteProduct turns the resulting 23503 into a readable message.
+    child_product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    child_variant_id INTEGER REFERENCES product_variants(id) ON DELETE RESTRICT,
+
+    -- how many of the child one combo contains
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    -- a combo cannot contain itself
+    CONSTRAINT product_bundle_items_not_self CHECK (parent_product_id <> child_product_id)
+);
+
+-- The same child twice in one combo is a quantity, not two rows. COALESCE
+-- because NULL never equals NULL, so a plain UNIQUE would let the whole-product
+-- row be added over and over.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_product_bundle_items_unique
+ON product_bundle_items (parent_product_id, child_product_id, COALESCE(child_variant_id, 0));
+
+CREATE INDEX IF NOT EXISTS idx_product_bundle_items_parent
+ON product_bundle_items (parent_product_id);
+
+-- deleteProduct asks "is this product inside any combo?" before it deletes
+CREATE INDEX IF NOT EXISTS idx_product_bundle_items_child
+ON product_bundle_items (child_product_id);
+
+-- ============================================================
+-- CART — the logged-in customer's cart, kept server side
+--
+-- The storefront still keeps a localStorage cart so a guest can shop without
+-- an account; on login those rows are merged in here and this table becomes
+-- the source of truth, which is what makes a cart survive a new device and
+-- what the CMS reads to see what a customer left behind.
+--
+-- One row per (user, product, variant). variant_id is NULL for a product sold
+-- without options, and NULL never equals NULL, so the uniqueness has to go
+-- through COALESCE the same way product_bundle_items does it.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS cart (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+
+    -- the exact variant the customer picked, NULL when the product has none
+    variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cart_unique_item
+ON cart (user_id, product_id, COALESCE(variant_id, 0));
+
+CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart(user_id);
+CREATE INDEX IF NOT EXISTS idx_cart_product_id ON cart(product_id);

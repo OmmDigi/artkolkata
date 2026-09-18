@@ -588,7 +588,7 @@ export default function SingleOrderPage() {
                     });
                   }}
                   label="Order Status"
-                  options={ORDER_STATUS}
+                  options={ORDER_STATUS.filter(item => item.value !== "")}
                   value={orderStatus}
                   disabledValues={[
                     // Courier-driven, but only while there is a courier. With a

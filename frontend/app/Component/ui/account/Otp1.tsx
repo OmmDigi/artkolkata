@@ -3,6 +3,9 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useRef, useState, FC, FormEvent, ChangeEvent } from "react";
 import { toast } from "react-toastify";
+import { useUserStore } from "@/hooks/useUserStore";
+import { useWishlistStore } from "@/store/useWishlistStore";
+import { useCartStore } from "@/store/useCartStore";
 
 interface Otp1Props {
   email: string;
@@ -17,6 +20,14 @@ interface VerifyOtpPayload {
 interface OtpResponse {
   success: boolean;
   message: string;
+  data?: {
+    refreshToken: string;
+    user: {
+      name: string;
+      email: string;
+      [key: string]: any;
+    };
+  };
 }
 
 interface ErrorResponse {
@@ -30,6 +41,8 @@ interface ErrorResponse {
 const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const setUser = useUserStore((state) => state.setUser);
+  
   const [otp, setOtp] = useState<string[]>(Array(4).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -39,9 +52,36 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
         url: "/api/v1/users/verify-otp",
         body: payload as any,
       }),
-    onSuccess: (data: OtpResponse) => {
+    onSuccess: async (data: OtpResponse) => {
       toast.success("OTP Verified Successfully!");
+      
+      if (data.data?.refreshToken) {
+        setUser({
+          token: data.data.refreshToken,
+          name: data.data.user?.name,
+          email: data.data.user?.email,
+        });
+
+        // Run wishlist migration
+        const { fetchIds } = useWishlistStore.getState();
+        const saved = JSON.parse(localStorage.getItem("wishlist") || "[]");
+        for (const item of saved) {
+          if (item?.id) {
+            await postRequest({
+              url: "/api/v1/wishlist",
+              body: { product_id: Number(item.id) },
+            }).catch(() => {});
+          }
+        }
+        localStorage.removeItem("wishlist");
+        await fetchIds();
+
+        // same hand-over as the password login : the guest cart is merged in
+        await useCartStore.getState().mergeGuestCart();
+      }
+
       if (onOtpVerified) onOtpVerified();
+      
       const redirectUrl = searchParams.get("redirect") || "/";
       router.push(redirectUrl);
     },
@@ -100,7 +140,7 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
       <button
         type="submit"
         disabled={isPending}
-        className={`bg-amber-400 hover:bg-amber-500 text-white font-medium px-4 py-2 rounded-lg shadow-md
+        className={`bg-gray-700 hover:bg-gray-500 text-white font-medium px-4 py-2 rounded-lg shadow-md
         ${isPending && "opacity-60 cursor-not-allowed"}`}
       >
         {isPending ? "Verifying OTP..." : "Submit OTP"}

@@ -407,6 +407,149 @@ const syncProductTags = async (client: PoolClient, tags: string[]) => {
   );
 };
 
+interface IBundleItemInput {
+  product_id: number;
+  variant_id?: number | null;
+  quantity?: number;
+}
+
+/**
+ * Replaces a combo's contents with the list the CMS sent.
+ *
+ * Wholesale replace rather than a diff, the same way options and images are
+ * handled a few lines down: the form always posts the complete list, and a diff
+ * would only add a way for the two to drift apart.
+ *
+ * Three things are refused here rather than at the database, because each one
+ * needs an explanation the constraint cannot give:
+ *
+ *  - a child that does not exist, which usually means a product was deleted
+ *    while the form was open;
+ *  - a variant that belongs to a different product, which would put the wrong
+ *    thing in the box and decrement the wrong stock;
+ *  - a child that is itself a combo. Nesting is refused outright because only
+ *    one level is ever expanded — by the packing slip, and by the stock
+ *    decrease — so a nested combo would quietly ship and count as one item
+ *    instead of the several it stands for.
+ */
+const syncBundleItems = async (
+  client: PoolClient,
+  parentProductId: number,
+  items: IBundleItemInput[] = [],
+) => {
+  await client.query(
+    "DELETE FROM product_bundle_items WHERE parent_product_id = $1",
+    [parentProductId],
+  );
+
+  if (items.length === 0) return;
+
+  // the same child listed twice is one line with the quantities added up, not
+  // two rows the unique index would then reject
+  const merged = new Map<string, IBundleItemInput & { quantity: number }>();
+
+  for (const item of items) {
+    if (item.product_id === parentProductId)
+      throw new ErrorHandler(400, "A combo cannot contain itself");
+
+    const variantId = item.variant_id ?? null;
+    const key = `${item.product_id}:${variantId ?? 0}`;
+    const quantity = item.quantity ?? 1;
+
+    const existing = merged.get(key);
+    if (existing) {
+      existing.quantity += quantity;
+      continue;
+    }
+
+    merged.set(key, { ...item, variant_id: variantId, quantity });
+  }
+
+  const rows = [...merged.values()];
+  const childIds = [...new Set(rows.map((item) => item.product_id))];
+
+  const { rows: childRows } = await client.query(
+    `SELECT
+      p.id,
+      p.name,
+      EXISTS (
+        SELECT 1 FROM product_bundle_items b WHERE b.parent_product_id = p.id
+      ) AS is_combo
+     FROM products p
+     WHERE p.id = ANY($1::int[])`,
+    [childIds],
+  );
+
+  const childById = new Map<number, any>(
+    childRows.map((row: any) => [row.id, row]),
+  );
+
+  for (const id of childIds) {
+    const child = childById.get(id);
+    if (!child)
+      throw new ErrorHandler(
+        400,
+        `A product chosen for this combo no longer exists (id ${id})`,
+      );
+
+    if (child.is_combo)
+      throw new ErrorHandler(
+        400,
+        `"${child.name}" is itself a combo, so it cannot be put inside another combo`,
+      );
+  }
+
+  const variantIds = rows
+    .map((item) => item.variant_id)
+    .filter((id): id is number => typeof id === "number");
+
+  if (variantIds.length !== 0) {
+    const { rows: variantRows } = await client.query(
+      "SELECT id, product_id FROM product_variants WHERE id = ANY($1::int[])",
+      [variantIds],
+    );
+
+    const productIdByVariant = new Map<number, number>(
+      variantRows.map((row: any) => [row.id, row.product_id]),
+    );
+
+    for (const item of rows) {
+      if (item.variant_id == null) continue;
+
+      const ownerProductId = productIdByVariant.get(item.variant_id);
+
+      if (ownerProductId === undefined)
+        throw new ErrorHandler(
+          400,
+          `A variant chosen for this combo no longer exists (id ${item.variant_id})`,
+        );
+
+      if (ownerProductId !== item.product_id)
+        throw new ErrorHandler(
+          400,
+          `The chosen variant does not belong to "${
+            childById.get(item.product_id)?.name ?? "the selected product"
+          }"`,
+        );
+    }
+  }
+
+  const placeholder = generatePlaceholders(rows.length, 5);
+
+  await client.query(
+    `INSERT INTO product_bundle_items
+      (parent_product_id, child_product_id, child_variant_id, quantity, position)
+     VALUES ${placeholder}`,
+    rows.flatMap((item, index) => [
+      parentProductId,
+      item.product_id,
+      item.variant_id ?? null,
+      item.quantity,
+      index,
+    ]),
+  );
+};
+
 export const getProductTagList = asyncErrorHandler(async (_req, res) => {
   const { rows } = await pool.query(
     "SELECT id, name FROM product_tags ORDER BY name ASC",
@@ -506,6 +649,9 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
     const productId = rows[0].id;
 
     await syncProductTags(client, value.tags ?? []);
+
+    // the other products that go in the box when this one is a combo
+    await syncBundleItems(client, productId, value.bundle_items ?? []);
 
     // 2. insert multiple images/videos of the inserted product
     const imagePlaceholder = generatePlaceholders(value.images.length, 5);
@@ -689,6 +835,8 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
 
     await syncProductTags(client, value.tags ?? []);
 
+    await syncBundleItems(client, productId, value.bundle_items ?? []);
+
     // 1. Delete existing variants and options and product_images
     // await client.query("DELETE FROM product_variants WHERE product_id = $1", [
     //   productId,
@@ -864,6 +1012,28 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
 });
 
 export const deleteProduct = asyncErrorHandler(async (req, res) => {
+  // A product sitting inside a combo is protected by an ON DELETE RESTRICT, so
+  // this would fail anyway — but as a raw foreign key violation that says
+  // nothing about which combo is holding it. Naming them lets the admin go and
+  // empty those combos first.
+  const { rows: combos } = await pool.query(
+    `SELECT DISTINCT p.name
+     FROM product_bundle_items b
+     JOIN products p ON p.id = b.parent_product_id
+     WHERE b.child_product_id = $1
+     ORDER BY p.name
+     LIMIT 5`,
+    [req.params.id],
+  );
+
+  if (combos.length !== 0)
+    throw new ErrorHandler(
+      400,
+      `This product is part of the combo ${combos
+        .map((row: any) => `"${row.name}"`)
+        .join(", ")}. Remove it from there before deleting it.`,
+    );
+
   await pool.query("DELETE FROM products WHERE id = $1", [req.params.id]);
   await invalidateCache(CACHE_TAGS.PRODUCTS);
   httpResponse(res, 200, "Product successfully removed");
@@ -1049,6 +1219,18 @@ export const copyProduct = asyncErrorHandler(async (req, res) => {
         ],
       );
     }
+
+    // 8️⃣ Copy the combo contents, if it is one. The children are the same real
+    // products the original pointed at, not copies of them — a duplicated combo
+    // still ships the same things.
+    await client.query(
+      `INSERT INTO product_bundle_items
+       (parent_product_id, child_product_id, child_variant_id, quantity, position)
+     SELECT $2, child_product_id, child_variant_id, quantity, position
+     FROM product_bundle_items
+     WHERE parent_product_id = $1`,
+      [value.old_product_id, newProductId],
+    );
   });
 
   await invalidateCache(CACHE_TAGS.PRODUCTS);

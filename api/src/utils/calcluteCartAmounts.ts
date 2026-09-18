@@ -196,6 +196,181 @@ export const calcluteCartAmounts = async (
       }
     }
 
+    // ------------------------------------------------------------
+    // COMBO CONTENTS
+    //
+    // A combo is an ordinary product that also ships other products inside it.
+    // Two things need to know that here, and both need it before the order row
+    // is written:
+    //
+    //  - the contents are attached to the item below and travel into
+    //    order_items.product_info / variant_info with everything else. Frozen,
+    //    on purpose: the packing slip printed next month must list what the
+    //    combo held on the day it sold, not what it holds now, and the stock
+    //    put back by a cancellation must be the stock that was taken.
+    //
+    //  - selling a combo consumes its children, so their stock is checked here.
+    //    Demand is summed across the whole cart first — two different combos
+    //    can contain the same lip balm, and a customer can have that lip balm
+    //    in the cart on its own as well. Checking each line separately would
+    //    wave through a cart that empties the shelf between them.
+    // ------------------------------------------------------------
+    const parentProductIds = [
+      ...new Set([
+        ...varientsInfo.map((item) => item.product_id),
+        ...productsInfo.map((item) => item.id),
+      ]),
+    ];
+
+    if (parentProductIds.length !== 0) {
+      const { rows: bundleRows } = await client.query(
+        `
+         SELECT
+          b.parent_product_id,
+          b.child_product_id,
+          b.child_variant_id,
+          b.quantity,
+          cp.name AS product_name,
+          cp.available_quantity AS product_available_quantity,
+          cp.sku_id AS product_sku,
+          cv.sku AS variant_sku,
+          cv.quantity AS variant_available_quantity,
+          (
+            SELECT STRING_AGG(pov.value, ' / ' ORDER BY po.position ASC)
+            FROM variant_option_values vov
+            JOIN product_option_values pov ON pov.id = vov.option_value_id
+            JOIN product_options po ON po.id = pov.option_id
+            WHERE vov.variant_id = cv.id
+          ) AS variant_label
+         FROM product_bundle_items b
+         JOIN products cp ON cp.id = b.child_product_id
+         LEFT JOIN product_variants cv ON cv.id = b.child_variant_id
+         WHERE b.parent_product_id = ANY($1::int[])
+         ORDER BY b.position ASC, b.id ASC
+        `,
+        [parentProductIds],
+      );
+
+      if (bundleRows.length !== 0) {
+        const bundlesByParent = new Map<number, any[]>();
+        for (const row of bundleRows) {
+          const list = bundlesByParent.get(row.parent_product_id) ?? [];
+          list.push(row);
+          bundlesByParent.set(row.parent_product_id, list);
+        }
+
+        // a child is identified the same way an order line is: a variant when
+        // one was chosen, otherwise the product itself
+        const keyOf = (productId: number, variantId: number | null) =>
+          variantId == null ? `p:${productId}` : `v:${variantId}`;
+
+        const demand = new Map<
+          string,
+          { label: string; required: number; available: number }
+        >();
+
+        const addDemand = (
+          key: string,
+          label: string,
+          available: number,
+          quantity: number,
+        ) => {
+          const existing = demand.get(key);
+          if (existing) {
+            existing.required += quantity;
+            return;
+          }
+          demand.set(key, { label, required: quantity, available });
+        };
+
+        // what the cart already takes off the shelf on its own, so a combo
+        // cannot be sold out of stock its own cart has spoken for
+        for (const varient of varient_ids) {
+          const info = varientsInfo.find((item) => item.id == varient.id);
+          if (!info) continue;
+          addDemand(
+            keyOf(info.product_id, info.id),
+            `${info.product_name}${info.sku ? ` (${info.sku})` : ""}`,
+            Number(info.quantity),
+            varient.quantity,
+          );
+        }
+
+        for (const product of product_ids) {
+          const info = productsInfo.find((item) => item.id == product.id);
+          if (!info) continue;
+          addDemand(
+            keyOf(info.id, null),
+            info.name,
+            Number(info.available_quantity),
+            product.quantity,
+          );
+        }
+
+        // then what the combos in the cart take
+        const attachBundle = (
+          parentProductId: number,
+          orderedQuantity: number,
+        ) => {
+          const rows = bundlesByParent.get(parentProductId);
+          if (!rows) return [];
+
+          return rows.map((row: any) => {
+            const isVariant = row.child_variant_id != null;
+            const available = Number(
+              isVariant
+                ? row.variant_available_quantity
+                : row.product_available_quantity,
+            );
+            const sku = (isVariant ? row.variant_sku : row.product_sku) ?? null;
+            const label = `${row.product_name}${
+              row.variant_label ? ` (${row.variant_label})` : ""
+            }`;
+
+            addDemand(
+              keyOf(row.child_product_id, row.child_variant_id),
+              label,
+              available,
+              row.quantity * orderedQuantity,
+            );
+
+            // the snapshot that rides along on the order line
+            return {
+              product_id: row.child_product_id,
+              variant_id: row.child_variant_id,
+              quantity: row.quantity,
+              name: row.product_name,
+              variant_label: row.variant_label ?? null,
+              sku,
+            };
+          });
+        };
+
+        for (const varient of varient_ids) {
+          const info = varientsInfo.find((item) => item.id == varient.id);
+          if (!info) continue;
+          (info as any).bundle_items = attachBundle(
+            info.product_id,
+            varient.quantity,
+          );
+        }
+
+        for (const product of product_ids) {
+          const info = productsInfo.find((item) => item.id == product.id);
+          if (!info) continue;
+          (info as any).bundle_items = attachBundle(info.id, product.quantity);
+        }
+
+        for (const item of demand.values()) {
+          if (item.required > item.available)
+            throw new ErrorHandler(
+              400,
+              `${item.label} quantity not avilable`,
+            );
+        }
+      }
+    }
+
     if (discount_code) {
       // a category coupon with nothing matching in the cart discounts nothing
       if (discountCategoryList.length !== 0 && eligibleAmount === 0) {
