@@ -59,7 +59,7 @@ export default function CategoryPage() {
     useDoMutation();
 
   const { categoryData, isCategoryFetching, categoryError, refetchCategory } =
-    useCategory({ page: currentPage, limit : -1, search: currentSearch });
+    useCategory({ page: currentPage, limit: -1, search: currentSearch });
 
   const onVisibilityChange = (item: ICategory, isVisible: boolean) => {
     const payload: Record<string, string | number | boolean | null> = {
@@ -129,7 +129,9 @@ export default function CategoryPage() {
                   Category Name
                 </TableHead>
                 <TableHead className="text-white text-center">Slug</TableHead>
-                <TableHead className="text-white text-center">Position</TableHead>
+                <TableHead className="text-white text-center">
+                  Position
+                </TableHead>
                 <TableHead className="text-white text-center">
                   Visibility
                 </TableHead>
@@ -155,7 +157,9 @@ export default function CategoryPage() {
                     {item.name}
                   </TableCell>
                   <TableCell className="text-center">{item.slug}</TableCell>
-                  <TableCell className="text-center">{item.position ?? 0}</TableCell>
+                  <TableCell className="text-center">
+                    {item.position ?? 0}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-2">
                       <Switch
@@ -167,7 +171,9 @@ export default function CategoryPage() {
                           onVisibilityChange(item, checked)
                         }
                       />
-                      <Badge variant={item.is_visible ? "default" : "secondary"}>
+                      <Badge
+                        variant={item.is_visible ? "default" : "secondary"}
+                      >
                         {item.is_visible ? "Public" : "Private"}
                       </Badge>
                     </div>
@@ -190,7 +196,7 @@ export default function CategoryPage() {
                           onClick={() => {
                             if (
                               !confirm(
-                                "Are you sure you want to remove this category ?"
+                                "Are you sure you want to remove this category ?",
                               )
                             )
                               return;

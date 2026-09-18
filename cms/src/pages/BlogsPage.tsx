@@ -45,8 +45,9 @@ export default function BlogsPage() {
           <TableHeader>
             <TableRow className="bg-green-600 hover:!bg-green-600">
               <TableHead className="text-white">Title</TableHead>
+              <TableHead className="text-white text-center">Author</TableHead>
               <TableHead className="text-white text-center">Status</TableHead>
-              <TableHead className="text-white text-center">Created</TableHead>
+              <TableHead className="text-white text-center">Published</TableHead>
               <TableHead className="text-right text-white">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -59,19 +60,28 @@ export default function BlogsPage() {
                     <span className="text-xs text-gray-500 font-normal">/{blog.slug}</span>
                   </div>
                 </TableCell>
+                <TableCell className="text-center text-sm text-gray-600">
+                  {blog.author?.name ?? "—"}
+                </TableCell>
                 <TableCell className="text-center">
-                  {blog.status === "published" ? (
-                    <span className="inline-block px-3.5 py-1 rounded-full bg-green-700 text-white text-sm">
-                      Published
-                    </span>
-                  ) : (
+                  {/* "published" alone is not the whole story: a post dated in
+                      the future is saved as published but not readable yet */}
+                  {blog.status !== "published" ? (
                     <span className="inline-block px-3.5 py-1 rounded-full bg-yellow-500 text-white text-sm">
                       Draft
+                    </span>
+                  ) : blog.is_scheduled ? (
+                    <span className="inline-block px-3.5 py-1 rounded-full bg-blue-600 text-white text-sm">
+                      Scheduled
+                    </span>
+                  ) : (
+                    <span className="inline-block px-3.5 py-1 rounded-full bg-green-700 text-white text-sm">
+                      Published
                     </span>
                   )}
                 </TableCell>
                 <TableCell className="text-center text-sm text-gray-600">
-                  {blog.created_at}
+                  {blog.published_at_label ?? blog.created_at}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-5">

@@ -1,7 +1,10 @@
 # ------------------------
 # Stage 1: Build
 # ------------------------
-FROM node:18-alpine AS builder
+# @react-pdf/renderer ships ESM only. This is a commonjs build, so it reaches it
+# through require(esm), which node only supports from 22.12 — on 18 the api
+# starts and then dies the first time a document is generated.
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +21,7 @@ RUN npm run build
 # ------------------------
 # Stage 2: Runtime
 # ------------------------
-FROM node:18-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 

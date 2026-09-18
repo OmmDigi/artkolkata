@@ -11,6 +11,9 @@ export const SITE_INFO_DEFAULTS: ISiteInfo = {
   contact_emails: [],
   contact_phones: [],
   site_addresses: [],
+  ribbon_section: { text: "", link: null },
+  payment_methods: { cod_enabled: true, online_enabled: true },
+  guest_checkout: { enabled: true },
 };
 
 export const useSiteInfo = () => {

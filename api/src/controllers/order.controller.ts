@@ -1,27 +1,42 @@
 import { pool } from "..";
 import {
+  COURIER_PROTECTED_STATUSES,
   ONLINE_PAYMENT,
   ORDER_CANCELLED,
   ORDER_CONFIRMED,
   ORDER_DELIVERED,
   ORDER_PENDING,
+  ORDER_RETURNED,
   ORDER_RETURN_INITIATED,
+  RETURN_WINDOW_DAYS,
   REPLACE_INITIATED,
+  REPLACED,
   SHIPMENT_MAPING,
+  GST_PERCENTAGE,
 } from "../constant";
 import { v4 as uuidv4 } from "uuid";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
-import { CustomRequest, IShippingAddress, ITokenInfo } from "../types";
+import { CustomRequest, IShippingAddress } from "../types";
+import {
+  assertGuestCheckoutEnabled,
+  assertPaymentMethodEnabled,
+} from "./settings.controller";
 import { calcluteCartAmounts } from "../utils/calcluteCartAmounts";
 import { calculateAutoDiscount } from "../utils/calculateAutoDiscount";
-import { buildPriceBreakdown } from "../utils/buildPriceBreakdown";
+import { buildPriceBreakdown, IPriceBreakdown } from "../utils/buildPriceBreakdown";
 import { doTransition } from "../utils/doTransition";
 import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { generateOrderNumber } from "../utils/generateOrderNumber";
 import { generatePlaceholders } from "../utils/generatePlaceholders";
 import { httpResponse } from "../utils/httpResponse";
+import {
+  CACHE_TAGS,
+  invalidateCache,
+} from "../services/cache.service";
 import { manageStock } from "../utils/manageStock";
+import { notifyStaffNewOrder } from "../utils/notifyStaffNewOrder";
+import { notifyOrderReceived, notifyOrderStatus } from "../utils/orderEmails";
 import { parsePagination } from "../utils/parsePagination";
 import {
   VCancelOrder,
@@ -33,19 +48,50 @@ import {
   VUpdateShipmentBoxes,
   VUploadOrderInvoice,
 } from "../validator/order.validator";
-import DelhiveryService from "../services/delhiveryService";
-import BigshipService, { EWAYBILL_THRESHOLD } from "../services/bigshipService";
 import {
   aggregateShipmentDimensions,
   IShipmentDimensionInput,
 } from "../utils/aggregateShipmentDimensions";
 import {
-  createBigshipShipment,
+  EWAYBILL_THRESHOLD,
+  getShippingPartner,
+  isShippingEnabled,
   parseShipmentBoxes,
-} from "../utils/createBigshipShipment";
-import { createPaymentGatewayOrder } from "../services/payment.service";
+  ShipmentSkipReason,
+} from "../services/shipping";
+import { describeInstrument, getPaymentGateway } from "../services/payment";
+import { isEmailEnabled } from "../services/email";
+import { sendEmail } from "../utils/sendEmail";
+import { saveOrderAddress } from "../utils/saveOrderAddress";
+import { resolveGuestUser } from "../utils/resolveGuestUser";
+import {
+  createGuestOrderToken,
+  requireGuestOrderToken,
+} from "../services/guestOrderToken";
+import { fetchCustomerOrderById } from "../services/customerOrders.service";
+
 import logger from "../utils/logger";
 import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
+import { getOrderDocumentData } from "../services/documents/orderDocumentData";
+import {
+  renderInvoicePdf,
+  renderPackingSlipPdf,
+} from "../services/documents/renderOrderDocument";
+import {
+  deleteOrderDocument,
+  fetchOrderDocument,
+  uploadOrderDocument,
+} from "../services/documents/documentStorage";
+import {
+  attachOrderToIdempotencyKey,
+  completeIdempotencyKey,
+  hashRequestPayload,
+  readIdempotencyKey,
+  releaseIdempotencyKey,
+  reserveIdempotencyKey,
+} from "../utils/idempotency";
+
+const PLACE_ORDER_ENDPOINT = "POST /orders/place-order";
 
 export const createOrder = asyncErrorHandler(
   async (req: CustomRequest, res) => {
@@ -64,9 +110,75 @@ export const createOrder = asyncErrorHandler(
       };
     }>(VCreateOrder, req.body ?? {});
 
+    // The store owner can switch either method off from the CMS. Checked before
+    // the idempotency key is reserved, so a rejected method never burns a key
+    // the customer would then have to change to retry with.
+    await assertPaymentMethodEnabled(value.paymentMethod);
+
+    /**
+     * Who is placing this. The route runs checkUser, not isAuthenticated, so a
+     * missing or expired token is not an error here — it means guest checkout.
+     *
+     * A guest still gets a users row (see resolveGuestUser); everything below
+     * this point works with a plain user id and neither knows nor cares which
+     * of the two branches produced it. The only thing that stays different is
+     * isGuestOrder, which is recorded on the order and decides whether a guest
+     * order token is handed back at the end.
+     */
+    const isGuestOrder = !req.token_info;
+    let customerId: number;
+
+    if (req.token_info) {
+      customerId = req.token_info.id;
+    } else {
+      // Refuses when the owner has turned guest checkout off, and before a key
+      // is reserved for the same reason the payment check is.
+      await assertGuestCheckoutEnabled();
+
+      // Throws 409 ACCOUNT_EXISTS when this email is a real account — placing
+      // the order would otherwise file it into a stranger's order history.
+      const guest = await resolveGuestUser(value.shippingDetails);
+      customerId = guest.id;
+    }
+
+    // Placing an order is not safe to repeat, so the client sends a key that
+    // is stable across its retries and we do the work at most once for it. The
+    // reservation happens before the order transaction opens and commits on
+    // its own, so a duplicate arriving mid-flight sees it and backs off.
+    //
+    // Keyed by the guest's shadow user id for a guest order, which is what
+    // makes the key work at all without a session: the same email resolves to
+    // the same row, so a retry lands in the same bucket as the original.
+    const idempotencyKey = readIdempotencyKey(req);
+    const reservation = await reserveIdempotencyKey({
+      key: idempotencyKey,
+      userId: customerId,
+      endpoint: PLACE_ORDER_ENDPOINT,
+      // the validated payload, not the raw body: two retries that differ only
+      // in fields Joi strips must still count as the same request
+      requestHash: hashRequestPayload(value),
+    });
+
+    // A duplicate of an order that already went through. Replay the original
+    // reply verbatim — for ONLINE that is the same gateway URL, so the
+    // customer lands back on the payment page they were already sent to
+    // instead of a second one for a second order.
+    if (!reservation.reserved) {
+      return httpResponse(
+        res,
+        reservation.status,
+        reservation.message,
+        reservation.data,
+      );
+    }
+
     let paymentMethodOrderId: string | null = null;
     let totalFinalAmount = 0;
     let paymentPageUrl: string | null = null;
+    let createdOrderId: number | null = null;
+    // Hoisted out of the transaction so the guest order token, which is minted
+    // after the commit, can name the order the customer is looking at.
+    let createdOrderNumber: string | null = null;
 
     let shipmentDimensions = {
       weight: 0.5,
@@ -75,256 +187,295 @@ export const createOrder = asyncErrorHandler(
       height: 10,
     };
 
-    await doTransition(async (client) => {
-      let tokenInfo: ITokenInfo | null = null;
+    try {
+      await doTransition(async (client) => {
 
-      // let guestUserInfo: null | any = null;
-      // if (!req.token_info) {
-      //   // mean user is not logged in. mean i need to create a new user with the shiping info
+        const { priceAfterDiscount, couponDiscount, subTotal, productsInfo, varientsInfo } =
+          await calcluteCartAmounts(
+            value.product.varient_ids,
+            value.product.product_ids,
+            value.product.code,
+            client,
+          );
 
-      //   //create the new user
-      //   const passwordStr = generateRandomTextPrefix();
-      //   const encryptPassword = encrypt(passwordStr);
-      //   const { rowCount, rows } = await client.query(
-      //     `
-      //       INSERT INTO users
-      //           (name, email, phone_no, password, is_verified, role)
-      //       VALUES
-      //           ($1, $2, $3, $4, 'true', 'User')
-      //       ON CONFLICT (email) DO NOTHING
-      //       RETURNING id, role
-      //       `,
-      //     [
-      //       value.shippingDetails.fullName,
-      //       value.shippingDetails.email,
-      //       value.shippingDetails.phone,
-      //       encryptPassword,
-      //     ],
-      //   );
+        const cartDimensionInputs: IShipmentDimensionInput[] = [];
+        for (const v of value.product.varient_ids) {
+          const info = varientsInfo.find((item) => item.id == v.id);
+          if (info) cartDimensionInputs.push({ ...info, quantity: v.quantity });
+        }
+        for (const p of value.product.product_ids) {
+          const info = productsInfo.find((item) => item.id == p.id);
+          if (info) cartDimensionInputs.push({ ...info, quantity: p.quantity });
+        }
+        // Snapshotted onto the order below so the shipment booked later uses the
+        // dimensions as they were when the customer ordered.
+        shipmentDimensions = aggregateShipmentDimensions(cartDimensionInputs);
 
-      //   // now check if the email is already exist or not if exist tell user you already have an account login with that account
-      //   if (rowCount === 0)
-      //     throw new ErrorHandler(401, "Login your account first");
+        // Pincode serviceability only : the quoted courier rate is ignored, the
+        // customer is never charged for delivery.
+        const serviceability = await getShippingPartner().checkShipment({
+          pincode: value.shippingDetails.pincode,
+          weight: shipmentDimensions.weight,
+          invoiceValue: subTotal,
+          cod: value.paymentMethod === "COD",
+          dimensions: shipmentDimensions,
+        });
 
-      //   guestUserInfo = {
-      //     email: value.shippingDetails.email,
-      //     password: passwordStr,
-      //     loginUrl: `${process.env.FRONTEND_HOST_URL}/authenteaction`,
-      //   };
-
-      //   // send the password to the regiesterd email
-      //   tokenInfo = {
-      //     id: rows[0].id,
-      //     role: rows[0].role,
-      //   };
-      // } else {
-      //   tokenInfo = req.token_info;
-      // }
-
-      tokenInfo = req.token_info ?? null;
-
-      if (!tokenInfo) throw new ErrorHandler(400, "User info is required!");
-
-      const {
-        priceAfterDiscount,
-        couponDiscount,
-        subTotal,
-        productsInfo,
-        varientsInfo,
-      } = await calcluteCartAmounts(
-        value.product.varient_ids,
-        value.product.product_ids,
-        value.product.code,
-        client,
-      );
-
-      const cartDimensionInputs: IShipmentDimensionInput[] = [];
-      for (const v of value.product.varient_ids) {
-        const info = varientsInfo.find((item) => item.id == v.id);
-        if (info) cartDimensionInputs.push({ ...info, quantity: v.quantity });
-      }
-      for (const p of value.product.product_ids) {
-        const info = productsInfo.find((item) => item.id == p.id);
-        if (info) cartDimensionInputs.push({ ...info, quantity: p.quantity });
-      }
-      // Snapshotted onto the order below so the shipment booked later uses the
-      // dimensions as they were when the customer ordered.
-      shipmentDimensions = aggregateShipmentDimensions(cartDimensionInputs);
-
-      // Pincode serviceability only : the quoted courier rate is ignored, the
-      // customer is never charged for delivery.
-      const serviceability = await BigshipService.checkServiceability(
-        value.shippingDetails.pincode,
-        shipmentDimensions.weight,
-        subTotal,
-        value.paymentMethod === "COD",
-        shipmentDimensions,
-      );
-
-      if (!serviceability.success) {
-        throw new ErrorHandler(
-          500,
-          "Unable to verify delivery availability. Try again.",
-        );
-      }
-
-      if (!serviceability.serviceable) {
-        throw new ErrorHandler(
-          400,
-          `Delivery not available for pincode ${value.shippingDetails.pincode}`,
-        );
-      }
-
-      // now continue with creating order
-
-      const shippingAddressSnapshot = {
-        name: value.shippingDetails.fullName,
-        phone: value.shippingDetails.phone,
-        email: value.shippingDetails.email,
-        address_line1: value.shippingDetails.address,
-        city: value.shippingDetails.city,
-        state: value.shippingDetails.state,
-        pincode: value.shippingDetails.pincode,
-        country: value.shippingDetails.country ?? "India",
-      };
-
-      const orderNumber = generateOrderNumber();
-
-      // order value rule (e.g. "spend ₹2000, get 10% off") — applied on top of
-      // the coupon, on the same client so it reads the rules inside the transaction
-      const autoDiscount = await calculateAutoDiscount(
-        priceAfterDiscount,
-        !!value.product.code,
-        client,
-      );
-
-      // same helper the checkout preview calls, so what was quoted is charged
-      const priceBreakdown = buildPriceBreakdown({
-        subTotal,
-        priceAfterDiscount,
-        couponDiscount,
-        autoDiscount,
-      });
-
-      totalFinalAmount = priceBreakdown.total;
-
-      const orderInfo = await client.query(
-        `INSERT INTO orders
-            (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, total_amount, coupon_code, shipping_address, price_breakdown, payment_method, shipment_dimensions)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING order_id`,
-        [
-          tokenInfo.id,
-          orderNumber,
-          priceBreakdown.subtotal,
-          priceBreakdown.discount,
-          priceBreakdown.coupon_discount,
-          priceBreakdown.auto_discount,
-          autoDiscount.rule?.id ?? null,
-          priceBreakdown.shipping_charge,
-          totalFinalAmount,
-          value.product.code,
-          JSON.stringify(shippingAddressSnapshot),
-          JSON.stringify(priceBreakdown),
-          value.paymentMethod,
-          JSON.stringify(shipmentDimensions),
-        ],
-      );
-
-      const orderId = orderInfo.rows[0].order_id;
-
-      const placeholder = generatePlaceholders(
-        value.product.varient_ids.length + value.product.product_ids.length,
-        6,
-      );
-
-      const valuesToStore: any[] = [];
-
-      for (const varient of value.product.varient_ids) {
-        const dbVarientInfo = varientsInfo.find(
-          (item) => item.id == varient.id,
-        );
-
-        if (!dbVarientInfo)
-          throw new ErrorHandler(404, "No varient id found in database");
-
-        valuesToStore.push(orderId);
-        valuesToStore.push(null);
-        valuesToStore.push(dbVarientInfo);
-        valuesToStore.push(varient.quantity);
-        valuesToStore.push(dbVarientInfo.price);
-        valuesToStore.push(parseFloat(dbVarientInfo.price) * varient.quantity);
-      }
-
-      for (const product of value.product.product_ids) {
-        const dbProductInfo = productsInfo.find(
-          (item) => item.id == product.id,
-        );
-        if (!dbProductInfo)
-          throw new ErrorHandler(404, "No product id found in database");
-        valuesToStore.push(orderId);
-        valuesToStore.push(dbProductInfo as any);
-        valuesToStore.push(null);
-        valuesToStore.push(product.quantity);
-        valuesToStore.push(dbProductInfo.price);
-        valuesToStore.push(parseFloat(dbProductInfo.price) * product.quantity);
-      }
-
-      await client.query(
-        `INSERT INTO order_items 
-            (order_id, product_info, variant_info, quantity, price, subtotal)
-         VALUES 
-            ${placeholder}`,
-        valuesToStore,
-      );
-
-      if (value.paymentMethod == "ONLINE") {
-        const { orderid, paymentPageUrl: paymentUrl } =
-          await createPaymentGatewayOrder({
-            amount: totalFinalAmount,
-            dbOrderRowId: orderId,
-            marchentOrderId: uuidv4(),
-            provider: "phonepe",
-            userName: value.shippingDetails.fullName,
-            userPhoneNumber: value.shippingDetails.phone,
+        // A partner that is down or not configured must not stop a customer
+        // paying — only a positive "no courier goes there" blocks the order. The
+        // booking itself happens later, on confirm, where it can be retried.
+        if (!serviceability.success) {
+          logger.error({
+            message: "Serviceability check failed, allowing the order through",
+            partner: getShippingPartner().name,
+            pincode: value.shippingDetails.pincode,
+            error: serviceability.error,
           });
+        } else if (!serviceability.serviceable) {
+          throw new ErrorHandler(
+            400,
+            `Delivery not available for pincode ${value.shippingDetails.pincode}`,
+          );
+        }
 
-        paymentPageUrl = paymentUrl;
-        paymentMethodOrderId = orderid;
-      }
+        // now continue with creating order
 
-      await client.query(
-        `
-        INSERT INTO payments
-            (order_id, provider, provider_order_id, amount, status)
-        VALUES
-            ($1, $2, $3, $4, $5)
-        `,
-        [
-          orderId,
-          value.paymentMethod == "ONLINE" ? "PhonePe" : null,
-          paymentMethodOrderId,
-          totalFinalAmount,
-          "PENDING",
-        ],
-      );
+        const shippingAddressSnapshot = {
+          name: value.shippingDetails.fullName,
+          phone: value.shippingDetails.phone,
+          email: value.shippingDetails.email,
+          address_line1: value.shippingDetails.address,
+          city: value.shippingDetails.city,
+          state: value.shippingDetails.state,
+          pincode: value.shippingDetails.pincode,
+          country: value.shippingDetails.country ?? "India",
+        };
 
-      // send guest account deatils
-      // if (guestUserInfo != null) {
-      //   await sendEmail(
-      //     guestUserInfo.email,
-      //     "SEND_GUEST_EMAIL_PASSWORD",
-      //     guestUserInfo,
-      //   );
-      // }
-    });
+        // the address typed at checkout also goes to the user's address book,
+        // the order snapshot above is only a frozen copy of it. A guest gets
+        // one too — the row is theirs the day they set a password and the
+        // shadow account becomes a real one.
+        await saveOrderAddress(client, customerId, value.shippingDetails);
+
+        const orderNumber = generateOrderNumber();
+        createdOrderNumber = orderNumber;
+
+        // order value rule (e.g. "spend ₹2000, get 10% off") — applied on top of
+        // the coupon, on the same client so it reads the rules inside the transaction
+        const autoDiscount = await calculateAutoDiscount(
+          priceAfterDiscount,
+          !!value.product.code,
+          client,
+        );
+
+        // same helper the checkout preview calls, so what was quoted is charged.
+        // The shipping slab is read on the same client, inside this transaction.
+        const priceBreakdown = await buildPriceBreakdown({
+          subTotal,
+          priceAfterDiscount,
+          couponDiscount,
+          autoDiscount,
+          paymentMethod: value.paymentMethod,
+          client,
+        });
+
+        totalFinalAmount = priceBreakdown.total;
+
+        const orderInfo = await client.query(
+          `INSERT INTO orders
+              (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, shipping_rule_id, total_amount, coupon_code, shipping_address, price_breakdown, payment_method, shipment_dimensions, is_guest_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING order_id`,
+          [
+            customerId,
+            orderNumber,
+            priceBreakdown.subtotal,
+            priceBreakdown.discount,
+            priceBreakdown.coupon_discount,
+            priceBreakdown.auto_discount,
+            autoDiscount.rule?.id ?? null,
+            priceBreakdown.shipping_charge,
+            priceBreakdown.shipping_rule?.id ?? null,
+            totalFinalAmount,
+            value.product.code,
+            JSON.stringify(shippingAddressSnapshot),
+            JSON.stringify(priceBreakdown),
+            value.paymentMethod,
+            JSON.stringify(shipmentDimensions),
+            isGuestOrder,
+          ],
+        );
+
+        const orderId = orderInfo.rows[0].order_id;
+        createdOrderId = orderId;
+
+        // On the transaction client on purpose: this commits with the order,
+        // so a key found IN_PROGRESS with an order_id is proof the order got
+        // through and must not be recreated by a retry.
+        await attachOrderToIdempotencyKey(client, reservation.recordId, orderId);
+
+        const placeholder = generatePlaceholders(
+          value.product.varient_ids.length + value.product.product_ids.length,
+          6,
+        );
+
+        const valuesToStore: any[] = [];
+
+        for (const varient of value.product.varient_ids) {
+          const dbVarientInfo = varientsInfo.find(
+            (item) => item.id == varient.id,
+          );
+
+          if (!dbVarientInfo)
+            throw new ErrorHandler(404, "No varient id found in database");
+
+          valuesToStore.push(orderId);
+          valuesToStore.push(null);
+          valuesToStore.push(dbVarientInfo);
+          valuesToStore.push(varient.quantity);
+          valuesToStore.push(dbVarientInfo.price);
+          valuesToStore.push(parseFloat(dbVarientInfo.price) * varient.quantity);
+        }
+
+        for (const product of value.product.product_ids) {
+          const dbProductInfo = productsInfo.find(
+            (item) => item.id == product.id,
+          );
+          if (!dbProductInfo)
+            throw new ErrorHandler(404, "No product id found in database");
+          valuesToStore.push(orderId);
+          valuesToStore.push(dbProductInfo as any);
+          valuesToStore.push(null);
+          valuesToStore.push(product.quantity);
+          valuesToStore.push(dbProductInfo.price);
+          valuesToStore.push(parseFloat(dbProductInfo.price) * product.quantity);
+        }
+
+        await client.query(
+          `INSERT INTO order_items 
+              (order_id, product_info, variant_info, quantity, price, subtotal)
+           VALUES 
+              ${placeholder}`,
+          valuesToStore,
+        );
+
+        // Whichever gateway PAYMENT_GATEWAY selected at startup. Nothing here
+        // knows or cares which one that is.
+        const gateway = getPaymentGateway();
+
+        if (value.paymentMethod == "ONLINE") {
+          const { providerOrderId, paymentPageUrl: paymentUrl } =
+            await gateway.createPaymentLink({
+              amount: totalFinalAmount,
+              orderRowId: orderId,
+              merchantOrderId: uuidv4(),
+              customerName: value.shippingDetails.fullName,
+              customerPhone: value.shippingDetails.phone,
+              customerEmail: shippingAddressSnapshot.email,
+            });
+
+          paymentPageUrl = paymentUrl;
+          paymentMethodOrderId = providerOrderId;
+        }
+
+        // A COD order is already settled as far as the instrument goes — the
+        // money arrives as cash at the door. An online one has no instrument
+        // yet: the customer has not picked UPI or a card, so the columns stay
+        // empty until the gateway says which it was.
+        const codInstrument =
+          value.paymentMethod == "ONLINE" ? null : describeInstrument({ type: "COD" });
+
+        await client.query(
+          `
+          INSERT INTO payments
+              (order_id, provider, provider_order_id, amount, status,
+               payment_instrument, instrument_label, instrument_detail)
+          VALUES
+              ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+          `,
+          [
+            orderId,
+            value.paymentMethod == "ONLINE" ? gateway.label : null,
+            paymentMethodOrderId,
+            totalFinalAmount,
+            "PENDING",
+            codInstrument?.type ?? null,
+            codInstrument?.label ?? null,
+            codInstrument ? JSON.stringify(codInstrument) : null,
+          ],
+        );
+
+      });
+    } catch (e) {
+      // Nothing committed — doTransition rolled the whole thing back — so the
+      // key goes back to being usable and the customer can fix whatever failed
+      // and submit again with the same key.
+      await releaseIdempotencyKey(reservation.recordId);
+      throw e;
+    }
 
     // No Bigship shipment is booked here, for COD or ONLINE. The boxes that
     // actually ship are keyed into the CMS by hand after the order lands, so
     // booking only happens when an admin moves the order to CONFIRMED.
 
-    httpResponse(res, 201, "New order successfully created", {
+    const responseMessage = "New order successfully created";
+
+    /**
+     * A guest has no session, so this token is the only thing that will let
+     * them back into the order they just placed — the confirmation page, the
+     * invoice, and cancelling while it is still PENDING all read it.
+     *
+     * Minted after the commit on purpose: a token for an order that rolled
+     * back would be a link to nothing. It goes into responseData and therefore
+     * into the stored idempotency reply, so a retry of the same key hands back
+     * the same token rather than a second one.
+     */
+    const guestToken =
+      isGuestOrder && createdOrderId != null && createdOrderNumber != null
+        ? createGuestOrderToken({
+            order_id: createdOrderId,
+            order_number: createdOrderNumber,
+            email: value.shippingDetails.email.trim().toLowerCase(),
+            user_id: customerId,
+          })
+        : null;
+
+    const responseData = {
       gatewayUrl: value.paymentMethod === "ONLINE" ? paymentPageUrl : null,
+      // The order number is returned for every order, guest or not: the
+      // storefront needs it to route to the confirmation page without a
+      // second round trip.
+      orderNumber: createdOrderNumber,
+      isGuestOrder,
+      guestToken,
+    };
+
+    // Store the reply before sending it, so a retry that arrives while this
+    // response is still in flight replays it instead of being told the request
+    // is still in progress. COD and ONLINE both land here; for ONLINE this is
+    // what pins a duplicate to the same gateway page.
+    await completeIdempotencyKey({
+      recordId: reservation.recordId,
+      orderId: createdOrderId,
+      status: 201,
+      message: responseMessage,
+      data: responseData,
     });
+
+    // Tell the staff who work on orders that a new one landed. Fire and forget
+    // on purpose : the customer's checkout response must not wait on SMTP, and
+    // a mail failure must not fail an order that is already committed.
+    if (createdOrderId != null) {
+      notifyStaffNewOrder(createdOrderId);
+
+      // And tell the customer we have their order — but only for COD, where
+      // placing the order is the whole transaction. An ONLINE order exists in
+      // PENDING before the customer has even reached the gateway, so its
+      // receipt email waits for the payment to actually succeed and is sent
+      // from recordPaymentEvent instead.
+      if (value.paymentMethod !== "ONLINE") notifyOrderReceived(createdOrderId);
+    }
+
+    httpResponse(res, 201, responseMessage, responseData);
   },
 );
 
@@ -344,17 +495,12 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     };
   }>(VGetPriceBreakdown, req.body ?? {});
 
-  const {
-    priceAfterDiscount,
-    couponDiscount,
-    subTotal,
-    productsInfo,
-    varientsInfo,
-  } = await calcluteCartAmounts(
-    value.product.varient_ids,
-    value.product.product_ids,
-    value.product.code,
-  );
+  const { priceAfterDiscount, couponDiscount, subTotal, productsInfo, varientsInfo } =
+    await calcluteCartAmounts(
+      value.product.varient_ids,
+      value.product.product_ids,
+      value.product.code,
+    );
 
   const cartDimensionInputs: IShipmentDimensionInput[] = [];
   for (const v of value.product.varient_ids) {
@@ -367,24 +513,18 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
   }
   const cartDimensions = aggregateShipmentDimensions(cartDimensionInputs);
 
-  const serviceability = await BigshipService.checkServiceability(
-    value.pincode,
-    cartDimensions.weight,
-    subTotal,
-    value.paymentMethod === "COD",
-    cartDimensions,
-  );
+  const serviceability = await getShippingPartner().checkShipment({
+    pincode: value.pincode,
+    weight: cartDimensions.weight,
+    invoiceValue: subTotal,
+    cod: value.paymentMethod === "COD",
+    dimensions: cartDimensions,
+  });
 
-  // console.log("ERRRO____");
-  // console.log(JSON.stringify(serviceability));
-  // console.log("ERRRO____");
-
-  if (!serviceability.success) {
-    throw new ErrorHandler(
-      500,
-      "Unable to verify delivery availability. Try again.",
-    );
-  }
+  // The cart uses this to grey out the place order button. createOrder applies
+  // the same rule, so the preview and the placed order agree — including when
+  // the partner is unreachable, where both let the order through.
+  const serviceable = serviceability.success ? serviceability.serviceable : true;
 
   // same rule createOrder will apply, so the cart preview and the placed order match
   const autoDiscount = await calculateAutoDiscount(
@@ -392,18 +532,19 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
     !!value.product.code,
   );
 
-  const priceBreakdown = buildPriceBreakdown({
+  const priceBreakdown = await buildPriceBreakdown({
     subTotal,
     priceAfterDiscount,
     couponDiscount,
     autoDiscount,
+    paymentMethod: value.paymentMethod,
   });
 
   httpResponse(res, 200, "Price breakdown", {
     ...priceBreakdown,
     // createOrder refuses an unserviceable pincode, so the cart uses this to
     // block the place order button before the customer pays
-    serviceable: serviceability.serviceable,
+    serviceable,
     courier_name: serviceability.courierName ?? null,
     estimated_days: serviceability.estimatedDays ?? null,
   });
@@ -437,23 +578,45 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
     filterValues.push(req.query.ostatus);
   }
 
+  // "Show me only the orders nobody was logged in for." Read off the order, not
+  // the customer, so a guest who has since made an account does not quietly
+  // drop out of the list.
+  if (req.query.customer_type === "guest") {
+    filter += ` AND o.is_guest_order = true`;
+  } else if (req.query.customer_type === "registered") {
+    filter += ` AND COALESCE(o.is_guest_order, false) = false`;
+  }
+
   const { rows } = await pool.query(
     `
        SELECT
          o.order_id,
          o.order_number,
          o.shipping_address->>'name' AS user_name,
+         o.shipping_address->>'email' AS user_email,
+         -- Whether it was placed without logging in. The CMS badges these, so
+         -- staff can tell at a glance that there is no account behind the
+         -- order and the only contact details are the ones on it.
+         COALESCE(o.is_guest_order, false) AS is_guest_order,
          o.total_amount,
          o.payment_status,
+         o.payment_method,
          o.order_status,
          TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
          (o.created_at >= NOW() - INTERVAL '7 days') AS is_returnable,
-         -- Only an invoice uploaded from the CMS counts here. The generated
-         -- document is a payment slip, not an invoice, and every order gets one
-         -- regardless of this flag.
+         -- True for an invoice of either kind: one an admin uploaded from the
+         -- CMS, or one the CMS generated. The payment slip is neither, and
+         -- every order gets one regardless of this flag.
          (
-           o.invoice_document IS NOT NULL AND o.invoice_document <> ''
-         ) AS invoice_avilable
+           (o.invoice_document IS NOT NULL AND o.invoice_document <> '')
+           OR (o.invoice_pdf_url IS NOT NULL AND o.invoice_pdf_url <> '')
+         ) AS invoice_avilable,
+         -- the uploaded invoice is the one the customer is given when both
+         -- exist, so the CMS is told which of the two it is looking at
+         (o.invoice_document IS NOT NULL AND o.invoice_document <> '') AS invoice_uploaded,
+         (o.invoice_pdf_url IS NOT NULL AND o.invoice_pdf_url <> '') AS invoice_generated,
+         o.invoice_number,
+         (o.packing_slip_url IS NOT NULL AND o.packing_slip_url <> '') AS packing_slip_available
         FROM orders o
 
         LEFT JOIN users u
@@ -483,6 +646,10 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
       `
        SELECT
         user_id,
+        -- Placed without logging in. The CMS shows it because it changes how
+        -- staff reach the customer: there is no account to look up, only the
+        -- address snapshot on the order itself.
+        COALESCE(is_guest_order, false) AS is_guest_order,
         order_number,
         subtotal,
         discount,
@@ -494,13 +661,25 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         shipping_address,
         price_breakdown,
         payment_method,
-        bigship_order_id,
+        shipping_partner,
+        partner_order_id,
+        partner_shipment_id,
+        waybill,
+        courier_name,
         shipment_boxes,
         ewaybill_number,
         -- the documents themselves are multi-MB data URIs; the CMS only needs
         -- to know whether one is already on file
         (ewaybill_document IS NOT NULL AND ewaybill_document <> '') AS has_ewaybill_document,
-        (invoice_document IS NOT NULL AND invoice_document <> '') AS has_invoice_document
+        (invoice_document IS NOT NULL AND invoice_document <> '') AS has_invoice_document,
+        -- the two documents the CMS generates. Only their presence and the
+        -- invoice number are sent; the files themselves live on the upload
+        -- server and are streamed by their own routes.
+        (invoice_pdf_url IS NOT NULL AND invoice_pdf_url <> '') AS has_generated_invoice,
+        (packing_slip_url IS NOT NULL AND packing_slip_url <> '') AS has_packing_slip,
+        invoice_number,
+        TO_CHAR(invoice_generated_at, 'DD Mon YYYY') AS invoice_generated_at,
+        TO_CHAR(packing_slip_generated_at, 'DD Mon YYYY') AS packing_slip_generated_at
        FROM orders
 
        WHERE order_id = $1
@@ -514,9 +693,12 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
     const paymentInfo = await client.query(
       `
        SELECT
-        *
-       FROM payments
-       WHERE order_id = $1
+        p.*,
+        u.name AS refunded_by_name
+       FROM payments p
+       LEFT JOIN users u
+       ON u.id = p.refunded_by
+       WHERE p.order_id = $1
       `,
       [orderid],
     );
@@ -575,6 +757,17 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
       addressInfo: orderInfo.rows[0].shipping_address,
       paymentInfo: paymentInfo.rows[0],
       orderItemsInfo: orderItemsInfo.rows,
+      // Which partner is live right now, not which one booked this order.
+      // orders.shipping_partner is only written at booking time, so it is NULL
+      // both for a shop that never books and for a shiprocket order still
+      // waiting to be confirmed — the CMS cannot tell those apart from the row.
+      // It needs to: with no partner no tracking scan will ever move the order,
+      // so the admin has to be able to set the courier-driven statuses by hand.
+      shippingInfo: {
+        enabled: isShippingEnabled(),
+        partner: getShippingPartner().name,
+        partner_label: getShippingPartner().label,
+      },
     };
   });
 
@@ -601,14 +794,15 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
   }>(VUpdateShipmentBoxes, req.body ?? {});
 
   const { rows, rowCount } = await pool.query(
-    "SELECT bigship_order_id, order_status FROM orders WHERE order_id = $1",
+    "SELECT bigship_order_id, shiprocket_order_id, order_status FROM orders WHERE order_id = $1",
     [orderId],
   );
 
-  if (rowCount === 0)
-    throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
 
-  if (rows[0].bigship_order_id) {
+  // Booked with either partner locks the boxes: what the courier was told the
+  // parcel measures cannot be changed after the fact.
+  if (rows[0].bigship_order_id || rows[0].shiprocket_order_id) {
     throw new ErrorHandler(
       400,
       "This order is already booked with the courier, so its boxes can no longer be changed.",
@@ -635,9 +829,7 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
     `,
     [
       JSON.stringify(value.boxes),
-      value.ewaybill_number === undefined
-        ? null
-        : value.ewaybill_number || null,
+      value.ewaybill_number === undefined ? null : value.ewaybill_number || null,
       value.ewaybill_document === undefined
         ? null
         : value.ewaybill_document || null,
@@ -649,13 +841,21 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
 });
 
 // Confirming is the point where the order goes to the courier, so everything
-// Bigship will demand is checked up front — a status change that commits and
-// then fails to book leaves the order looking fulfilled when it is not.
+// the shipping partner will demand is checked up front — a status change that
+// commits and then fails to book leaves the order looking fulfilled when it is
+// not. Box dimensions are needed by both partners; the ewaybill rules below
+// are Bigship's B2B ones and do not apply to a Shiprocket booking, which
+// declares a single package and reads no invoice document.
 const assertReadyToConfirm = async (orderId: number) => {
+  // Boxes and ewaybills exist to satisfy a courier API. With no partner
+  // configured nothing is booked, so demanding them would block a confirm for
+  // the benefit of a booking that is never going to happen.
+  if (!isShippingEnabled()) return;
+
   const { rows, rowCount } = await pool.query(
     `
      SELECT
-      o.bigship_order_id,
+      o.partner_order_id,
       o.shipment_boxes,
       o.ewaybill_number,
       o.ewaybill_document,
@@ -668,13 +868,13 @@ const assertReadyToConfirm = async (orderId: number) => {
     [orderId],
   );
 
-  if (rowCount === 0)
-    throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
 
   const order = rows[0];
+  const partner = getShippingPartner();
 
   // Already with the courier — re-confirming is a no-op, not a reason to block.
-  if (order.bigship_order_id) return;
+  if (order.partner_order_id) return;
 
   const boxes = parseShipmentBoxes(order.shipment_boxes);
 
@@ -685,7 +885,11 @@ const assertReadyToConfirm = async (orderId: number) => {
     );
   }
 
-  // One box books as B2C, which carries no ewaybill at all.
+  // Shiprocket consolidates the boxes into one declared package, so there is
+  // nothing further to check for it.
+  if (partner.name !== "bigship") return;
+
+  // One box books as Bigship B2C, which carries no ewaybill at all.
   if (boxes.length === 1) return;
 
   const invoiceAmount = parseFloat(order.invoice_amount);
@@ -723,8 +927,20 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         [value.status, value.order_item_id],
       );
     } else {
+      // delivered_at is stamped once and never moved: it anchors the return
+      // window, so a later re-save of the same status must not extend it.
       await client.query(
-        "UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2",
+        `
+         UPDATE orders
+         SET order_status = $1::varchar,
+             delivered_at = CASE
+               WHEN $1::varchar = '${ORDER_DELIVERED}' AND delivered_at IS NULL
+               THEN CURRENT_TIMESTAMP
+               ELSE delivered_at
+             END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $2
+        `,
         [value.status, value.order_id],
       );
 
@@ -735,18 +951,83 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
     }
   });
 
-  // Confirming an order is the point of no return for fulfilment, so make sure
-  // a Bigship shipment exists. Orders that already booked one at placement are
-  // skipped; orders whose booking failed back then get retried here. Runs after
-  // the transaction commits so a courier failure never rolls back the status.
-  if (value.status === ORDER_CONFIRMED && value.order_id) {
-    const shipment = await createBigshipShipment(value.order_id);
+  // Stock moved with the status change, and a product's variant quantities are
+  // part of its cached response. Runs after the commit so a rollback cannot
+  // leave the cache cleared against data that never changed — and, more
+  // importantly, so a concurrent read cannot refill the cache from the
+  // pre-commit snapshot.
+  await invalidateCache(CACHE_TAGS.PRODUCTS);
 
-    // Booked just now, or already booked at placement — either way the order
-    // is with the courier and there is nothing left to retry.
+  // Tell the customer, after the commit and before any of the courier branches
+  // below can return early. Not awaited, like the staff alert on a new order: an
+  // admin pressing Confirm should not wait on a mail server, and nothing is
+  // thrown out of notifyOrderStatus in any case.
+  //
+  // Only for whole-order changes. A single item moving to SHIPPED is not the
+  // order shipping, and an email saying it is would be a lie to the customer.
+  if (value.order_id && !value.order_item_id)
+    notifyOrderStatus(value.order_id, value.status);
+
+  // Cancelling in the CMS has to reach the courier too, or the parcel is still
+  // collected and delivered against an order our side calls cancelled. Runs
+  // after the commit, like the booking below, so a courier failure does not
+  // roll the status back.
+  if (isShippingEnabled() && value.status === ORDER_CANCELLED && value.order_id) {
+    const { rows } = await pool.query(
+      "SELECT waybill, partner_order_id FROM orders WHERE order_id = $1",
+      [value.order_id],
+    );
+
+    const booked = rows[0];
+    const partnerOrderId = booked?.partner_order_id ?? null;
+
+    if (booked?.waybill || partnerOrderId) {
+      const cancelResponse = await getShippingPartner().cancelShippingOrder({
+        waybill: booked.waybill,
+        partnerOrderId,
+      });
+
+      if (!cancelResponse.success) {
+        logger.error({
+          message: "Courier cancel failed (order already cancelled in DB)",
+          partner: getShippingPartner().name,
+          orderId: value.order_id,
+          waybill: booked.waybill,
+          partnerOrderId,
+          error: cancelResponse.error ?? cancelResponse.message,
+        });
+
+        return httpResponse(
+          res,
+          200,
+          "Order cancelled, but the courier would not cancel the shipment. Cancel it in the courier panel before it is picked up.",
+          { shipment_cancelled: false },
+        );
+      }
+
+      return httpResponse(res, 200, "Order status successfully updated", {
+        shipment_cancelled: true,
+      });
+    }
+  }
+
+  // Confirming an order is the point of no return for fulfilment, so make sure
+  // a shipment exists with the active shipping partner. Booking runs after the
+  // transaction commits, so a courier failure never rolls back the status —
+  // the order stays CONFIRMED and confirming it again retries the booking.
+  //
+  // With SHIPPING_PARTNER=none there is no booking to attempt, and no shipment
+  // fields to report: the confirm falls through to the plain response at the
+  // bottom, exactly as any other status change does.
+  if (isShippingEnabled() && value.status === ORDER_CONFIRMED && value.order_id) {
+    const partner = getShippingPartner();
+    const shipment = await partner.createShippingOrder(value.order_id);
+
+    // Booked just now, or already booked earlier — either way the order is
+    // with the courier and there is nothing left to retry.
     const isBooked = shipment.created || shipment.skipped === "already_created";
 
-    const REASON_MESSAGE: Record<string, string> = {
+    const REASON_MESSAGE: Partial<Record<ShipmentSkipReason, string>> = {
       payment_not_completed:
         "Order status updated. No shipment booked — this online order is not paid yet.",
       no_shipping_address:
@@ -759,6 +1040,8 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         "Order status updated, but no shipment was booked: this multi-box shipment needs an ewaybill number and document.",
       order_not_found:
         "Order status updated, but the order could not be read back to book a shipment.",
+      not_supported:
+        `Order status updated, but ${partner.label} cannot book this shipment. Book it in the courier panel by hand.`,
     };
 
     if (!isBooked) {
@@ -766,20 +1049,20 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         res,
         200,
         shipment.skipped
-          ? REASON_MESSAGE[shipment.skipped]
-          : "Order status updated, but the Bigship shipment could not be booked. Confirm the order again to retry.",
-        {
-          shipment_booked: false,
-          reason: shipment.skipped ?? "booking_failed",
-        },
+          ? (REASON_MESSAGE[shipment.skipped] ??
+            `Order status updated, but no shipment was booked (${shipment.skipped}).`)
+          : `Order status updated, but the ${partner.label} shipment could not be booked. Confirm the order again to retry.`,
+        { shipment_booked: false, reason: shipment.skipped ?? "booking_failed" },
       );
     }
 
     return httpResponse(res, 200, "Order status successfully updated", {
       shipment_booked: true,
       already_booked: shipment.skipped === "already_created",
-      waybill: shipment.awbCode ?? null,
-      bigship_order_id: shipment.bigshipOrderId ?? null,
+      shipping_partner: partner.name,
+      waybill: shipment.waybill ?? null,
+      courier_name: shipment.courierName ?? null,
+      partner_order_id: shipment.partnerOrderId ?? null,
     });
   }
 
@@ -787,7 +1070,7 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
 });
 
 //this endpoint for user only
-export const doReturn = asyncErrorHandler(async (req, res) => {
+export const doReturn = asyncErrorHandler(async (req: CustomRequest, res) => {
   const value = doValidate<{
     order_id: string;
     type: "Return" | "Replace";
@@ -795,129 +1078,304 @@ export const doReturn = asyncErrorHandler(async (req, res) => {
 
   const orderNumber = value.order_id;
 
+  const tokenInfo = req.token_info;
+  if (!tokenInfo) throw new ErrorHandler(401, "Unauthorized");
+
+  // A Replace keeps its own status on the order so the CMS can tell the two
+  // apart, but both move the items into the return flow — the goods come back
+  // either way, and only the order row decides what is sent out afterwards.
+  const orderStatus =
+    value.type === "Return" ? ORDER_RETURN_INITIATED : REPLACE_INITIATED;
+
+  // Claim the order first, in its own transaction: the courier is only told to
+  // collect once the order is definitely ours to return. Booking the pickup
+  // inside the transaction would hold the row lock across a network call, and
+  // a later failure would roll the status back while the courier still had a
+  // live pickup nobody had a record of.
+  let dbOrderId = 0;
+
   await doTransition(async (client) => {
-    // return only happen if the order is DELIVERED and payment method ONLINE and update_at vs now() diffrence is 7 day
+    // Returns are for delivered orders only, inside the RETURN_WINDOW_DAYS
+    // window measured from the delivery itself — the same number the delivered
+    // email quotes at the customer — and a refundable Return needs an online payment
+    // to refund to. A Replace has no refund, so COD can be replaced too.
     const orderInfo = await client.query(
       `
         UPDATE orders o
         SET order_status = $1
         WHERE o.order_number = $2
+          AND o.user_id = $4
           AND o.order_status = '${ORDER_DELIVERED}'
           AND (
             ($3 = 'Return' AND o.payment_method = '${ONLINE_PAYMENT}')
             OR ($3 = 'Replace')
           )
-          AND o.updated_at >= NOW() - INTERVAL '7 days'
-        RETURNING o.order_id, o.total_amount, o.shipping_address;
+          AND o.delivered_at IS NOT NULL
+          AND o.delivered_at >= NOW() - INTERVAL '${RETURN_WINDOW_DAYS} days'
+        RETURNING o.order_id;
       `,
-      [
-        value.type === "Return" ? ORDER_RETURN_INITIATED : REPLACE_INITIATED,
-        orderNumber,
-        value.type,
-      ],
+      [orderStatus, orderNumber, value.type, tokenInfo.id],
     );
 
     if (orderInfo.rowCount === 0)
       throw new ErrorHandler(400, "Unable to process your request");
 
-    const dbOrderId = orderInfo.rows[0].order_id;
-    const addr = orderInfo.rows[0].shipping_address;
+    dbOrderId = orderInfo.rows[0].order_id;
 
-    const orderItemsInfo = await client.query(
+    await client.query(
       "UPDATE order_items SET status = $1 WHERE order_id = $2",
       [ORDER_RETURN_INITIATED, dbOrderId],
     );
-
-    // now tell the deleviry to return the product
-    const returnResponse = await DelhiveryService.createReturnShipment(
-      {
-        add: addr.address_line1,
-        city: addr.city,
-        country: addr.country ?? "India",
-        state: addr.state,
-        phone: addr.phone,
-        name: addr.name,
-        pin: addr.pincode,
-      },
-      {
-        orderId: orderNumber,
-        productDescription: `Returning The ${orderNumber}`,
-        quantity: orderItemsInfo.rowCount ?? 1,
-        totalAmount: orderInfo.rows[0].total_amount,
-        weight: 0.2,
-      },
-      value.type === "Return" ? "Return" : "Replacement",
-    );
-
-    if (!returnResponse.success) {
-      throw new ErrorHandler(500, "Unable to process your request");
-    }
-
-    await client.query(
-      "INSERT INTO order_returns (order_id, waybill, reason, type) VALUES ($1, $2, $3, $4)",
-      [dbOrderId, returnResponse.returnWaybill, null, value.type],
-    );
   });
 
-  httpResponse(res, 200, "Return Successfully Initiated");
+  // Tell the courier to come and collect. The partner reads the order itself
+  // and writes the order_returns row, with or without a waybill — the status is
+  // already committed, so a courier failure cannot be undone by throwing, and
+  // the request has to stay on file either way for support to book by hand.
+  const partner = getShippingPartner();
+
+  const reverse =
+    value.type === "Return"
+      ? await partner.returnShippingOrder(dbOrderId)
+      : await partner.replaceShippingOrder(dbOrderId);
+
+  // With no partner configured the claim is recorded and no courier is called,
+  // which is the intended outcome rather than a failure worth paging anyone
+  // about — see NonePartner. A real partner refusing the pickup still is.
+  if (!reverse.created && isShippingEnabled()) {
+    logger.error({
+      message: "Return pickup booking failed (order already in return flow)",
+      partner: partner.name,
+      orderNumber,
+      dbOrderId,
+      type: value.type,
+      skipped: reverse.skipped,
+      error: reverse.error,
+    });
+  }
+
+  // The customer is told their return is accepted either way; the pickup flag
+  // is what the CMS uses to show support that a courier still has to be booked.
+  httpResponse(res, 200, "Return Successfully Initiated", {
+    pickup_booked: reverse.created,
+    waybill: reverse.waybill ?? null,
+  });
 });
 
-//this endpoint for user only
-export const doCancel = asyncErrorHandler(async (req, res) => {
-  const value = doValidate<{
-    order_id?: string;
-    order_item_id?: number;
-    // status: string;
-  }>(VCancelOrder, req.body ?? {});
+/**
+ * Books the replacement parcel for a Replace, once the returned goods are back
+ * at the warehouse. Admin only, and deliberately a separate call from the
+ * return itself: nothing goes out against a collection that never arrived.
+ *
+ * It is a second forward shipment against the same order, so it is stored on
+ * the order_returns row rather than on the order — see the partner's
+ * replacement leg.
+ */
+export const bookReplacementShipment = asyncErrorHandler(async (req, res) => {
+  const orderId = parseInt(String(req.params.orderid ?? ""), 10);
+  if (!orderId) throw new ErrorHandler(400, "Invalid order id");
 
-  // if (value.status != ORDER_CANCELLED)
-  //   throw new ErrorHandler(403, "Not allowed");
+  const { rows, rowCount } = await pool.query(
+    "SELECT order_status FROM orders WHERE order_id = $1",
+    [orderId],
+  );
 
-  let bigshipOrderId: string | null = null;
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
 
-  await doTransition(async (client) => {
-    if (value.order_id) {
-      const { rowCount, rows } = await client.query(
-        `
-        UPDATE orders
-          SET order_status = $1
-        -- Only a PENDING order can be cancelled. Once it is confirmed the
-        -- shipment is booked with the courier, so cancelling is a support job,
-        -- not something the customer can do from their account.
-        WHERE order_number = $2 AND order_status = '${ORDER_PENDING}'
-        RETURNING order_id, bigship_order_id
-        `,
-        [ORDER_CANCELLED, value.order_id],
-      );
+  // REPLACE INITIATED is where doReturn leaves the order; RETURNED is where a
+  // courier scan moves it once the collection is delivered back to us. Anything
+  // else is not a replacement waiting to be sent.
+  const status = rows[0].order_status;
+  if (status !== REPLACE_INITIATED && status !== ORDER_RETURNED) {
+    throw new ErrorHandler(
+      400,
+      "This order has no replacement to send. Only an order in the replace flow can be re-shipped.",
+    );
+  }
 
-      if (rowCount === 0)
-        throw new ErrorHandler(
-          400,
-          "This order can no longer be cancelled. Only orders that are still pending can be cancelled.",
-        );
+  // Nothing to book, and nothing the admin can do to make it work — say so
+  // plainly rather than handing back a courier-shaped failure.
+  if (!isShippingEnabled()) {
+    throw new ErrorHandler(
+      400,
+      "No shipping partner is configured, so there is no replacement parcel to book here. Send it with your own courier and mark the order delivered.",
+    );
+  }
 
-      const dbOrderId = rows[0].order_id;
-      bigshipOrderId = rows[0].bigship_order_id ?? null;
-
-      await client.query(
-        "UPDATE order_items SET status = $1 WHERE order_id = $2",
-        [ORDER_CANCELLED, dbOrderId],
-      );
-    }
+  const partner = getShippingPartner();
+  const shipment = await partner.createShippingOrder(orderId, {
+    leg: "replacement",
   });
 
-  // Cancel on Bigship if the shipment was already created. Bigship cancels on
-  // the order id it issued (CustomGlobalOrderId), not on the AWB.
-  if (bigshipOrderId) {
-    const cancelResponse = await BigshipService.cancelOrder(bigshipOrderId);
+  if (!shipment.created) {
+    const REASON_MESSAGE: Partial<Record<ShipmentSkipReason, string>> = {
+      already_created:
+        "The replacement parcel is already booked with the courier.",
+      no_return_record:
+        "No replacement was ever requested for this order, so there is nothing to send.",
+      no_shipment_boxes:
+        "Add the shipment box dimensions before booking the replacement.",
+      no_shipping_address: "This order has no shipping address.",
+      not_supported: `${partner.label} cannot book a replacement parcel. Book it in the courier panel by hand.`,
+    };
+
+    logger.error({
+      message: "Replacement booking failed",
+      partner: partner.name,
+      orderId,
+      skipped: shipment.skipped,
+      error: shipment.error,
+    });
+
+    throw new ErrorHandler(
+      400,
+      (shipment.skipped && REASON_MESSAGE[shipment.skipped]) ??
+        `The ${partner.label} replacement could not be booked. Try again.`,
+    );
+  }
+
+  // The replacement is with the courier, so the order has been made good.
+  await doTransition(async (client) => {
+    await client.query(
+      "UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2",
+      [REPLACED, orderId],
+    );
+    await client.query(
+      "UPDATE order_items SET status = $1 WHERE order_id = $2",
+      [REPLACED, orderId],
+    );
+  });
+
+  httpResponse(res, 200, "Replacement shipment booked", {
+    shipping_partner: partner.name,
+    waybill: shipment.waybill ?? null,
+    courier_name: shipment.courierName ?? null,
+    partner_order_id: shipment.partnerOrderId ?? null,
+  });
+});
+
+/**
+ * Cancel one order on behalf of the customer who owns it.
+ *
+ * Takes a user id rather than a request, because two routes reach it: the
+ * account one, where the id comes from the session, and the guest one, where
+ * it comes from the guest order token. Ownership is still enforced in the
+ * UPDATE itself — the caller proves who they are, this decides what that lets
+ * them touch — so neither route can widen it by passing the wrong thing.
+ */
+const cancelCustomerOrder = async (orderNumber: string, userId: number) => {
+  let shipmentWaybill: string | null = null;
+  let partnerOrderId: string | null = null;
+
+  await doTransition(async (client) => {
+    const { rowCount, rows } = await client.query(
+      `
+      UPDATE orders
+        SET order_status = $1
+      -- Only a PENDING order can be cancelled. Once it is confirmed the
+      -- shipment is booked with the courier, so cancelling is a support job,
+      -- not something the customer can do from their account.
+      WHERE order_number = $2
+        AND user_id = $3
+        AND order_status = '${ORDER_PENDING}'
+      RETURNING order_id, waybill, partner_order_id
+      `,
+      [ORDER_CANCELLED, orderNumber, userId],
+    );
+
+    // Deliberately the same message whether the order is not cancellable or
+    // belongs to someone else — telling them apart would confirm that an order
+    // number exists on another account.
+    if (rowCount === 0)
+      throw new ErrorHandler(
+        400,
+        "This order can no longer be cancelled. Only orders that are still pending can be cancelled.",
+      );
+
+    const dbOrderId = rows[0].order_id;
+    shipmentWaybill = rows[0].waybill ?? null;
+    partnerOrderId = rows[0].partner_order_id ?? null;
+
+    await client.query(
+      "UPDATE order_items SET status = $1 WHERE order_id = $2",
+      [ORDER_CANCELLED, dbOrderId],
+    );
+  });
+
+  // Cancel with the shipping partner if the shipment was already created. The
+  // order is already cancelled in our DB at this point, so a courier-side
+  // failure is logged rather than thrown — the customer has been told their
+  // order is cancelled and that must not be taken back.
+  if (isShippingEnabled() && (shipmentWaybill || partnerOrderId)) {
+    const cancelResponse = await getShippingPartner().cancelShippingOrder({
+      waybill: shipmentWaybill,
+      partnerOrderId,
+    });
+
     if (!cancelResponse.success) {
       logger.error({
-        message: "Bigship cancel failed (order already cancelled in DB)",
-        bigshipOrderId,
-        error: cancelResponse.error,
+        message: "Courier cancel failed (order already cancelled in DB)",
+        partner: getShippingPartner().name,
+        waybill: shipmentWaybill,
+        partnerOrderId,
+        error: cancelResponse.error ?? cancelResponse.message,
       });
     }
   }
+};
+
+//this endpoint for user only
+export const doCancel = asyncErrorHandler(async (req: CustomRequest, res) => {
+  const value = doValidate<{
+    order_id?: string;
+    order_item_id?: number;
+  }>(VCancelOrder, req.body ?? {});
+
+  const tokenInfo = req.token_info;
+  if (!tokenInfo) throw new ErrorHandler(401, "Unauthorized");
+
+  // The route is only authenticated, not authorised — without this an order
+  // number from someone else's account would cancel their order.
+  if (!value.order_id) {
+    throw new ErrorHandler(400, "An order number is required to cancel an order.");
+  }
+
+  await cancelCustomerOrder(value.order_id, tokenInfo.id);
+
+  httpResponse(res, 200, "Order successfully cancelled");
+});
+
+/* -------------------------------------------------------------------------- */
+/*                                Guest orders                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The one order a guest order token names.
+ *
+ * The token is the whole authorisation: it was signed by this api when the
+ * order was placed and it carries the order id, so there is nothing for the
+ * caller to supply and therefore nothing to enumerate. The order id in the
+ * token is checked against the row's own user_id as well, so a token whose
+ * order has since been moved to another account stops working rather than
+ * quietly following it.
+ */
+export const getGuestOrder = asyncErrorHandler(async (req, res) => {
+  const grant = await requireGuestOrderToken(req);
+
+  const order = await fetchCustomerOrderById(grant.order_id);
+
+  if (!order || order.order_number !== grant.order_number) {
+    throw new ErrorHandler(404, "We could not find this order");
+  }
+
+  httpResponse(res, 200, "Order details", order);
+});
+
+/** Cancel the order a guest order token names, on the same rules as an account. */
+export const cancelGuestOrder = asyncErrorHandler(async (req, res) => {
+  const grant = await requireGuestOrderToken(req);
+
+  await cancelCustomerOrder(grant.order_number, grant.user_id);
 
   httpResponse(res, 200, "Order successfully cancelled");
 });
@@ -938,8 +1396,7 @@ export const uploadOrderInvoice = asyncErrorHandler(async (req, res) => {
     [value.invoice_document, orderId],
   );
 
-  if (rowCount === 0)
-    throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
 
   httpResponse(res, 200, "Invoice uploaded");
 });
@@ -954,48 +1411,327 @@ export const deleteOrderInvoice = asyncErrorHandler(async (req, res) => {
     [orderId],
   );
 
-  if (rowCount === 0)
-    throw new ErrorHandler(404, "Order information not found!");
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
 
   httpResponse(res, 200, "Uploaded invoice removed");
 });
 
-// Serves the invoice an admin uploaded from the CMS, whatever the order status
-// is — the admin chose to put it there. Orders with no upload have no invoice
-// at all; what they have is a payment slip, served by downloadPaymentSlip.
+interface IOrderInvoiceFile {
+  content: Buffer;
+  filename: string;
+  contentType: string;
+}
+
+/**
+ * The order's invoice as bytes, plus the order details an invoice is described
+ * by. `file` is null when the order has no invoice of either kind.
+ *
+ * An invoice an admin uploaded by hand wins over a generated one: the admin
+ * uploaded it knowing a generated one was a click away, so it is the one they
+ * mean the customer to have. An order with neither has no invoice at all; what
+ * it has is a payment slip, served by downloadPaymentSlip.
+ *
+ * Shared by the download route and the email-it-to-the-customer route so the
+ * two can never disagree about which document is *the* invoice.
+ */
+const loadOrderInvoice = async (orderId: number | string) => {
+  const order = await pool.query(
+    `SELECT
+       o.order_number,
+       o.invoice_number,
+       o.invoice_document,
+       o.invoice_pdf_url,
+       o.total_amount,
+       TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
+       COALESCE(o.shipping_address, '{}'::jsonb) AS shipping_details,
+       u.name AS account_name,
+       u.email AS account_email
+     FROM orders o
+     LEFT JOIN users u ON u.id = o.user_id
+     WHERE o.order_id = $1`,
+    [orderId],
+  );
+
+  if (order.rowCount == 0)
+    throw new ErrorHandler(404, "Order information not found!");
+
+  const row = order.rows[0];
+  const { order_number, invoice_number, invoice_document, invoice_pdf_url } =
+    row;
+
+  let file: IOrderInvoiceFile | null = null;
+
+  if (invoice_document) {
+    const [header, base64] = (invoice_document as string).split(",");
+    const mime = header.match(/^data:([^;]+);base64$/)?.[1];
+
+    if (!base64 || !mime) {
+      throw new ErrorHandler(
+        500,
+        "The uploaded invoice for this order is unreadable",
+      );
+    }
+
+    const extension = mime === "application/pdf" ? "pdf" : "jpg";
+
+    file = {
+      content: Buffer.from(base64, "base64"),
+      filename: `invoice-${order_number}.${extension}`,
+      contentType: mime,
+    };
+  } else if (invoice_pdf_url) {
+    // the file itself is private on the upload server, so it is read with the
+    // api's token and streamed on rather than linked to
+    file = {
+      content: await fetchOrderDocument(invoice_pdf_url),
+      filename: `invoice-${invoice_number ?? order_number}.pdf`,
+      contentType: "application/pdf",
+    };
+  }
+
+  return { order: row, file };
+};
+
+// Serves the order's invoice, whatever the order status is.
 export const downloadInvoice = asyncErrorHandler(async (req, res) => {
   const orderid = req.params.orderid;
   if (!orderid) throw new ErrorHandler(400, "Invalid request");
 
-  const uploaded = await pool.query(
-    "SELECT order_number, invoice_document FROM orders WHERE order_id = $1",
-    [orderid],
+  const { file } = await loadOrderInvoice(String(orderid));
+
+  if (!file) throw new ErrorHandler(404, "No invoice is available for this order");
+
+  res.setHeader("Content-Type", file.contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${file.filename}"`,
   );
 
-  if (uploaded.rowCount == 0)
+  return res.send(file.content);
+});
+
+/**
+ * Emails the invoice to the customer, with the PDF attached rather than linked.
+ *
+ * Attached, because the download route is public — rate limited, but open to
+ * anyone holding the order id — so a link mailed out is a link that can be
+ * forwarded and walked. The attachment travels with the email and needs no
+ * endpoint at all.
+ *
+ * Admin action, and a deliberate one: nothing sends this automatically, because
+ * an invoice is the document a customer keeps and a shop that emails three
+ * corrected copies looks like a shop that cannot count.
+ */
+export const emailOrderInvoice = asyncErrorHandler(async (req, res) => {
+  const orderId = readOrderId(req);
+
+  const { order, file } = await loadOrderInvoice(orderId);
+
+  if (!file)
+    throw new ErrorHandler(
+      404,
+      "This order has no invoice yet — generate or upload one first",
+    );
+
+  // The address snapshot taken at checkout first, the account second — the same
+  // order the confirmation email uses. A guest order has only the snapshot.
+  const shipping = order.shipping_details ?? {};
+  const recipient = String(shipping.email ?? order.account_email ?? "").trim();
+
+  if (!recipient)
+    throw new ErrorHandler(
+      422,
+      "This order has no email address to send the invoice to",
+    );
+
+  // An admin pressing the button on a server with EMAIL_PROVIDER=none would
+  // otherwise be told the invoice was emailed, because the none provider
+  // reports success by design.
+  if (!isEmailEnabled())
+    throw new ErrorHandler(
+      503,
+      "Email is switched off on this server, so the invoice was not sent",
+    );
+
+  const sent = await sendEmail(
+    recipient,
+    "SEND_INVOICE",
+    {
+      customerName: shipping.name ?? order.account_name ?? "Customer",
+      orderId: order.order_number,
+      invoiceNumber: order.invoice_number,
+      orderDate: order.order_date,
+      totalAmount: order.total_amount,
+    },
+    [file],
+  );
+
+  // Unlike every other send in this codebase an admin is standing in front of
+  // this one, so the failure is theirs to see rather than the log's to keep.
+  if (!sent.ok)
+    throw new ErrorHandler(
+      502,
+      "The invoice email could not be sent, please try again",
+    );
+
+  httpResponse(res, 200, `Invoice emailed to ${recipient}`, {
+    sent_to: recipient,
+    invoice_number: order.invoice_number,
+  });
+});
+
+// ============================================================
+// GENERATED DOCUMENTS — invoice and packing slip
+//
+// Both are rendered by the api from the order record, pushed to the upload
+// server's private area, and referenced from the order row by path. Generating
+// is an admin action and is always a fresh render, so an admin who fixed an
+// address can press the button again and get a document that says so.
+// ============================================================
+
+const readOrderId = (req: { params: Record<string, any> }) => {
+  const orderId = parseInt(String(req.params.orderid ?? ""), 10);
+  if (!orderId) throw new ErrorHandler(400, "Invalid order id");
+  return orderId;
+};
+
+export const generateOrderInvoice = asyncErrorHandler(async (req, res) => {
+  const orderId = readOrderId(req);
+
+  let invoiceNumber = "";
+  let supersededUrl: string | null = null;
+  let storedUrl = "";
+
+  await doTransition(async (client) => {
+    // FOR UPDATE, so two admins pressing the button at the same moment cannot
+    // draw two invoice numbers for one order.
+    const existing = await client.query(
+      `SELECT invoice_number, invoice_generated_at, invoice_pdf_url
+       FROM orders WHERE order_id = $1 FOR UPDATE`,
+      [orderId],
+    );
+
+    if (existing.rowCount === 0)
+      throw new ErrorHandler(404, "Order information not found!");
+
+    const row = existing.rows[0];
+    supersededUrl = row.invoice_pdf_url ?? null;
+
+    // The number and the date are allotted once and then kept. A customer
+    // holding INV-100023 dated the 4th must not be sent a corrected document
+    // that calls itself something else, or claims to have been issued later.
+    if (row.invoice_number) {
+      invoiceNumber = row.invoice_number;
+    } else {
+      const allotted = await client.query(
+        "SELECT 'INV-' || nextval('invoice_number_seq') AS invoice_number",
+      );
+      invoiceNumber = allotted.rows[0].invoice_number;
+    }
+
+    const invoiceDate = row.invoice_generated_at
+      ? new Date(row.invoice_generated_at)
+      : new Date();
+
+    const data = await getOrderDocumentData(orderId, client);
+    const pdf = await renderInvoicePdf(data, invoiceNumber, invoiceDate);
+
+    storedUrl = await uploadOrderDocument(pdf, `invoice-${invoiceNumber}.pdf`);
+
+    await client.query(
+      `UPDATE orders
+       SET invoice_number = $1,
+           invoice_pdf_url = $2,
+           invoice_generated_at = COALESCE(invoice_generated_at, $3),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $4`,
+      [invoiceNumber, storedUrl, invoiceDate, orderId],
+    );
+  });
+
+  // Only once the new path is committed, and never in a way that can fail the
+  // request — see deleteOrderDocument.
+  if (supersededUrl && supersededUrl !== storedUrl)
+    await deleteOrderDocument(supersededUrl);
+
+  httpResponse(res, 200, "Invoice generated", {
+    invoice_number: invoiceNumber,
+    invoice_url: `${process.env.API_BASE_URL}/api/v1/orders/invoice/${orderId}`,
+  });
+});
+
+export const generateOrderPackingSlip = asyncErrorHandler(async (req, res) => {
+  const orderId = readOrderId(req);
+
+  let supersededUrl: string | null = null;
+  let storedUrl = "";
+
+  await doTransition(async (client) => {
+    const existing = await client.query(
+      "SELECT order_number, packing_slip_url FROM orders WHERE order_id = $1 FOR UPDATE",
+      [orderId],
+    );
+
+    if (existing.rowCount === 0)
+      throw new ErrorHandler(404, "Order information not found!");
+
+    supersededUrl = existing.rows[0].packing_slip_url ?? null;
+
+    const data = await getOrderDocumentData(orderId, client);
+    const pdf = await renderPackingSlipPdf(data);
+
+    storedUrl = await uploadOrderDocument(
+      pdf,
+      `packing-slip-${data.orderNumber}.pdf`,
+    );
+
+    await client.query(
+      `UPDATE orders
+       SET packing_slip_url = $1,
+           packing_slip_generated_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $2`,
+      [storedUrl, orderId],
+    );
+  });
+
+  if (supersededUrl && supersededUrl !== storedUrl)
+    await deleteOrderDocument(supersededUrl);
+
+  httpResponse(res, 200, "Packing slip generated", {
+    packing_slip_url: `${process.env.API_BASE_URL}/api/v1/orders/${orderId}/packing-slip`,
+  });
+});
+
+// The packing slip is warehouse paperwork, so unlike the invoice it is served
+// to staff only — the route is behind the admin guard.
+export const downloadPackingSlip = asyncErrorHandler(async (req, res) => {
+  const orderId = readOrderId(req);
+
+  const order = await pool.query(
+    "SELECT order_number, packing_slip_url FROM orders WHERE order_id = $1",
+    [orderId],
+  );
+
+  if (order.rowCount === 0)
     throw new ErrorHandler(404, "Order information not found!");
 
-  const dataUri: string | null = uploaded.rows[0].invoice_document ?? null;
+  const { order_number, packing_slip_url } = order.rows[0];
 
-  if (!dataUri)
-    throw new ErrorHandler(404, "No invoice has been uploaded for this order");
-
-  const [header, base64] = dataUri.split(",");
-  const mime = header.match(/^data:([^;]+);base64$/)?.[1];
-
-  if (!base64 || !mime) {
+  if (!packing_slip_url)
     throw new ErrorHandler(
-      500,
-      "The uploaded invoice for this order is unreadable",
+      404,
+      "No packing slip has been generated for this order",
     );
-  }
 
-  const extension = mime === "application/pdf" ? "pdf" : "jpg";
-  const fileName = `invoice-${uploaded.rows[0].order_number}.${extension}`;
+  const pdf = await fetchOrderDocument(packing_slip_url);
 
-  res.setHeader("Content-Type", mime);
-  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-  return res.send(Buffer.from(base64, "base64"));
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="packing-slip-${order_number}.pdf"`,
+  );
+  return res.send(pdf);
 });
 
 // The document the app renders itself. It records what was ordered and what was
@@ -1016,12 +1752,15 @@ export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
         TO_CHAR(created_at, 'DD Mon YYYY') AS order_date,
         subtotal,
         discount,
+        coupon_discount,
+        auto_discount,
         shipping_charge,
         total_amount,
         coupon_code,
         order_status,
         payment_status,
         shipping_address,
+        price_breakdown,
         payment_method
        FROM orders
 
@@ -1033,7 +1772,32 @@ export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
     if (orderInfo.rowCount == 0)
       throw new ErrorHandler(404, "Order information not found!");
 
-    const addr = orderInfo.rows[0].shipping_address ?? {};
+    const order = orderInfo.rows[0];
+    const addr = order.shipping_address ?? {};
+
+    // The slip must show the same rows the checkout page showed, so it reads
+    // the price_breakdown snapshot createOrder wrote through buildPriceBreakdown
+    // rather than recomputing anything. Orders placed before that column
+    // existed fall back to the flat columns, with GST reverse calculated the
+    // same way buildPriceBreakdown does.
+    const round2 = (value: number) => parseFloat(value.toFixed(2));
+    const num = (value: any) => {
+      const parsed = parseFloat(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const snapshot: Partial<IPriceBreakdown> = order.price_breakdown ?? {};
+
+    const subtotal = num(snapshot.subtotal ?? order.subtotal);
+    const couponDiscount = num(snapshot.coupon_discount ?? order.coupon_discount);
+    const autoDiscount = num(snapshot.auto_discount ?? order.auto_discount);
+    const total = num(snapshot.total ?? order.total_amount);
+    const gstPercentage = num(snapshot.gst_percentage ?? GST_PERCENTAGE);
+    const gstAmount = round2(
+      num(
+        snapshot.gst_amount ??
+          (total * gstPercentage) / (100 + gstPercentage),
+      ),
+    );
 
     const orderItemsInfo = await client.query(
       `
@@ -1069,22 +1833,28 @@ export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
     );
 
     objectToSend = {
-      orderNumber: orderInfo.rows[0].order_number,
-      orderDate: orderInfo.rows[0].order_date,
-      total: orderInfo.rows[0].total_amount,
+      orderNumber: order.order_number,
+      orderDate: order.order_date,
+      total,
       paymentMethodTxt:
-        orderInfo.rows[0].payment_method == "COD"
-          ? "Cash on delivery"
-          : "Online Paid",
-      paymentMethod: orderInfo.rows[0].payment_method,
+        order.payment_method == "COD" ? "Cash on delivery" : "Online Paid",
+      paymentMethod: order.payment_method,
       items: orderItemsInfo.rows.map((item: any) => ({
         name: item.product_name,
         quantity: item.quantity,
         total: item.price,
       })),
 
-      subtotal: orderInfo.rows[0].subtotal,
-      shipping: orderInfo.rows[0].shipping_charge,
+      subtotal,
+      couponCode: order.coupon_code ?? null,
+      couponDiscount,
+      autoDiscount,
+      // labels the order value discount row with the rule that fired
+      autoDiscountTitle: snapshot.auto_discount_rule?.title ?? null,
+      totalDiscount: round2(couponDiscount + autoDiscount),
+      gstPercentage,
+      gstAmount,
+      shipping: num(snapshot.shipping_charge ?? order.shipping_charge),
       billingAddress: {
         name: addr.name,
         line1: addr.address_line1,
@@ -1120,41 +1890,78 @@ interface ITrack {
   }[];
 }
 // ============================================================
-// HELPER — pull latest tracking data from Bigship and backfill
-// webhook_data. Bigship has no webhook push in this API version,
-// so trackOrder pulls live and caches it the same way a webhook would.
+// HELPER — pull the latest tracking data from the active shipping
+// partner and backfill webhook_data.
+//
+// Shiprocket does push a tracking webhook, but only for accounts that have one
+// registered, and it can be missed. Pulling on read keeps the tracking page
+// correct either way; the pull and the webhook write the same normalized rows,
+// and the pull replaces the AWB's rows wholesale so a replay cannot duplicate.
 // ============================================================
-async function syncBigshipTracking(orderNumber: string) {
+// Pulls one waybill's scans and replaces whatever webhook_data holds for it.
+// Wholesale replacement, not an append, so pulling the same waybill twice
+// cannot duplicate a scan.
+async function pullShipmentScans(waybill: string) {
+  const partner = getShippingPartner();
+
+  const result = await partner.trackShipment(waybill);
+  if (!result.success || !result.trackingData) return [];
+
+  const events = partner.normalizeTrackingHistory(result.trackingData, waybill);
+  if (events.length === 0) return [];
+
+  await pool.query("DELETE FROM webhook_data WHERE waybill = $1", [waybill]);
+
+  for (const event of events) {
+    await pool.query(
+      "INSERT INTO webhook_data (waybill, payload) VALUES ($1, $2)",
+      [waybill, event],
+    );
+  }
+
+  return events;
+}
+
+async function syncShipmentTracking(orderNumber: string) {
+  // No partner means no waybill was ever written, so there is nothing to pull
+  // and the tracking page falls back to the order's own status history.
+  if (!isShippingEnabled()) return;
+
   try {
     const { rows, rowCount } = await pool.query(
-      "SELECT waybill, bigship_order_id FROM orders WHERE order_number = $1",
+      `
+      SELECT
+        o.waybill,
+        r.waybill AS return_waybill,
+        r.replacement_waybill
+      FROM orders o
+      LEFT JOIN order_returns r ON r.order_id = o.order_id
+      WHERE o.order_number = $1
+      ORDER BY r.id DESC
+      LIMIT 1
+      `,
       [orderNumber],
     );
 
-    // Bigship tracks on the order id it issued, but webhook_data is keyed on
-    // the AWB, so an order needs both before it can be synced.
-    if (rowCount === 0 || !rows[0].waybill || !rows[0].bigship_order_id) return;
+    if (rowCount === 0) return;
 
-    const waybill: string = rows[0].waybill;
-    const bigshipOrderId: string = rows[0].bigship_order_id;
+    const { waybill, return_waybill, replacement_waybill } = rows[0];
 
-    const result = await BigshipService.trackShipment(bigshipOrderId);
-    if (!result.success || !result.trackingData) return;
-
-    const events = BigshipService.normalizeTrackingHistory(
-      result.trackingData,
-      waybill,
-    );
-    if (events.length === 0) return;
-
-    await pool.query("DELETE FROM webhook_data WHERE waybill = $1", [waybill]);
-
-    for (const event of events) {
-      await pool.query(
-        "INSERT INTO webhook_data (waybill, payload) VALUES ($1, $2)",
-        [waybill, event],
-      );
+    // The reverse legs only add scans to the tracking page. An order with a
+    // return or a replacement in flight is in a COURIER_PROTECTED_STATUS, so
+    // nothing they report is allowed to move its status anyway.
+    for (const reverseWaybill of [return_waybill, replacement_waybill]) {
+      if (reverseWaybill) await pullShipmentScans(reverseWaybill);
     }
+
+    if (!waybill) return;
+
+    // Set inside the transaction, emailed after it commits — see the webhook
+    // service for the same pattern.
+    let movedOrderId: number | null = null;
+
+    const events = await pullShipmentScans(waybill);
+    if (events.length === 0) return;
 
     // Latest event drives the order's actual status, same as a webhook push would
     const latestEvent = events[events.length - 1];
@@ -1167,7 +1974,7 @@ async function syncBigshipTracking(orderNumber: string) {
 
     await doTransition(async (client) => {
       const orderLookup = await client.query(
-        "SELECT order_id FROM orders WHERE waybill = $1",
+        "SELECT order_id, order_status FROM orders WHERE waybill = $1",
         [waybill],
       );
 
@@ -1175,10 +1982,29 @@ async function syncBigshipTracking(orderNumber: string) {
 
       const orderId = orderLookup.rows[0].order_id;
 
+      // A cancelled or returned order keeps its forward-leg scans, and the
+      // newest of those is usually "Delivered" — writing it back would undo
+      // the cancellation or the return.
+      if (COURIER_PROTECTED_STATUSES.includes(orderLookup.rows[0].order_status)) {
+        return;
+      }
+
+      movedOrderId = orderId;
+
       await manageStock({ order_status: STATUS, orderid: orderId, client });
 
       await client.query(
-        "UPDATE orders SET order_status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2",
+        `
+         UPDATE orders
+         SET order_status = $1::varchar,
+             delivered_at = CASE
+               WHEN $1::varchar = '${ORDER_DELIVERED}' AND delivered_at IS NULL
+               THEN CURRENT_TIMESTAMP
+               ELSE delivered_at
+             END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $2
+        `,
         [STATUS, orderId],
       );
 
@@ -1187,9 +2013,18 @@ async function syncBigshipTracking(orderNumber: string) {
         [STATUS, orderId],
       );
     });
+
+    // see the note in updateOrderStatus : after the commit, never inside it
+    await invalidateCache(CACHE_TAGS.PRODUCTS);
+
+    // This function runs from the customer's own tracking page, so it re-writes
+    // the same status every time they open it. order_email_log is the only
+    // reason that is one email and not one per refresh.
+    if (movedOrderId) await notifyOrderStatus(movedOrderId, STATUS);
   } catch (err) {
     logger.error({
-      message: "syncBigshipTracking failed",
+      message: "syncShipmentTracking failed",
+      partner: getShippingPartner().name,
       orderNumber,
       error: err,
     });
@@ -1203,7 +2038,7 @@ export const trackOrder = asyncErrorHandler(async (req, res) => {
     req.query ?? {},
   );
 
-  await syncBigshipTracking(value.order_number);
+  await syncShipmentTracking(value.order_number);
 
   const { rows, rowCount } = await pool.query<ITrack>(
     `
@@ -1232,7 +2067,9 @@ export const trackOrder = asyncErrorHandler(async (req, res) => {
         ON r.order_id = o.order_id
 
       LEFT JOIN webhook_data AS wd 
-        ON wd.waybill = o.waybill OR wd.waybill = r.waybill
+        ON wd.waybill = o.waybill
+        OR wd.waybill = r.waybill
+        OR wd.waybill = r.replacement_waybill
 
       WHERE o.order_number = $1
       GROUP BY o.order_id;

@@ -1,3 +1,4 @@
+import { pool } from "..";
 import { REVIEW_STATUS_APPROVED } from "../constant";
 import { Role } from "../types";
 import { doTransition } from "../utils/doTransition";
@@ -18,6 +19,7 @@ export const getSingleProduct = async (productIdSlug: any, userRole : Role) => {
     filter += ` AND p.status = $${paramCount++}`;
     filterValues.push(1);
   }
+
 
   await doTransition(async (client) => {
     // 1. Get product info
@@ -163,10 +165,107 @@ export const getSingleProduct = async (productIdSlug: any, userRole : Role) => {
 
     const variants = Array.from(variantsMap.values());
 
+     
+
     product.variants = variants;
     product.options = options;
+    //this opration will only happen if calling by product.id not by slug mainly for the cms call
+    if(isNumber(productIdSlug)) {
+      const { rows } = await pool.query(`
+            SELECT EXISTS (
+              SELECT
+                1
+              FROM order_items
+              WHERE variant_info->>'product_id' = $1 OR product_info->>'id' = $1
+            )
+        `, [productIdSlug]);
+
+        product.isAlreadyOrdered = rows[0].exists;
+    }
+    
     productsResToReturn = product;
   });
 
   return productsResToReturn;
+};
+
+// batch fetch variants for many products at once (used by the product list when ?variants=true)
+export const getProductsVariants = async (productIds: number[]) => {
+  const variantsByProduct: Record<number, any[]> = {};
+
+  if (productIds.length === 0) return variantsByProduct;
+
+  const { rows } = await pool.query(
+    `
+       SELECT 
+        pv.product_id,
+        pv.id,
+        pv.sku,
+        pv.price,
+        pv.compare_at_price,
+        pv.quantity,
+        pv.available,
+        pov.value as option_value,
+        po.name as option_name,
+        po.position as option_position,
+        COALESCE(JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'image', pvi.image,
+            'alt_tag', pvi.alt_tag,
+            'position', pvi.position,
+            'type', COALESCE(pvi.type, 'image')
+          )
+          ORDER BY pvi.position ASC
+        ) FILTER (WHERE pvi.image IS NOT NULL), '[]'::json) AS vareient_images
+        FROM product_variants pv
+        LEFT JOIN variant_option_values vov ON pv.id = vov.variant_id
+        LEFT JOIN product_option_values pov ON vov.option_value_id = pov.id
+        LEFT JOIN product_options po ON pov.option_id = po.id
+
+        LEFT JOIN product_variant_images pvi ON pvi.product_variant_id = vov.variant_id
+
+        WHERE pv.product_id = ANY($1::int[])
+
+        GROUP BY pv.id, pov.id, po.id
+
+        ORDER BY pv.product_id, pv.id, po.position
+      `,
+    [productIds],
+  );
+
+  const variantsMap = new Map<number, any>();
+
+  rows.forEach((row) => {
+    if (!variantsMap.has(row.id)) {
+      const variant = {
+        id: row.id,
+        sku: row.sku,
+        price: row.price.toString(),
+        compareAtPrice: row.compare_at_price
+          ? row.compare_at_price.toString()
+          : "",
+        quantity: row.quantity.toString(),
+        available: row.available,
+        combination: [] as string[],
+        images: row.vareient_images ?? [],
+      };
+
+      variantsMap.set(row.id, variant);
+
+      if (!variantsByProduct[row.product_id]) {
+        variantsByProduct[row.product_id] = [];
+      }
+      variantsByProduct[row.product_id].push(variant);
+    }
+
+    if (row.option_value) {
+      variantsMap.get(row.id).combination.push(row.option_value);
+    }
+
+    if (row.vareient_images) {
+      variantsMap.get(row.id).images = row.vareient_images;
+    }
+  });
+
+  return variantsByProduct;
 };

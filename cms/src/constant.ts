@@ -7,6 +7,11 @@ export const SIDEBAR_OPTIONS = {
       url: "#",
       items: [
         {
+          id: "1-15",
+          title: "Dashboard",
+          url: "/",
+        },
+        {
           id: "1-1",
           title: "Categories",
           url: "/categories",
@@ -81,15 +86,6 @@ export const SIDEBAR_OPTIONS = {
   ],
 };
 
-export const PREDEFINED_PRODUCT_TAGS = [
-  "Best Seller",
-  "Recommendation",
-  "New Arrival",
-  "Featured",
-  "Sale",
-  "Trending",
-];
-
 export const DEFAULT_PRODUCT_VARIANT_OPTIONS = [
   {
     id: 1,
@@ -110,14 +106,52 @@ export const ORDER_CANCELLED = "CANCELLED";
 export const ORDER_RETURNED = "RETURNED";
 export const ORDER_RETURN_INITIATED = "RETURN INITIATED";
 export const OUT_FOR_DELIVERY = "OUT FOR DELIVERY";
+// A customer asking for a Replace instead of a Return puts the order into
+// these, so the CMS has to be able to show and progress them — without them a
+// replaced order shows a blank status the admin cannot move.
+export const REPLACE_INITIATED = "REPLACE INITIATED";
+export const REPLACED = "REPLACED";
 
 export const PAYMENT_PENDING = "PENDING";
 export const PAYMENT_PAID = "PAID";
 export const PAYMENT_FAILED = "FAILED";
 export const PAYMENT_REFUNDED = "REFUNDED";
 
+export const PAYMENT_METHOD_COD = "COD";
+export const PAYMENT_METHOD_ONLINE = "ONLINE";
+
 export const REVIEW_STATUS_NOT_APPROVED = 1;
 export const REVIEW_STATUS_APPROVED = 2;
+
+// "all" is not sent to the API, it just clears the ?stars= filter.
+export const REVIEW_RATING_ALL = "all";
+
+export const REVIEW_RATINGS = [
+  {
+    text: "All Ratings",
+    value: REVIEW_RATING_ALL,
+  },
+  {
+    text: "5 Star",
+    value: "5",
+  },
+  {
+    text: "4 Star",
+    value: "4",
+  },
+  {
+    text: "3 Star",
+    value: "3",
+  },
+  {
+    text: "2 Star",
+    value: "2",
+  },
+  {
+    text: "1 Star",
+    value: "1",
+  },
+];
 
 export const ORDER_STATUS = [
   {
@@ -156,6 +190,14 @@ export const ORDER_STATUS = [
     text: "Return Initiated",
     value: ORDER_RETURN_INITIATED,
   },
+  {
+    text: "Replace Initiated",
+    value: REPLACE_INITIATED,
+  },
+  {
+    text: "Replaced",
+    value: REPLACED,
+  },
 ];
 
 export const PAYMENT_STATUS = [
@@ -174,5 +216,27 @@ export const PAYMENT_STATUS = [
   {
     text: "Refunded",
     value: PAYMENT_REFUNDED,
+  },
+];
+
+/**
+ * The sidebar id of the Orders screen. It is also what the analytics endpoints
+ * require, so it is what gates the dashboard on the landing page — see
+ * api/src/routes/analytics.routes.ts.
+ */
+export const ORDERS_PERMISSION_ID = "1-5";
+
+/**
+ * Whether an order was placed with an account or as a guest. Used by the order
+ * list and the customer list, which filter on the same query parameter.
+ */
+export const CUSTOMER_TYPE = [
+  {
+    text: "Registered",
+    value: "registered",
+  },
+  {
+    text: "Guest",
+    value: "guest",
   },
 ];

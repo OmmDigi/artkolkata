@@ -17,7 +17,9 @@ export default function LabelInput(props: IProps) {
       ) : null}
       <div className="flex items-center gap-5">
         <Input
-          className="border-1 border-green-600 disabled:opacity-100"
+          className={
+            `border-1 border-green-600 disabled:opacity-100 ${props.readOnly == true ? "opacity-30" : ""}`
+          }
           {...props}
           type={props.passwordInput ? passwordType : props.type}
         />

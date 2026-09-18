@@ -1,5 +1,6 @@
 import { PaginationComp } from "@/components/PaginationComp";
 import SearchBar from "@/components/SearchBar";
+import SelectInput from "@/components/SelectInput";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
@@ -10,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CUSTOMER_TYPE } from "@/constant";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import type { IError, IResponse, IUsers } from "@/types";
 import { api } from "@/utils/api";
@@ -58,6 +60,14 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
     if (searchBy && searchValue) {
       urlSearchParams.set(searchBy, searchValue);
     }
+
+    // Guests and registered customers share the users table. Left off, the API
+    // returns both, which is what this screen showed before guest checkout.
+    const customerType = searchParams.get("customer_type");
+    if (customerType) {
+      urlSearchParams.set("customer_type", customerType);
+    }
+
     setQueryParams(urlSearchParams.toString());
   }, [searchParams.toString()]);
 
@@ -87,6 +97,22 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
               { text: "Phone Number", value: "phone_no" },
             ]}
           />
+
+          {/* Staff are never guests, so the split only makes sense for customers. */}
+          {role === "User" ? (
+            <SelectInput
+              label="Customer Type"
+              options={CUSTOMER_TYPE}
+              defaultValue={searchParams.get("customer_type") ?? undefined}
+              onValueChange={(value) =>
+                setSearchParams((prev) => {
+                  prev.set("customer_type", value);
+                  prev.delete("page");
+                  return prev;
+                })
+              }
+            />
+          ) : null}
           <Button
             title="Reset filter"
             onClick={() => {
@@ -119,7 +145,20 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
               {data?.data?.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
-                    <span className="block">{user.name}</span>
+                    <span className="block">
+                      {user.name}
+                      {/* No password, never verified : this row exists only
+                          because someone checked out as a guest with this
+                          email. It cannot be logged into. */}
+                      {user.is_guest ? (
+                        <span
+                          title="Created by a guest checkout, no password set"
+                          className="ml-2 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5"
+                        >
+                          Guest
+                        </span>
+                      ) : null}
+                    </span>
                     <div className="flex items-center gap-3.5">
                       <Link
                         to={`/${role == "User" ? "users" : "staff"}/${user.id}`}

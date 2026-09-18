@@ -7,18 +7,24 @@ import SelectInput from "@/components/SelectInput";
 import ShopifyVariants from "@/components/ShopifyVariants";
 import { ButtonLoading } from "@/components/ui/button-loading";
 import { Label } from "@/components/ui/label";
-import {
-  DEFAULT_PRODUCT_VARIANT_OPTIONS,
-  PREDEFINED_PRODUCT_TAGS,
-} from "@/constant";
+import { Input } from "@/components/ui/input";
+import { DEFAULT_PRODUCT_VARIANT_OPTIONS } from "@/constant";
 import { useCategory } from "@/hooks/useCategory";
+import { useDoMutation } from "@/hooks/useDoMutation";
 import { useProduct } from "@/hooks/useProduct";
+import { useProductTags } from "@/hooks/useProductTags";
 import { cn } from "@/lib/utils";
 import LoadingHandler from "@/middleware/LoadingHandler";
-import type { ImageTypes, ISubCategory, Option, Variant } from "@/types";
+import type {
+  ImageTypes,
+  IProductTag,
+  ISubCategory,
+  Option,
+  Variant,
+} from "@/types";
 import { createSlug } from "@/utils/createSlug";
 import type { OutputData } from "@editorjs/editorjs";
-import { MoveLeft } from "lucide-react";
+import { MoveLeft, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -44,8 +50,68 @@ export default function SingleProduct() {
   const [subCategoryList, setSubCategoryList] = useState<ISubCategory[]>([]);
   const [productSlug, setProductSlug] = useState<string | null>(null);
   const [productTags, setProductTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
 
   const { categoryData, isCategoryFetching } = useCategory({ limit: -1 });
+
+  // the tag list lives in the database, so a tag created here is available to
+  // every other product and to the website filters
+  const { productTagData, refetchProductTags } = useProductTags();
+  const { mutate: mutateTag, isLoading: isTagMutating } = useDoMutation();
+
+  const handleAddTag = () => {
+    const name = newTag.trim();
+
+    if (name === "") return;
+
+    const existing = productTagData.find(
+      (tag) => tag.name.toLowerCase() === name.toLowerCase(),
+    );
+
+    // already in the catalogue, nothing to create, just select it
+    if (existing) {
+      setProductTags((prev) =>
+        prev.includes(existing.name) ? prev : [...prev, existing.name],
+      );
+      setNewTag("");
+      return;
+    }
+
+    mutateTag({
+      apiPath: "/api/v1/products/tags",
+      method: "post",
+      formData: { name },
+      onSuccess(data) {
+        const created = data.data as IProductTag | null;
+        const createdName = created?.name ?? name;
+
+        setProductTags((prev) =>
+          prev.includes(createdName) ? prev : [...prev, createdName],
+        );
+        setNewTag("");
+        refetchProductTags();
+      },
+    });
+  };
+
+  const handleDeleteTag = (tag: IProductTag) => {
+    if (
+      !confirm(
+        `Delete the tag "${tag.name}"? It will also be removed from every product using it.`,
+      )
+    )
+      return;
+
+    mutateTag({
+      apiPath: "/api/v1/products/tags",
+      method: "delete",
+      id: tag.id,
+      onSuccess() {
+        setProductTags((prev) => prev.filter((t) => t !== tag.name));
+        refetchProductTags();
+      },
+    });
+  };
 
   const {
     mutateProduct,
@@ -143,7 +209,7 @@ export default function SingleProduct() {
       payload["variants"] = varientOptionsValues.current.variants.map(
         (item) => ({
           ...item,
-          images: item.images
+          images: (item.images ?? [])
             .filter((image) => image.image.trim() != "")
             .map((image, index) => ({
               ...image,
@@ -411,6 +477,7 @@ export default function SingleProduct() {
                     defaultCompareAtPrice={productPrice.compairAtPrice}
                     productOptions={productData[0]?.options}
                     productVariants={productData[0]?.variants}
+                    isAlreadyOrdered={productData[0]?.isAlreadyOrdered ?? false}
                   />
                 </Section>
               ) : null}
@@ -451,30 +518,68 @@ export default function SingleProduct() {
                 <div className="grid gap-3">
                   <Label className="font-semibold">Tags</Label>
                   <div className="flex flex-wrap gap-2">
-                    {PREDEFINED_PRODUCT_TAGS.map((tag) => {
-                      const isSelected = productTags.includes(tag);
+                    {productTagData.map((tag) => {
+                      const isSelected = productTags.includes(tag.name);
                       return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() =>
-                            setProductTags((prev) =>
-                              isSelected
-                                ? prev.filter((t) => t !== tag)
-                                : [...prev, tag],
-                            )
-                          }
+                        <div
+                          key={tag.id}
                           className={cn(
-                            "px-3 py-1 rounded-full text-sm border transition-colors cursor-pointer",
+                            "group flex items-center rounded-full border text-sm transition-colors",
                             isSelected
                               ? "bg-green-600 text-white border-green-600"
                               : "bg-white text-gray-700 border-gray-300 hover:border-green-600",
                           )}
                         >
-                          {tag}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProductTags((prev) =>
+                                isSelected
+                                  ? prev.filter((t) => t !== tag.name)
+                                  : [...prev, tag.name],
+                              )
+                            }
+                            className="px-3 py-1 cursor-pointer"
+                          >
+                            {tag.name}
+                          </button>
+                          <button
+                            type="button"
+                            title="Delete this tag everywhere"
+                            disabled={isTagMutating}
+                            onClick={() => handleDeleteTag(tag)}
+                            className="pr-2 opacity-0 group-hover:opacity-70 hover:opacity-100 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
                       );
                     })}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={newTag}
+                      maxLength={50}
+                      placeholder="Create a new tag"
+                      onChange={(e) => setNewTag(e.currentTarget.value)}
+                      // the product form wraps this input, so Enter here would
+                      // save the whole product instead of adding the tag
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        handleAddTag();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={isTagMutating || newTag.trim() === ""}
+                      onClick={handleAddTag}
+                      className="flex items-center gap-1 rounded-md border border-gray-300 px-3 h-9 text-sm cursor-pointer hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Plus size={14} />
+                      Add
+                    </button>
                   </div>
                   {productTags.length > 0 && (
                     <p className="text-xs text-gray-500">

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Welcome - <%= companyName %></title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+        padding: 20px;
+      }
+      .email-container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        background-color: #ff6900;
+        color: #ffffff;
+        padding: 30px 20px;
+        text-align: center;
+      }
+      .header h1 {
+        font-size: 24px;
+        margin-bottom: 5px;
+      }
+      .content {
+        padding: 30px 20px;
+      }
+      .content p {
+        color: #333333;
+        line-height: 1.6;
+        margin-bottom: 15px;
+        font-size: 16px;
+      }
+      .big-icon {
+        text-align: center;
+        font-size: 60px;
+        margin: 20px 0;
+      }
+      .order-summary {
+        background-color: #f9f9f9;
+        padding: 20px;
+        border-radius: 6px;
+        margin: 20px 0;
+      }
+      .order-summary h3 {
+        color: #ff6900;
+        margin-bottom: 15px;
+        font-size: 18px;
+      }
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #e0e0e0;
+      }
+      .detail-row:last-child {
+        border-bottom: none;
+      }
+      .detail-label {
+        font-weight: bold;
+        color: #555555;
+      }
+      .detail-value {
+        color: #333333;
+      }
+      .total {
+        font-size: 18px;
+        font-weight: bold;
+        color: #ff6900;
+        padding-top: 15px;
+        margin-top: 10px;
+        border-top: 2px solid #ff6900;
+      }
+      .info-box {
+        background-color: #fff9e6;
+        border-left: 4px solid #ff6900;
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 4px;
+      }
+      .info-box p {
+        margin: 0;
+        color: #666666;
+        font-size: 14px;
+      }
+      .button-container {
+        text-align: center;
+        margin: 30px 0;
+      }
+      .cta-button {
+        display: inline-block;
+        background-color: #ff6900;
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 14px 40px;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+      .footer {
+        background-color: #f9f9f9;
+        padding: 20px;
+        text-align: center;
+        color: #777777;
+        font-size: 14px;
+      }
+      .footer a {
+        color: #ff6900;
+        text-decoration: none;
+      }
+
+      /* Mobile Responsive */
+      @media only screen and (max-width: 600px) {
+        body {
+          padding: 10px;
+        }
+        .header h1 {
+          font-size: 20px;
+        }
+        .content {
+          padding: 20px 15px;
+        }
+        .content p {
+          font-size: 14px;
+        }
+        .big-icon {
+          font-size: 50px;
+        }
+        .detail-row {
+          flex-direction: column;
+          gap: 5px;
+        }
+        .cta-button {
+          padding: 12px 30px;
+          font-size: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <!-- Header -->
+      <div class="header">
+        <h1>Welcome to <%= companyName %></h1>
+        <p style="margin: 0; color: #ffffff">Your account is ready</p>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <div class="big-icon">&#127881;</div>
+
+        <p>Hello <%= customerName %>,</p>
+        <p>
+          Thank you for signing up. Your email is verified and your
+          <%= companyName %> account is ready to use.
+        </p>
+
+        <div class="info-box">
+          <p><strong>What you can do now</strong></p>
+          <p>
+            Track your orders, save addresses for faster checkout, and keep a
+            wishlist of the things you are not ready to buy just yet.
+          </p>
+        </div>
+
+        <div class="button-container">
+          <a href="<%= shopLink %>" class="cta-button">Start Shopping</a>
+        </div>
+
+        <p style="text-align: center; color: #777777; font-size: 14px">
+          If you did not create this account, please contact us.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p>
+          &copy; <%= new Date().getFullYear() %> <%= companyName %>. All rights
+          reserved.
+        </p>
+        <p style="margin-top: 10px">
+          Need help?
+          <a href="mailto:<%= supportEmail %>">Contact Support</a>
+        </p>
+        <p style="margin-top: 10px; font-size: 12px; color: #999999">
+          You're receiving this email because an account was created with this address.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

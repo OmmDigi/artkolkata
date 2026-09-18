@@ -1,12 +1,17 @@
-import { DatabaseError } from "pg";
+import { DatabaseError, PoolClient } from "pg";
 import { pool } from "..";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { doValidate } from "../utils/doValidate";
 import { httpResponse } from "../utils/httpResponse";
 import {
+  CACHE_TAGS,
+  invalidateCache,
+} from "../services/cache.service";
+import {
   VAddCategory,
   VAddNewRecipent,
   VAddProducts,
+  VAddProductTag,
   VAddReview,
   VAddSubCategory,
   VCopyProduct,
@@ -21,10 +26,27 @@ import { ErrorHandler } from "../utils/ErrorHandler";
 import { parsePagination } from "../utils/parsePagination";
 import { doTransition } from "../utils/doTransition";
 import { generatePlaceholders } from "../utils/generatePlaceholders";
-import { getSingleProduct } from "../services/product.service";
-import { isNumber } from "../utils/isNumber";
+import {
+  getProductsVariants,
+  getSingleProduct,
+} from "../services/product.service";
+import {
+  buildProductFilter,
+  buildProductSort,
+  MAX_PRICE_EXPR,
+  MIN_PRICE_EXPR,
+  PRODUCT_PRICE_JOIN,
+} from "../services/productFilter.service";
+import { getProductFilters } from "../services/productFacet.service";
+// import { isNumber } from "../utils/isNumber";
 import { CustomRequest } from "../types";
-import { REVIEW_STATUS_APPROVED } from "../constant";
+import {
+  PRODUCT_STATUS_PUBLIC,
+  REVIEW_STATUS_APPROVED,
+  // TOP_REVIEW_LIMIT,
+  // TOP_REVIEW_MAX_LIMIT,
+  TOP_REVIEW_MIN_STARS,
+} from "../constant";
 import { checkPermission } from "../utils/checkPermissions";
 import { runEditorParser } from "../utils/runEditorParser";
 
@@ -45,6 +67,7 @@ export const createNewCategory = asyncErrorHandler(async (req, res) => {
       ],
     );
 
+    await invalidateCache(CACHE_TAGS.CATEGORIES);
     httpResponse(res, 201, "New category successfully created");
   } catch (error) {
     const err = error as DatabaseError;
@@ -116,6 +139,7 @@ export const updateCateogry = asyncErrorHandler(async (req, res) => {
       ],
     );
 
+    await invalidateCache(CACHE_TAGS.CATEGORIES);
     httpResponse(res, 200, "Category successfully updated");
   } catch (error) {
     const err = error as DatabaseError;
@@ -182,6 +206,7 @@ export const getSingleCategory = asyncErrorHandler(
 
 export const deleteSingleCategory = asyncErrorHandler(async (req, res) => {
   await pool.query("DELETE FROM categories WHERE id = $1", [req.params.id]);
+  await invalidateCache(CACHE_TAGS.CATEGORIES, CACHE_TAGS.SUB_CATEGORIES, CACHE_TAGS.PRODUCTS);
   httpResponse(res, 200, "Category successfully removed");
 });
 
@@ -192,6 +217,7 @@ export const addNewRecipient = asyncErrorHandler(async (req, res) => {
     "INSERT INTO recipient (tag_name, image, alt_tag, status) VALUES ($1, $2, $3, $4)",
     [value.tag_name, value.image, value.alt_tag ?? null, value.status],
   );
+  await invalidateCache(CACHE_TAGS.RECIPIENTS);
   httpResponse(res, 201, "New Item Successfully Created");
 });
 
@@ -262,11 +288,13 @@ export const updateRecipient = asyncErrorHandler(async (req, res) => {
     ],
   );
 
+  await invalidateCache(CACHE_TAGS.RECIPIENTS);
   httpResponse(res, 200, "Item successfully updated");
 });
 
 export const deleteRecipient = asyncErrorHandler(async (req, res) => {
   await pool.query("DELETE FROM recipient WHERE id = $1", [req.params.id]);
+  await invalidateCache(CACHE_TAGS.RECIPIENTS);
   httpResponse(res, 200, "Item successfully removed");
 });
 
@@ -284,104 +312,28 @@ export const getProductList = asyncErrorHandler(
 
     const { TO_STRING } = parsePagination(req);
 
-    let filter = "";
-    let placeholdernum = 1;
-    const filterValues: any[] = [];
+    const { where, values } = buildProductFilter(req);
 
-    if (req.query.category) {
-      // const categories = req.query.category.split(",");
-      let keys = new Array();
-      if(Array.isArray(req.query.category)) {
-        req.query.category.forEach(item => {
-          keys.push(item);
-          filterValues.push(item);
-        })
-        keys = [...req.query.category];
-        placeholdernum += keys.length;
-      } else {
-        keys = [req.query.category]
-        filterValues.push(keys[0]);
-      }
-      let placeholders = generatePlaceholders(1, keys.length);
-      const key = isNumber(keys[0]) ? "p.category_id" : "c.slug";
-
-      if (filter === "") {
-        if (keys.length == 0) {
-          filter = `WHERE ${key} = $${placeholdernum++}`;
-        } else {
-          filter = `WHERE ${key} IN ${placeholders}`;
-          placeholdernum += keys.length;
-        }
-      } else {
-        if (keys.length == 0) {
-          filter = ` AND ${key} = $${placeholdernum++}`;
-        } else {
-          filter += ` AND ${key} IN ${placeholders}`;
-          placeholdernum += keys.length;
-        }
-      }
-    }
-
-    if (req.query.sub_category) {
-      const key = isNumber(req.query.sub_category) ? "sc.id" : "sc.slug";
-
-      if (filter === "") {
-        filter = `WHERE ${key} = $${placeholdernum++}`;
-      } else {
-        filter += ` AND ${key} = $${placeholdernum++}`;
-      }
-
-      filterValues.push(req.query.sub_category);
-    }
-
-    if (req.query.tag) {
-      if (filter === "") {
-        filter = `WHERE p.tags ? $${placeholdernum++}`;
-      } else {
-        filter += ` AND p.tags ? $${placeholdernum++}`;
-      }
-
-      filterValues.push(req.query.tag);
-    }
-
-    if (req.query.search) {
-      if (filter === "") {
-        filter = `WHERE p.name ILIKE '%' || $${placeholdernum++} || '%'`;
-      } else {
-        filter += ` AND p.name ILIKE '%' || $${placeholdernum++} || '%'`;
-      }
-
-      filterValues.push(req.query.search);
-    }
-
-    if (req.query.status && checkPermission(req.token_info?.permissions ?? null, ["1-6"]) == true) {
-      // check is the request is comming form the admin if yes any status can see but if not only public product will visiable
-      if (filter === "") {
-        filter = `WHERE p.status = $${placeholdernum++}`;
-      } else {
-        filter += ` AND p.status = $${placeholdernum++}`;
-      }
-      filterValues.push(req.query.status);
-    } else {
-      if (!checkPermission(req.token_info?.permissions ?? null, ["1-3"])) {
-        if (filter === "") {
-          filter = `WHERE p.status = 1`;
-        } else {
-          filter += ` AND p.status = 1`;
-        }
-      }
-    }
-
-    // console.log(filter);
-    // console.log(filterValues)
+    const orderBy = buildProductSort(req);
 
     const { rows } = await pool.query(
       `
     SELECT 
-     p.*,
+     p.id,
+     p.sku_id,
+     p.name,
+     p.category_id,
+     p.price,
+     p.compare_at_price,
+     p.status,
+     p.slug,
+     p.position,
+     p.tags,
      c.slug AS category_slug,
      c.name AS category_name,
      TO_CHAR(p.updated_at, 'DD Mon YYYY') AS updated_at,
+     ${MIN_PRICE_EXPR} AS min_price,
+     ${MAX_PRICE_EXPR} AS max_price,
      COALESCE(JSON_AGG(pi ORDER BY pi.position ASC) FILTER (WHERE pi.id IS NOT NULL), '[]'::json) as images,
      COALESCE(AVG(r.stars), 0.0) AS rating,
      COUNT(DISTINCT r.id) AS total_ratings
@@ -399,20 +351,118 @@ export const getProductList = asyncErrorHandler(
     LEFT JOIN reviews r
     ON r.product_id = p.id AND r.status = ${REVIEW_STATUS_APPROVED}
 
-    ${filter}
+    ${PRODUCT_PRICE_JOIN}
 
-    GROUP BY p.id, c.id
+    ${where}
 
-    ORDER BY p.position ASC, p.id DESC
+    GROUP BY p.id, c.id, vp.min_price, vp.max_price
+
+    ${orderBy}
 
     ${TO_STRING}
   `,
-      filterValues,
+      values,
     );
+
+    if (req.query.variants === "true") {
+      const variantsByProduct = await getProductsVariants(
+        rows.map((row) => row.id),
+      );
+
+      rows.forEach((row) => {
+        row.variants = variantsByProduct[row.id] ?? [];
+      });
+    }
 
     httpResponse(res, 200, "Product List", rows);
   },
 );
+
+// returns every filter the website can show for the products matching the current query
+export const getProductFilterList = asyncErrorHandler(
+  async (req: CustomRequest, res) => {
+    const filters = await getProductFilters(req);
+    httpResponse(res, 200, "Product Filters", filters);
+  },
+);
+
+// product tags
+//
+// The tag text is the key inside products.tags and the value the website
+// filters on, so a tag the admin invents has to land in both places: the
+// product row it was created for, and the product_tags catalogue every other
+// product picks from.
+const syncProductTags = async (client: PoolClient, tags: string[]) => {
+  const names = [
+    ...new Set(tags.map((tag) => tag.trim()).filter((tag) => tag !== "")),
+  ];
+
+  if (names.length === 0) return;
+
+  await client.query(
+    `INSERT INTO product_tags (name)
+     SELECT * FROM UNNEST($1::text[])
+     ON CONFLICT DO NOTHING`,
+    [names],
+  );
+};
+
+export const getProductTagList = asyncErrorHandler(async (_req, res) => {
+  const { rows } = await pool.query(
+    "SELECT id, name FROM product_tags ORDER BY name ASC",
+  );
+
+  httpResponse(res, 200, "Product Tag List", rows);
+});
+
+export const addProductTag = asyncErrorHandler(async (req, res) => {
+  const value = doValidate(VAddProductTag, req.body ?? {});
+
+  const { rows, rowCount } = await pool.query(
+    `INSERT INTO product_tags (name)
+     VALUES ($1)
+     ON CONFLICT DO NOTHING
+     RETURNING id, name`,
+    [value.name],
+  );
+
+  // the unique index is on LOWER(name), so a conflict means the tag already
+  // exists under some casing. Hand that row back instead of failing: the CMS
+  // only wants a tag it can select, and one already exists.
+  if (rowCount === 0) {
+    const { rows: existing } = await pool.query(
+      "SELECT id, name FROM product_tags WHERE LOWER(name) = LOWER($1)",
+      [value.name],
+    );
+
+    return httpResponse(res, 200, "Tag already exists", existing[0]);
+  }
+
+  await invalidateCache(CACHE_TAGS.PRODUCT_TAGS);
+  httpResponse(res, 201, "New Tag Successfully Created", rows[0]);
+});
+
+export const deleteProductTag = asyncErrorHandler(async (req, res) => {
+  const id = req.params.id as string;
+
+  await doTransition(async (client) => {
+    const { rows, rowCount } = await client.query(
+      "DELETE FROM product_tags WHERE id = $1 RETURNING name",
+      [id],
+    );
+
+    if (rowCount === 0) throw new ErrorHandler(404, "Tag not found");
+
+    // a deleted tag must stop being filterable, and the facets are built from
+    // products.tags, so the key has to leave every product that carried it
+    await client.query("UPDATE products SET tags = tags - $1 WHERE tags ? $1", [
+      rows[0].name,
+    ]);
+  });
+
+  await invalidateCache(CACHE_TAGS.PRODUCT_TAGS, CACHE_TAGS.PRODUCTS);
+  httpResponse(res, 200, "Tag Successfully Deleted");
+});
 
 export const addNewProduct = asyncErrorHandler(async (req, res) => {
   const value = doValidate(VAddProducts, req.body ?? {});
@@ -455,6 +505,8 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
 
     const productId = rows[0].id;
 
+    await syncProductTags(client, value.tags ?? []);
+
     // 2. insert multiple images/videos of the inserted product
     const imagePlaceholder = generatePlaceholders(value.images.length, 5);
     await client.query(
@@ -474,9 +526,9 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
 
     const { options, variants } = value;
 
-    console.log(options)
-    console.log(variants)
-    console.log(options[0].values)
+    // console.log(options)
+    // console.log(variants)
+    // console.log(options[0].values)
 
     if (options && variants) {
       for (let i = 0; i < options.length; i++) {
@@ -504,7 +556,9 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
 
       // 4. Insert variants
       for (const variant of variants) {
-        const variantResult = await client.query(
+        let variantId : null | number = null;
+        try {
+          const variantResult = await client.query(
           `INSERT INTO product_variants 
                 (product_id, sku, price, compare_at_price, quantity, available) 
                 VALUES ($1, $2, $3, $4, $5, $6) 
@@ -518,21 +572,33 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
             variant.available,
           ],
         );
-        const variantId = variantResult.rows[0].id;
+         variantId = variantResult.rows[0].id;
+        } catch (error) {
+          const dbError = error as DatabaseError;
+          // sku has a unique index (unique_product_variant_sku), so a duplicate
+          // sku from any product lands here
+          if (dbError.code === "23505" && dbError.constraint === "unique_product_variant_sku") {
+            throw new ErrorHandler(
+              400,
+              `SKU "${variant.sku}" is already used by another product variant. Please enter a unique SKU.`,
+            );
+          }
+          throw error;
+        }
 
         // Add varient images/videos
-        if (variant.images?.length != 0) {
+        if (variant.images?.length) {
           const variantPlaceholder = generatePlaceholders(
             variant.images.length,
             5,
           );
           await client.query(
             `INSERT INTO product_variant_images (product_variant_id, image, alt_tag, position, type) VALUES ${variantPlaceholder}`,
-            variant.images.flatMap((image: any) => [
+            variant.images.flatMap((image: any, index: number) => [
               variantId,
               image.image,
               image.alt_tag,
-              image.position,
+              image.position ?? index,
               image.type ?? "image",
             ]),
           );
@@ -555,6 +621,7 @@ export const addNewProduct = asyncErrorHandler(async (req, res) => {
     }
   });
 
+  await invalidateCache(CACHE_TAGS.PRODUCTS, CACHE_TAGS.PRODUCT_TAGS);
   httpResponse(res, 201, "New Product Successfully Added");
 });
 
@@ -619,6 +686,8 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
     );
 
     if (rowCount == 0) throw new ErrorHandler(400, "Unable to update product");
+
+    await syncProductTags(client, value.tags ?? []);
 
     // 1. Delete existing variants and options and product_images
     // await client.query("DELETE FROM product_variants WHERE product_id = $1", [
@@ -688,7 +757,8 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
         let variantId = variant.id;
 
         // check user add a new varient or not if yes insert it else update the varient info via id
-        if (variant.isNew) {
+        try {
+          if (variant.isNew) {
           const variantResult = await client.query(
             `INSERT INTO product_variants 
                 (product_id, sku, price, compare_at_price, quantity, available) 
@@ -728,24 +798,39 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
           );
           varientIds.push(variantId);
         }
+        } catch (error) {
+          const dbError = error as DatabaseError;
+          // sku has a unique index (unique_product_variant_sku), so a duplicate
+          // sku from any product lands here
+          if (dbError.code === "23505" && dbError.constraint === "unique_product_variant_sku") {
+            throw new ErrorHandler(
+              400,
+              `SKU "${variant.sku}" is already used by another product variant. Please enter a unique SKU.`,
+            );
+          }
+          throw error;
+        }
 
         // Add varient images/videos
-        if (variant.images?.length != 0) {
-          await client.query(
-            "DELETE FROM product_variant_images WHERE product_variant_id = $1",
-            [variantId],
-          );
+        // always wipe the old rows first, the client sends the full list it
+        // wants to keep, so an empty list means every media was removed
+        await client.query(
+          "DELETE FROM product_variant_images WHERE product_variant_id = $1",
+          [variantId],
+        );
+
+        if (variant.images?.length) {
           const variantPlaceholder = generatePlaceholders(
             variant.images.length,
             5,
           );
           await client.query(
             `INSERT INTO product_variant_images (product_variant_id, image, alt_tag, position, type) VALUES ${variantPlaceholder}`,
-            variant.images.flatMap((image: any) => [
+            variant.images.flatMap((image: any, index: number) => [
               variantId,
               image.image,
               image.alt_tag,
-              image.position,
+              image.position ?? index,
               image.type ?? "image",
             ]),
           );
@@ -774,11 +859,13 @@ export const updateProduct = asyncErrorHandler(async (req, res) => {
     }
   });
 
+  await invalidateCache(CACHE_TAGS.PRODUCTS, CACHE_TAGS.PRODUCT_TAGS);
   httpResponse(res, 200, "Product Successfully Updated");
 });
 
 export const deleteProduct = asyncErrorHandler(async (req, res) => {
   await pool.query("DELETE FROM products WHERE id = $1", [req.params.id]);
+  await invalidateCache(CACHE_TAGS.PRODUCTS);
   httpResponse(res, 200, "Product successfully removed");
 });
 
@@ -964,6 +1051,7 @@ export const copyProduct = asyncErrorHandler(async (req, res) => {
     }
   });
 
+  await invalidateCache(CACHE_TAGS.PRODUCTS);
   httpResponse(res, 201, "Product successfully copied and saved in private product list");
 });
 
@@ -984,6 +1072,7 @@ export const createNewSubCategory = asyncErrorHandler(async (req, res) => {
       ],
     );
 
+    await invalidateCache(CACHE_TAGS.SUB_CATEGORIES);
     httpResponse(res, 201, "New sub category successfully created");
   } catch (error) {
     const err = error as DatabaseError;
@@ -1046,6 +1135,7 @@ export const updateSubCateogry = asyncErrorHandler(async (req, res) => {
       ],
     );
 
+    await invalidateCache(CACHE_TAGS.SUB_CATEGORIES);
     httpResponse(res, 200, "Category successfully updated");
   } catch (error) {
     const err = error as DatabaseError;
@@ -1101,6 +1191,7 @@ export const getSingleSubCategory = asyncErrorHandler(async (req, res) => {
 
 export const deleteSingleSubCategory = asyncErrorHandler(async (req, res) => {
   await pool.query("DELETE FROM sub_categories WHERE id = $1", [req.params.id]);
+  await invalidateCache(CACHE_TAGS.SUB_CATEGORIES, CACHE_TAGS.PRODUCTS);
   httpResponse(res, 200, "Category successfully removed");
 });
 
@@ -1117,6 +1208,7 @@ export const createNewReview = asyncErrorHandler(
       [userId, value.stars, value.message ?? null, value.product_id],
     );
 
+    await invalidateCache(CACHE_TAGS.REVIEWS);
     httpResponse(res, 201, "Review request successfully sent");
   },
 );
@@ -1137,6 +1229,15 @@ export const getReviewList = asyncErrorHandler(
     if (req.query.product_id) {
       filter += ` AND r.product_id = $${placeholder++}`;
       filterValues.push(req.query.product_id);
+    }
+
+    // ?stars=4 narrows the list to a single rating bucket. Anything outside
+    // 1-5 is ignored rather than rejected, so a stale or empty value from the
+    // storefront filter just falls back to "all ratings".
+    const stars = parseInt((req.query.stars as string) ?? "", 10);
+    if (!Number.isNaN(stars) && stars >= 1 && stars <= 5) {
+      filter += ` AND r.stars = $${placeholder++}`;
+      filterValues.push(stars);
     }
 
     const { rows } = await pool.query(
@@ -1167,6 +1268,138 @@ export const getReviewList = asyncErrorHandler(
   },
 );
 
+// Latest approved reviews of 4 stars and above, used by the storefront to show
+// social proof. Public: it never leaks pending reviews or private products.
+export const getTopReviewList = asyncErrorHandler(async (req, res) => {
+  const { TO_STRING } = parsePagination(req);
+
+  const { rows } = await pool.query(
+    `
+     SELECT
+      r.id,
+      r.stars,
+      r.message,
+      r.user_id,
+      u.name AS user_name,
+      r.product_id,
+      p.slug AS product_slug,
+      p.name AS product_name,
+      COALESCE(pi.images, '[]'::json) AS product_images,
+      TO_CHAR(r.created_at, 'DD Mon YYYY') AS created_at
+     FROM reviews r
+
+     JOIN products p
+     ON p.id = r.product_id AND p.status = $1
+
+     LEFT JOIN users u
+     ON u.id = r.user_id
+
+     LEFT JOIN LATERAL (
+       SELECT JSON_AGG(i ORDER BY i.position ASC) AS images
+       FROM product_images i
+       WHERE i.product_id = p.id
+     ) pi ON true
+
+     WHERE r.status = $2 AND r.stars >= $3
+
+     ORDER BY r.created_at DESC, r.id DESC
+
+     ${TO_STRING}
+    `,
+    [
+      PRODUCT_STATUS_PUBLIC,
+      REVIEW_STATUS_APPROVED,
+      TOP_REVIEW_MIN_STARS,
+    ],
+  );
+
+  httpResponse(res, 200, "Top review list", rows);
+});
+
+// Rating breakdown for a product, or for the whole shop when no product_id is
+// given: how many 5 star reviews, how many 4, and so on. One pass over the
+// table with FILTER aggregates instead of six round trips.
+export const getReviewAnalytics = asyncErrorHandler(
+  async (req: CustomRequest, res) => {
+    const isPrivileged = checkPermission(
+      req.token_info?.permissions ?? null,
+      ["1-6"],
+    );
+
+    let filter = `WHERE 1=1`;
+    let placeholder = 1;
+    const filterValues: any[] = [];
+
+    // A shopper only ever counts approved reviews, so the numbers here match
+    // the list they can actually read. A manager counts everything and gets
+    // the approved/pending split alongside it.
+    if (!isPrivileged) {
+      filter += ` AND r.status = $${placeholder++}`;
+      filterValues.push(REVIEW_STATUS_APPROVED);
+    }
+
+    if (req.query.product_id) {
+      const productId = parseInt(req.query.product_id as string, 10);
+      if (Number.isNaN(productId)) {
+        throw new ErrorHandler(400, "product_id must be a number");
+      }
+      filter += ` AND r.product_id = $${placeholder++}`;
+      filterValues.push(productId);
+    }
+
+    const approvedPlaceholder = placeholder++;
+    filterValues.push(REVIEW_STATUS_APPROVED);
+
+    const { rows } = await pool.query(
+      `
+     SELECT
+      COUNT(*)::int AS total,
+      COALESCE(ROUND(AVG(r.stars)::numeric, 2), 0) AS average,
+      COUNT(*) FILTER (WHERE r.stars = 5)::int AS star_5,
+      COUNT(*) FILTER (WHERE r.stars = 4)::int AS star_4,
+      COUNT(*) FILTER (WHERE r.stars = 3)::int AS star_3,
+      COUNT(*) FILTER (WHERE r.stars = 2)::int AS star_2,
+      COUNT(*) FILTER (WHERE r.stars = 1)::int AS star_1,
+      COUNT(*) FILTER (WHERE r.status = $${approvedPlaceholder})::int AS approved
+     FROM reviews r
+
+     ${filter}
+    `,
+      filterValues,
+    );
+
+    const row = rows[0];
+    const total: number = row.total;
+
+    // Percentages are what the star bars are drawn from, so they are rounded
+    // here rather than in every client.
+    const breakdown = [5, 4, 3, 2, 1].map((stars) => {
+      const count: number = row[`star_${stars}`];
+      return {
+        stars,
+        count,
+        percentage: total === 0 ? 0 : Number(((count / total) * 100).toFixed(2)),
+      };
+    });
+
+    const analytics: Record<string, any> = {
+      total,
+      // AVG comes back as a numeric string from pg
+      average: Number(row.average),
+      breakdown,
+    };
+
+    // Pending counts are staff-only: they describe reviews the storefront is
+    // not allowed to know exist yet.
+    if (isPrivileged) {
+      analytics.approved = row.approved;
+      analytics.pending = total - row.approved;
+    }
+
+    httpResponse(res, 200, "Review analytics", analytics);
+  },
+);
+
 export const updateReviewStatus = asyncErrorHandler(async (req, res) => {
   const value = doValidate(VUpdateReviewStatus, { ...req.params, ...req.body });
 
@@ -1177,6 +1410,7 @@ export const updateReviewStatus = asyncErrorHandler(async (req, res) => {
   if (rowCount == 0)
     throw new ErrorHandler(500, "Unable to update review status");
 
+  await invalidateCache(CACHE_TAGS.REVIEWS);
   httpResponse(res, 200, "Review status successfully updated");
 });
 
@@ -1188,5 +1422,6 @@ export const deleteReview = asyncErrorHandler(async (req, res) => {
   ]);
   if (rowCount == 0) throw new ErrorHandler(500, "Unable to delete review");
 
+  await invalidateCache(CACHE_TAGS.REVIEWS);
   httpResponse(res, 200, "Review successfully removed");
 });

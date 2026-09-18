@@ -237,6 +237,10 @@ export const VDeleteReview = Joi.object({
   id: Joi.number().required(),
 });
 
+export const VAddProductTag = Joi.object({
+  name: Joi.string().trim().min(1).max(50).required().label("Tag name"),
+});
+
 export const VAddNewRecipent = Joi.object({
   tag_name: Joi.string().required(),
   alt_tag: Joi.string().optional(),

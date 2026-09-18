@@ -4,6 +4,8 @@
     "module": "commonjs",
     "strict": true,
     "esModuleInterop": true,
+    // the two generated order documents are written as react-pdf components
+    "jsx": "react-jsx",
     "outDir": "./dist"
   },
   "include": ["src/**/*"]

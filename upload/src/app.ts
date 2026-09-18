@@ -3,15 +3,13 @@ import uploadRoutes from "./routes/upload.routes";
 import path from "path";
 import { globalErrorController } from "./controllers/error.controller";
 import { PUBLIC_FOLDER_NAME } from "./constant";
-import dotenv from "dotenv";
 import { viewRoute } from "./routes/view.routes";
 import cors from "cors";
 import { manageRoutes } from "./routes/manage.routes";
+import { loadEnv } from "./utils/loadEnv";
 
 // Load environment variables based on NODE_ENV
-dotenv.config({
-  path: process.env.NODE_ENV === "production" ? ".env" : ".env.local",
-});
+loadEnv()
 
 const app = express();
 

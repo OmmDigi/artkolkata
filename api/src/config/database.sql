@@ -457,17 +457,33 @@ ALTER TABLE sub_categories ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS position INTEGER DEFAULT 0;
 
 -- Migrate product tags from comma-separated TEXT to JSONB object {"tag": true}
-ALTER TABLE products ADD COLUMN IF NOT EXISTS tags_jsonb JSONB DEFAULT '{}';
+--
+-- Guarded on the column still being text. This whole file runs as one
+-- statement, so it runs as one transaction: once tags is jsonb, trim(tags)
+-- below is an error, and that error would roll back every migration written
+-- after it — including ones that had never been applied.
+DO $migrate_product_tags$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'products'
+      AND column_name = 'tags'
+      AND data_type <> 'jsonb'
+  ) THEN
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS tags_jsonb JSONB DEFAULT '{}';
 
-UPDATE products
-SET tags_jsonb = (
-  SELECT jsonb_object_agg(trim(t), true)
-  FROM unnest(string_to_array(trim(tags), ',')) AS t
-)
-WHERE tags IS NOT NULL AND trim(tags) != '';
+    UPDATE products
+    SET tags_jsonb = (
+      SELECT jsonb_object_agg(trim(t), true)
+      FROM unnest(string_to_array(trim(tags), ',')) AS t
+    )
+    WHERE tags IS NOT NULL AND trim(tags) != '';
 
-ALTER TABLE products DROP COLUMN IF EXISTS tags;
-ALTER TABLE products RENAME COLUMN tags_jsonb TO tags;
+    ALTER TABLE products DROP COLUMN IF EXISTS tags;
+    ALTER TABLE products RENAME COLUMN tags_jsonb TO tags;
+  END IF;
+END
+$migrate_product_tags$;
 
 CREATE INDEX IF NOT EXISTS idx_products_tags_gin ON products USING GIN (tags);
 -- Category visibility (public / private). Private categories are only visible to admins
@@ -481,7 +497,8 @@ INSERT INTO store_settings (key, value) VALUES
   ('site_logo_alt',   '""'),
   ('contact_emails',  '[]'),
   ('contact_phones',  '[]'),
-  ('site_addresses',  '[]')
+  ('site_addresses',  '[]'),
+  ('ribbon_section',  '{"text":"","link":null}')
 ON CONFLICT (key) DO NOTHING;
 
 -- Website banners
@@ -541,3 +558,540 @@ ON auto_discount_rules(status, min_order_amount);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_discount NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS auto_discount NUMERIC(10,2) DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS auto_discount_rule_id INTEGER;
+
+-- Products a user saved for later. One row per (user, product) pair, so adding
+-- the same product twice is a no-op instead of a duplicate row.
+CREATE TABLE IF NOT EXISTS wishlist (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    UNIQUE(user_id, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON wishlist(user_id);
+CREATE INDEX IF NOT EXISTS idx_wishlist_product_id ON wishlist(product_id);
+
+-- Shiprocket integration
+-- Shiprocket returns two separate ids for one booking: an order id (what the
+-- Shiprocket panel and the cancel/invoice APIs key off) and a shipment id
+-- (what AWB assignment, pickup, label and manifest key off). Both are needed
+-- later, so both are stored. shiprocket_order_id being set is what marks an
+-- order as already booked, so it must be written even when AWB assignment fails.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shiprocket_order_id TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shiprocket_shipment_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_orders_shiprocket_order_id ON orders(shiprocket_order_id);
+
+-- ============================================================
+-- SHIPPING PARTNER — one set of columns, whoever books the parcel
+--
+-- The per-partner columns above (shiprocket_order_id, bigship_order_id) are
+-- what these replace: every partner now writes the same three columns, so no
+-- query has to know which one is live. They are left in place, unread, so an
+-- older build rolled back onto this database still finds what it wrote.
+-- ============================================================
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_partner VARCHAR(20);
+-- What the partner keys the booking off, and what marks an order as already
+-- booked — so it is written even when AWB assignment fails.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS partner_order_id TEXT;
+-- Shiprocket keys AWB assignment, pickup, label and manifest off a second id.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS partner_shipment_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_orders_partner_order_id ON orders(partner_order_id);
+
+-- Backfill from the columns they replace, so orders booked before this change
+-- are still found by the cancel and re-confirm paths. Guarded on
+-- partner_order_id being empty, so it cannot overwrite a newer booking.
+UPDATE orders
+SET shipping_partner    = 'shiprocket',
+    partner_order_id    = shiprocket_order_id,
+    partner_shipment_id = shiprocket_shipment_id
+WHERE partner_order_id IS NULL AND shiprocket_order_id IS NOT NULL;
+
+UPDATE orders
+SET shipping_partner = 'bigship',
+    partner_order_id = bigship_order_id
+WHERE partner_order_id IS NULL AND bigship_order_id IS NOT NULL;
+
+-- ============================================================
+-- REVERSE SHIPMENTS — the collection, and the parcel that replaces it
+--
+-- A Replace has two legs: the goods come back on `waybill`, and the new parcel
+-- goes out on `replacement_waybill`. They cannot share the order's own shipment
+-- columns, which the original forward parcel already owns.
+-- ============================================================
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS shipping_partner VARCHAR(20);
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS partner_order_id TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS partner_shipment_id TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS courier_name TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS replacement_partner_order_id TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS replacement_partner_shipment_id TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS replacement_waybill TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS replacement_courier_name TEXT;
+ALTER TABLE order_returns ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+
+-- Both legs are looked up by AWB on every courier scan.
+CREATE INDEX IF NOT EXISTS idx_order_returns_waybill ON order_returns(waybill);
+CREATE INDEX IF NOT EXISTS idx_order_returns_replacement_waybill
+  ON order_returns(replacement_waybill);
+CREATE INDEX IF NOT EXISTS idx_order_returns_order_id ON order_returns(order_id);
+
+-- A reverse AWB is the courier's, not ours: Shiprocket hands back ids longer
+-- than the 50 characters this column was created with.
+ALTER TABLE order_returns ALTER COLUMN waybill TYPE TEXT;
+
+-- Which courier the shipping partner actually assigned, shown to the customer
+-- on the tracking page. The AWB alone does not say who is carrying it.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_name TEXT;
+
+-- When the order actually reached the customer. The return window is measured
+-- from this, not from updated_at: updated_at moves every time anything touches
+-- the row — a courier scan, a tracking poll — which silently restarted the
+-- window on every read. Set once, by whichever writer first sees DELIVERED.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP;
+
+-- Backfill for orders delivered before this column existed. updated_at is the
+-- best evidence available for them and is what the window already used.
+UPDATE orders
+SET delivered_at = updated_at
+WHERE order_status = 'DELIVERED' AND delivered_at IS NULL;
+
+-- Conditional shipping charge. Delivery used to be a hardcoded ₹0 that the
+-- seller absorbed; it is now a slab table so the CMS can say things like
+-- "₹99 under ₹1000, free above it" or "₹49 handling on COD" without a deploy.
+--
+-- min_order_amount is inclusive, max_order_amount is EXCLUSIVE, so the usual
+-- pair of slabs is (min 0, max 1000) and (min 1000, max NULL) with no gap and
+-- no overlap. The amount compared against is the payable cart value AFTER the
+-- coupon and the automatic discount — the same number calculateAutoDiscount
+-- works on — so a discount that drops the cart under the threshold does bring
+-- the shipping charge back.
+--
+-- One rule ever applies: highest priority wins, ties break on the bigger slab.
+-- When nothing matches, shipping is free — which is what an empty table means,
+-- so installing this migration changes no price on its own.
+CREATE TABLE IF NOT EXISTS shipping_charge_rules (
+    id SERIAL PRIMARY KEY,
+
+    title VARCHAR(255) NOT NULL,
+
+    -- slab the cart value must fall into: min <= amount < max
+    min_order_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+    max_order_amount NUMERIC(10,2),        -- NULL = no upper bound
+
+    type VARCHAR(20) NOT NULL,             -- 'flat' | 'percentage' | 'free'
+    value NUMERIC(10,2) NOT NULL DEFAULT 0,-- rupee amount, or percent of the cart
+    max_charge_amount NUMERIC(10,2),       -- cap for percentage rules, NULL = uncapped
+
+    -- 'ALL' matches both, otherwise the rule only fires for that payment method
+    payment_method VARCHAR(10) NOT NULL DEFAULT 'ALL', -- 'ALL' | 'COD' | 'ONLINE'
+
+    status VARCHAR(20) NOT NULL DEFAULT 'active',      -- 'active' | 'disabled'
+
+    -- higher priority wins when several slabs match; ties break on the bigger slab
+    priority INTEGER NOT NULL DEFAULT 0,
+
+    starts_at TIMESTAMPTZ,                 -- NULL = no start boundary
+    ends_at TIMESTAMPTZ,                   -- NULL = never expires
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shipping_charge_rules_lookup
+ON shipping_charge_rules(status, min_order_amount);
+
+-- Which slab an order was charged under, so a later rule change never rewrites
+-- history. The full snapshot also lives in orders.price_breakdown.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_rule_id INTEGER;
+
+-- Idempotency for checkout. Placing an order is not naturally repeatable: a
+-- double click, a browser refresh on a slow gateway call, an axios/proxy retry
+-- after a timeout, or a back-button re-post all used to create a second orders
+-- row (and for ONLINE, a second gateway order) for the same intent.
+--
+-- The client mints a UUID per checkout attempt and sends it as the
+-- Idempotency-Key header. The first request to arrive INSERTs this row in its
+-- own committed transaction BEFORE the order transaction opens, so a racing
+-- duplicate sees it immediately. Whoever loses the INSERT either replays the
+-- stored response (COMPLETED) or is told to retry (IN_PROGRESS).
+--
+-- request_hash guards against the client reusing one key for a different cart:
+-- same key + different payload is a client bug, not a retry, and is rejected
+-- rather than being answered with the wrong order's response.
+--
+-- Rows are kept forever: one row per checkout attempt is a useful audit trail
+-- at this volume, and nothing here needs to expire for correctness.
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    id SERIAL PRIMARY KEY,
+
+    idempotency_key TEXT NOT NULL,
+    user_id INT NOT NULL REFERENCES users(id),
+    endpoint TEXT NOT NULL,          -- scopes the key, e.g. 'POST /orders/place-order'
+    request_hash TEXT NOT NULL,      -- sha256 of the validated request payload
+
+    status VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',
+    -- IN_PROGRESS : reserved, the order transaction has not committed yet
+    -- COMPLETED   : order committed, response_body below is the reply to replay
+    -- FAILED      : the order transaction rolled back, nothing was created,
+    --               so the same key may be retried from scratch
+
+    order_id INT REFERENCES orders(order_id),
+    response_status INT,
+    response_message TEXT,
+    response_body JSONB,             -- the `data` object of the original 201
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- The key is scoped per user so one customer's key can never collide with, or
+-- replay, another's. This unique index is what makes the reservation atomic.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_idempotency_keys_lookup
+ON idempotency_keys(user_id, endpoint, idempotency_key);
+
+CREATE UNIQUE INDEX IF NOT EXISTS unique_product_variant_sku
+ON product_variants (sku);
+-- ============================================================
+-- REFUND AUDIT
+--
+-- A refund is decided by a person, so what they decided is worth keeping:
+-- how much went back, why, and who pressed the button. refunded_amount also
+-- makes a partial refund legible — status alone only ever says REFUNDED, and
+-- without the amount nobody can tell 200 back from 2000.
+--
+-- It is also what tells apart a refund this api issued from one an admin did
+-- by hand in the gateway's own portal and then recorded here.
+-- ============================================================
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refund_note TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_by INT REFERENCES users(id);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP;
+-- true when the money was moved by the gateway api, false when an admin
+-- settled it outside this system and only recorded the fact.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded_via_gateway BOOLEAN;
+
+-- ============================================================
+-- How the customer actually paid.
+--
+-- orders.payment_method only says ONLINE or COD. That is not enough for
+-- support: a customer whose money left but whose order never confirmed quotes
+-- their UPI id or the last four of their card, and a chargeback names the
+-- issuing bank. So the gateway's own instrument payload is flattened into
+-- these three columns by describeInstrument.
+--
+-- payment_instrument is the coarse kind, and the only one worth filtering or
+-- reporting on. instrument_label is the line the CMS prints. instrument_detail
+-- keeps the pieces it was built from, so a question the label does not answer
+-- can still be answered without re-reading the whole gateway response.
+--
+-- Nothing here is ever a full card number: gateways only ever send the last
+-- four, and nothing in this api asks for more.
+-- ============================================================
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_instrument VARCHAR(20);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS instrument_label TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS instrument_detail JSONB;
+
+-- ============================================================
+-- PRODUCT TAGS
+--
+-- products.tags is a jsonb set of tag names, so the tag text itself is what a
+-- shopper filters on. This table is the catalogue of tags an admin may pick
+-- from. Without it the CMS could only ever offer a hardcoded list, and a tag
+-- invented while editing one product would be invisible to the next one.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_tags (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- tags are matched case insensitively, otherwise "New Arrival" and
+-- "new arrival" both exist and split the same products into two filters
+CREATE UNIQUE INDEX IF NOT EXISTS idx_product_tags_name
+ON product_tags (LOWER(name));
+
+-- the set the CMS used to hardcode
+INSERT INTO product_tags (name)
+SELECT t.name FROM (VALUES
+  ('Best Seller'),
+  ('Recommendation'),
+  ('New Arrival'),
+  ('Featured'),
+  ('Sale'),
+  ('Trending')
+) AS t(name)
+ON CONFLICT DO NOTHING;
+
+-- plus every tag already written onto a product before this table existed
+INSERT INTO product_tags (name)
+SELECT DISTINCT ON (LOWER(t.tag)) t.tag
+FROM products p
+CROSS JOIN LATERAL jsonb_object_keys(COALESCE(p.tags, '{}'::jsonb)) AS t(tag)
+WHERE trim(t.tag) <> ''
+ORDER BY LOWER(t.tag), t.tag
+ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- BLOG AUTHORS
+--
+-- A post shows who wrote it, and the same few people write most of them, so
+-- the author is a row of its own rather than a name retyped onto every post.
+-- Editing a bio or a photo once then fixes it on every post that author wrote.
+--
+-- blogs.author_id stays what it was: the admin account that created the row,
+-- kept for audit. blog_author_id is the byline the website prints, and the two
+-- are not the same thing — an admin often publishes a post someone else wrote.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS blog_authors (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    designation TEXT,
+    bio TEXT,
+    image TEXT,
+    email TEXT,
+    website_url TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- one author per name, matched case insensitively, so "Ria Sen" and "ria sen"
+-- can not become two bylines for the same person
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_authors_name
+ON blog_authors (LOWER(name));
+
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS blog_author_id INTEGER
+  REFERENCES blog_authors(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- SCHEDULING
+--
+-- published_at is when the post is meant to be public, which is not when the
+-- row was created. A post is public only when status = 'published' AND
+-- published_at <= NOW(), and that comparison happens on every read — so a
+-- future date simply goes live by itself, with nothing running in the
+-- background to flip it. Rows written before this column existed fall back to
+-- created_at so nothing that was already live disappears.
+-- ============================================================
+-- TIMESTAMPTZ, unlike created_at next to it: a scheduled post has to go live
+-- at an absolute instant, and only a tz-aware column compares correctly
+-- against NOW() no matter what timezone the api process or the database runs
+-- in. TO_CHAR(... AT TIME ZONE 'Asia/Kolkata') then prints it as IST.
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+
+UPDATE blogs SET published_at = created_at
+WHERE published_at IS NULL AND status = 'published';
+
+CREATE INDEX IF NOT EXISTS idx_blogs_published_at ON blogs(published_at DESC);
+
+-- ============================================================
+-- OPEN GRAPH / TWITTER
+--
+-- Every one of these is optional. Left empty the api answers with the value
+-- the page would otherwise use (meta_title, meta_description, cover image), so
+-- a post gets correct share cards without anyone filling this section in, and
+-- an admin only touches it when the share card should differ from the page.
+-- ============================================================
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS og_title TEXT;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS og_description TEXT;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS og_image TEXT;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS og_type TEXT DEFAULT 'article';
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS twitter_card TEXT DEFAULT 'summary_large_image';
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS twitter_title TEXT;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS twitter_description TEXT;
+ALTER TABLE blogs ADD COLUMN IF NOT EXISTS twitter_image TEXT;
+
+-- ============================================================
+-- BLOG MEDIA
+--
+-- Shaped exactly like product_images: one row per piece of media, ordered by
+-- position, with type saying what the url in the image column is — an uploaded
+-- image, or a video link (YouTube) that the website embeds instead of showing.
+--
+-- The first image-type row is the cover. blogs.cover_image is kept in sync
+-- with it on every write so the listing and the share card keep reading one
+-- column and nothing that already depends on it has to change.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS blog_media (
+    id SERIAL PRIMARY KEY,
+    blog_id INTEGER REFERENCES blogs(id) ON DELETE CASCADE,
+    image TEXT,
+    alt_tag TEXT,
+    type TEXT DEFAULT 'image',
+    position INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_blog_media_blog_id ON blog_media(blog_id);
+
+-- the cover every existing post already has becomes its first media row,
+-- otherwise opening an old post in the CMS would show an empty gallery
+INSERT INTO blog_media (blog_id, image, alt_tag, type, position)
+SELECT b.id, b.cover_image, b.cover_image_alt, 'image', 0
+FROM blogs b
+WHERE b.cover_image IS NOT NULL
+  AND trim(b.cover_image) <> ''
+  AND NOT EXISTS (SELECT 1 FROM blog_media m WHERE m.blog_id = b.id);
+
+-- ============================================================
+-- PRODUCT SEARCH (full text)
+--
+-- The search box matches a product by its name or by any of its tag names, so
+-- both live in one tsvector kept by the database itself — a generated column
+-- never goes stale the way a trigger-maintained one does when a write path
+-- forgets about it.
+--
+-- Weights carry where a word came from: 'A' is the product name, 'B' a tag.
+-- That is what lets ?search_by=name / ?search_by=tag narrow the search to one
+-- side without a second index or a second copy of the text.
+--
+-- The regconfig is spelled out ('english', not the default) because only the
+-- explicit-config overloads of to_tsvector / jsonb_to_tsvector are IMMUTABLE,
+-- and a generated column will not accept anything less. The CASE guards rows
+-- whose tags are NULL or not an object: jsonb_to_tsvector only takes objects.
+-- ============================================================
+ALTER TABLE products ADD COLUMN IF NOT EXISTS search_vector tsvector
+  GENERATED ALWAYS AS (
+    setweight(to_tsvector('english', COALESCE(name, '')), 'A') ||
+    setweight(
+      jsonb_to_tsvector(
+        'english',
+        CASE WHEN jsonb_typeof(tags) = 'object' THEN tags ELSE '{}'::jsonb END,
+        '["key"]'
+      ),
+      'B'
+    )
+  ) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_products_search_vector
+ON products USING GIN (search_vector);
+
+-- ============================================================
+-- DASHBOARD ANALYTICS
+--
+-- The KPI endpoints read orders, order_items, payments and users over a date
+-- window. None of those had an index on the column the window is cut on, so
+-- every card was a sequential scan of the whole table.
+-- ============================================================
+
+-- Every KPI query starts by narrowing orders to the window, and the order list
+-- screen already reads newest-first, so DESC serves both.
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+
+-- Products Sold and Top Products join order_items back to the windowed orders.
+-- order_id was only ever a foreign key, which postgres does not index for you.
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+
+-- Refunds are counted by when the money went back, not by when the order was
+-- placed, so refunded_at is its own window column. Partial, because rows with
+-- no refund are the overwhelming majority and none of them are ever read here.
+CREATE INDEX IF NOT EXISTS idx_payments_refunded_at
+  ON payments(refunded_at)
+  WHERE refunded_amount > 0;
+
+-- ------------------------------------------------------------
+-- users.created_at
+--
+-- The Customers KPI counts people who signed up inside the window, and until
+-- now there was nothing on a user row saying when that was.
+--
+-- Deliberately added WITHOUT a default first: a default would stamp every
+-- existing row with the moment of the migration and the dashboard would report
+-- the entire customer base as having signed up that day. Existing rows are
+-- backfilled from their first order instead, which is a real date, and rows
+-- with no order stay NULL — unknown, and counted in no window rather than in
+-- the wrong one. The default is attached afterwards so new signups get a
+-- timestamp without the signup code having to pass one.
+-- ------------------------------------------------------------
+ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP;
+
+UPDATE users u
+SET created_at = first_orders.placed_at
+FROM (
+  SELECT user_id, MIN(created_at) AS placed_at
+  FROM orders
+  WHERE user_id IS NOT NULL
+  GROUP BY user_id
+) AS first_orders
+WHERE u.id = first_orders.user_id
+  AND u.created_at IS NULL;
+
+ALTER TABLE users ALTER COLUMN created_at SET DEFAULT NOW();
+
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);
+
+-- ------------------------------------------------------------
+-- Generated order documents (invoice + packing slip)
+--
+-- The invoice an admin uploads by hand still lives in invoice_document as a
+-- data URI. These columns are for the two PDFs the CMS generates instead: they
+-- are rendered by the api, pushed to the upload server's PRIVATE area and only
+-- the returned path is kept here, so an order row stays small no matter how
+-- many times a document is regenerated.
+--
+-- invoice_number is allotted once, on the first generate, and deliberately
+-- survives a regenerate — a customer who already has invoice INV-100023 must
+-- not receive a second PDF calling itself something else. It comes from its own
+-- sequence rather than from the order number because invoices are numbered in
+-- the order they are issued, which is not the order in which orders are placed.
+-- ------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS invoice_number_seq START WITH 100001;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(30);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_pdf_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_generated_at TIMESTAMP;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS packing_slip_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS packing_slip_generated_at TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number
+  ON orders(invoice_number)
+  WHERE invoice_number IS NOT NULL;
+
+-- ------------------------------------------------------------
+-- Customer email log
+--
+-- Which of the customer-facing order emails have already gone out, one row per
+-- (order, kind). The primary key is the whole guard: a send claims its row with
+-- ON CONFLICT DO NOTHING and only mails when the insert actually took.
+--
+-- It is needed because nothing else in the status path is once-only. The
+-- courier webhooks re-push their whole scan history, and syncShipmentTracking
+-- runs from the customer's own tracking page — so "SHIPPED" is written to an
+-- order over and over, and without this table every refresh would be another
+-- email in the customer's inbox.
+--
+-- Rows are also the audit trail: what was sent to this order, and when.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS order_email_log (
+  order_id   INT NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+  email_type VARCHAR(40) NOT NULL,
+  sent_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (order_id, email_type)
+);
+
+-- ------------------------------------------------------------
+-- Guest checkout
+--
+-- A guest is still a users row. Every order, address, invoice, email and CMS
+-- join in this codebase reaches the customer through orders.user_id, so the
+-- alternative — a nullable user_id plus a parallel set of guest_* columns —
+-- would have meant a COALESCE in every one of those queries and a second
+-- code path in each of them forever.
+--
+-- What makes the row a guest is that nobody has ever proved they own it:
+-- password is NULL and is_verified stays false, so it cannot be logged into.
+-- It becomes a real account the moment the customer sets a password through
+-- the ordinary send-otp / verify-otp flow, which clears this flag — the orders
+-- already attached to the row then simply appear in their history.
+-- ------------------------------------------------------------
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT false;
+
+-- The CMS lists customers and guests separately, and the guest side of that
+-- split is the smaller one, so the index only covers it.
+CREATE INDEX IF NOT EXISTS idx_users_is_guest ON users(is_guest) WHERE is_guest = true;
+
+-- Whether this order was placed without logging in. The users row alone cannot
+-- answer that: a guest who later sets a password stops being a guest, and their
+-- earlier orders would retroactively look like account orders. The CMS shows
+-- this flag, so it has to mean "how it was placed", not "what the customer is
+-- now".
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_guest_order BOOLEAN DEFAULT false;

@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, ChevronDown, ChevronUp, Minus } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Minus,
+  AlertTriangle,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import LabelInput from "./LabelInput";
 import type { ImageTypes, Option, Variant } from "@/types";
 import { DEFAULT_PRODUCT_VARIANT_OPTIONS } from "@/constant";
 import MediaManager from "./MediaManager";
 import { Checkbox } from "./ui/checkbox";
-import { useParams } from "react-router-dom";
+// import { useParams } from "react-router-dom";
 // import { Switch } from "./ui/switch";
 // import { useParams } from "react-router-dom";
 
@@ -16,6 +23,7 @@ interface IProps {
   defaultCompareAtPrice: string;
   productOptions?: Option[];
   productVariants?: Variant[];
+  isAlreadyOrdered  : boolean;
 }
 
 export default function ShopifyVariants({
@@ -24,9 +32,11 @@ export default function ShopifyVariants({
   defaultCompareAtPrice,
   productOptions,
   productVariants,
+  isAlreadyOrdered
 }: IProps) {
-  const params = useParams();
-  const isNewProduct = params?.id == "new";
+  // const params = useParams();
+  // const isNewProduct = params?.id == "new";
+
 
   const [options, setOptions] = useState<Option[]>(() => {
     if (varientOptionsValues.options.length !== 0)
@@ -211,13 +221,29 @@ export default function ShopifyVariants({
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-medium text-gray-900">Variants Options</h2>
 
-        {isNewProduct ? (
-          <Button disabled={!isNewProduct} onClick={addOption} type="button">
+        {isAlreadyOrdered == false ? (
+          <Button disabled={isAlreadyOrdered} onClick={addOption} type="button">
             <Plus size={16} />
             Add Option
           </Button>
         ) : null}
       </div>
+
+      {isAlreadyOrdered ? (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+          <div className="text-sm text-amber-800">
+            <p className="font-medium">
+              This product has already been purchased by a customer.
+            </p>
+            <p className="mt-1">
+              Variant options can no longer be added, because existing orders
+              are linked to the current variants. To add more variant options,
+              duplicate this product and edit the copy instead.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {options.map((option) => (
@@ -481,6 +507,7 @@ export default function ShopifyVariants({
                     </div> */}
 
                         <LabelInput
+                          readOnly={isAlreadyOrdered}
                           // disabled
                           label="SKU"
                           // value={variant.combination.join(" / ")}

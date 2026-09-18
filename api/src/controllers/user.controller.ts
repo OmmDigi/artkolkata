@@ -21,12 +21,7 @@ import { doValidate } from "../utils/doValidate";
 import { pool } from "..";
 import { decrypt, encrypt } from "../services/crypto";
 import { ErrorHandler } from "../utils/ErrorHandler";
-import {
-  COOKIE_KEY,
-  ONLINE_PAYMENT,
-  ORDER_DELIVERED,
-  ORDER_PENDING,
-} from "../constant";
+import { COOKIE_KEY } from "../constant";
 import { createToken } from "../services/jwt";
 import { sendEmail } from "../utils/sendEmail";
 import { doTransition } from "../utils/doTransition";
@@ -34,7 +29,7 @@ import { insertOtpToDatabase } from "../services/users.service";
 import { createOtp } from "../utils/createOtp";
 import { parsePagination } from "../utils/parsePagination";
 import { checkPermission } from "../utils/checkPermissions";
-import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
+import { fetchOrdersForUser } from "../services/customerOrders.service";
 
 // normal login system
 export const signUp = asyncErrorHandler(async (req, res) => {
@@ -45,11 +40,28 @@ export const signUp = asyncErrorHandler(async (req, res) => {
   const OTP = createOtp();
 
   await doTransition(async (client) => {
+    /**
+     * A guest checkout leaves a shadow users row behind: same email, no
+     * password, is_guest true. Signing up with that address is the customer
+     * claiming it, so the conflict target is upgraded in place rather than
+     * refused — refusing would tell them an account exists that they have
+     * never been able to log into, and starting a fresh row would orphan the
+     * orders already hanging off the old one.
+     *
+     * The WHERE on the update is what keeps this safe: it only ever fires on a
+     * row that has no password and is flagged as a guest, so a real account
+     * still collides and still gets the "already exists" message below.
+     */
     const { rowCount } = await client.query(
       `
-        INSERT INTO users (name, email, phone_no, password)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (email) DO NOTHING
+        INSERT INTO users (name, email, phone_no, password, is_guest)
+        VALUES ($1, $2, $3, $4, false)
+        ON CONFLICT (email) DO UPDATE
+          SET name     = EXCLUDED.name,
+              phone_no = EXCLUDED.phone_no,
+              password = EXCLUDED.password,
+              is_guest = false
+        WHERE users.is_guest = true AND users.password IS NULL
       `,
       [value.name, value.email, value.phone_no, encodedPassword],
     );
@@ -156,6 +168,25 @@ export const verifyOtp = asyncErrorHandler(async (req, res) => {
     req.body ?? {},
   );
 
+  // Filled by the verification update below, so the signup flow can hand back a
+  // token and the user lands logged in instead of being sent to the login page.
+  type VerifiedUser = {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    permissions: any;
+    is_active: boolean;
+    /**
+     * Whether the account was already verified before this request. An OTP can
+     * be requested again at any time, so without this a second verification
+     * would send a second welcome email to someone who has been a customer for
+     * months.
+     */
+    was_verified: boolean;
+  };
+  let verifiedUser: VerifiedUser | null = null;
+
   await doTransition(async (client) => {
     const { rows, rowCount } = await client.query(
       `
@@ -174,15 +205,37 @@ export const verifyOtp = asyncErrorHandler(async (req, res) => {
     if (value.password) {
       // if it comes with password than change the password
       const encodedPassword = encrypt(value.password);
+      // is_guest is cleared here too: setting a password through an OTP sent
+      // to this address is exactly the proof of ownership a shadow row was
+      // missing, so the guest becomes an ordinary account and the orders
+      // already attached to it show up in their history.
       await client.query(
-        "UPDATE users SET is_verified = 'true', password = $1 WHERE email = $2",
+        `UPDATE users
+            SET is_verified = 'true', password = $1, is_guest = false
+          WHERE email = $2`,
         [encodedPassword, value.email],
       );
     } else {
-      await client.query(
-        "UPDATE users SET is_verified = 'true' WHERE email = $1",
+      const { rows: userRows } = await client.query(
+        `
+        WITH verified AS (
+          UPDATE users SET is_verified = 'true' WHERE email = $1
+          RETURNING id, name, email, role, is_active
+        )
+        SELECT
+          verified.*,
+          up.permissions,
+          -- Reads the row as it was before the CTE's update: both halves of the
+          -- statement run against the same snapshot.
+          COALESCE((SELECT is_verified FROM users WHERE email = $1), false)
+            AS was_verified
+        FROM verified
+        LEFT JOIN user_permissions up
+        ON up.user_id = verified.id
+        `,
         [value.email],
       );
+      verifiedUser = userRows[0] ?? null;
     }
     await client.query("DELETE FROM otps WHERE email = $1 AND otp = $2", [
       value.email,
@@ -193,7 +246,44 @@ export const verifyOtp = asyncErrorHandler(async (req, res) => {
   if (value.password) {
     return httpResponse(res, 200, "Password reset successfully completed!");
   }
-  httpResponse(res, 200, "Email verification successfully completed!");
+
+  // Signup verification — issue the same token login does so the frontend can
+  // store it and skip the login step. A disabled account still gets verified,
+  // it just does not get a session.
+  const user = verifiedUser as VerifiedUser | null;
+
+  if (!user || user.is_active === false) {
+    return httpResponse(res, 200, "Email verification successfully completed!");
+  }
+
+  // Welcome them, once, at the moment the account actually becomes real. Fire
+  // and forget: the signup response must not wait on a mail server.
+  if (!user.was_verified) {
+    sendEmail(user.email, "WELCOME_EMAIL", {
+      customerName: user.name,
+      shopLink: process.env.FRONTEND_HOST_URL,
+    });
+  }
+
+  const token = createToken(
+    {
+      id: user.id,
+      role: user.role,
+      permissions: user.permissions,
+    },
+    {
+      expiresIn: "1d",
+    },
+  );
+
+  httpResponse(res, 200, "Email verification successfully completed!", {
+    [COOKIE_KEY]: token,
+    user: {
+      name: user.name,
+      email: user.email,
+    },
+    permissions: user.permissions,
+  });
 });
 
 export const sendOtp = asyncErrorHandler(async (req, res) => {
@@ -265,6 +355,19 @@ export const getUserList = asyncErrorHandler(async (req, res) => {
     filterValues.push(req.query.phone_no);
   }
 
+  /**
+   * Guests and registered customers share the users table, so the CMS list
+   * would otherwise mix them. ?customer_type=guest shows only the shadow rows
+   * left by guest checkout, ?customer_type=registered only the real accounts,
+   * and leaving it off shows both — which is what the existing screens did
+   * before guest checkout, so no caller changes behaviour by accident.
+   */
+  if (req.query.customer_type === "guest") {
+    filter += ` AND is_guest = true`;
+  } else if (req.query.customer_type === "registered") {
+    filter += ` AND COALESCE(is_guest, false) = false`;
+  }
+
   if (req.path == "/") {
     // mean admin want to get the registered users list
     filter += ` AND role = $${filterNum++}`;
@@ -283,7 +386,10 @@ export const getUserList = asyncErrorHandler(async (req, res) => {
       phone_no, 
       role, 
       is_verified,
-      is_active
+      is_active,
+      -- NULL on every row that predates guest checkout, and those are all real
+      -- accounts, so it is coalesced rather than passed through raw.
+      COALESCE(is_guest, false) AS is_guest
      FROM users 
      ${filter}
      ORDER BY id DESC
@@ -702,120 +808,25 @@ export const verifyGoogleLogin = asyncErrorHandler(async (req, res) => {
 
 export const getUserOrdersList = asyncErrorHandler(
   async (req: CustomRequest, res) => {
-    let filter = "WHERE o.user_id = $1";
-    // let filterNum = 2;
-    const filterValues: any[] = [];
-    if (
-      req.query.userid &&
-      checkPermission(req.token_info?.permissions ?? null, [
-        "1-11",
-        "1-12",
-        "1-5",
-      ])
-    ) {
-      filterValues.push(req.query.userid);
-    } else {
-      filterValues.push(req.token_info?.id);
-    }
+    // Staff with a customer-facing permission can read another account's
+    // orders from the CMS; everyone else only ever gets their own.
+    const canReadOthers = checkPermission(req.token_info?.permissions ?? null, [
+      "1-11",
+      "1-12",
+      "1-5",
+    ]);
 
-    const { rows } = await pool.query(
-      `
-     SELECT
-      o.order_id,
-      o.order_number,
-      TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
-      o.order_status,
-      o.total_amount,
-      o.payment_method,
-      CASE
-        WHEN o.order_status = '${ORDER_DELIVERED}' 
-              AND o.payment_method = '${ONLINE_PAYMENT}' 
-              AND o.updated_at >= NOW() - INTERVAL '7 days'
-        THEN true
-        ELSE false
-      END AS is_returnable,
-      CASE
-        WHEN o.order_status = '${ORDER_DELIVERED}' 
-              AND o.updated_at >= NOW() - INTERVAL '7 days'
-        THEN true
-        ELSE false
-      END AS is_replaceable,
-      -- Only an invoice uploaded from the CMS counts here. The generated
-      -- document is a payment slip, not an invoice, and every order gets one
-      -- regardless of this flag.
-      (o.invoice_document IS NOT NULL AND o.invoice_document <> '') AS invoice_avilable,
-      o.waybill AS tracking_id,
-      -- Cancelling is only offered while the order is still pending; after
-      -- confirmation the shipment is already booked with the courier.
-      (o.order_status = '${ORDER_PENDING}') AS is_cancelable,
-      JSON_AGG(
-        CASE
-          WHEN oi.variant_info IS NOT NULL
-          THEN JSON_BUILD_OBJECT(
-          'product_name', oi.variant_info->>'product_name',
-          -- the live slug wins over the snapshot, so a link keeps working after
-          -- an admin edits the slug. The snapshot covers a deleted product, and
-          -- orders placed before the slug was snapshotted fall back to the live
-          -- lookup.
-          'product_slug', COALESCE(
-              (
-                SELECT slug
-                FROM products
-                WHERE id = (oi.variant_info->>'product_id')::int
-              ),
-              oi.variant_info->>'product_slug'
-            ),
-          'quantity', oi.quantity,
-          'sku', oi.variant_info->>'sku',
-          'price', oi.variant_info->'price',
-          'images', COALESCE(
-              oi.variant_info->'images'->0,
-              (
-                SELECT 
-                  jsonb_build_object(
-                    'image',   image,
-                    'alt_tag', alt_tag 
-                  )    
-                FROM product_images
+    const userId =
+      req.query.userid && canReadOthers
+        ? Number(req.query.userid)
+        : req.token_info?.id;
 
-                WHERE product_id = (oi.variant_info->>'product_id')::int
-                AND COALESCE(type, 'image') = 'image'
-                ORDER BY position ASC
-                LIMIT 1
-              )
-            )
-          )
-          ELSE JSON_BUILD_OBJECT(
-          'product_name', oi.product_info->>'name',
-          'product_slug', COALESCE(
-              (
-                SELECT slug
-                FROM products
-                WHERE id = (oi.product_info->>'id')::int
-              ),
-              oi.product_info->>'slug'
-            ),
-          'quantity', oi.quantity,
-          'sku', null,
-          'images', oi.product_info->'images'->0,
-          'price', oi.product_info->'price'
-          )
-        END
-      ) AS ordered_products
-      FROM orders o
+    if (!userId) throw new ErrorHandler(401, "Unauthorized");
 
-      LEFT JOIN order_items oi
-      ON oi.order_id = o.order_id
+    // Shared with the guest order endpoint, so a guest and an account holder
+    // are shown the same fields and the same cancel/return flags.
+    const orders = await fetchOrdersForUser(userId);
 
-      ${filter}
-
-      GROUP BY o.order_id
-
-      ORDER BY o.order_id DESC
-    `,
-      filterValues,
-    );
-
-    httpResponse(res, 200, "User order list", withOrderDocumentUrls(rows));
+    httpResponse(res, 200, "User order list", orders);
   },
 );

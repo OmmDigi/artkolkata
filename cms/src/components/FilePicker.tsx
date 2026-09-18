@@ -1,42 +1,56 @@
 import { uploadFiles } from "@/utils/uploadFiles";
+import { asUploadedFile, isAssetUrl } from "@/utils/assetUrl";
+import { cn } from "@/lib/utils";
 import { Plus, Trash } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { toast } from "react-toastify";
 import type { IUploadedFile } from "@/types";
 
 interface IProps {
   className?: string;
+  /** wraps the picker button and the url box, use it to size the whole block */
+  wrapperClassName?: string;
   fileLink?: string;
   label?: string;
   name: string;
   accept?: string;
   folder?: string;
+  /** set false to hide the "paste an asset url" box */
+  allowUrl?: boolean;
+  urlPlaceholder?: string;
   onUploaded?: (image: IUploadedFile | null) => void;
   onUploading?: (percent: number) => void;
   onUploadStart?: () => void;
-  onRemoved?:() => void;
+  onRemoved?: () => void;
 }
 
 export default function FilePicker({
   className,
+  wrapperClassName,
   fileLink,
   label,
   name,
   accept,
   folder,
+  allowUrl = true,
+  urlPlaceholder = "Or paste an asset url",
   onUploaded,
   onUploading,
   onUploadStart,
-  onRemoved
+  onRemoved,
 }: IProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [sourceLink, setSourceLink] = useState<string | undefined>(undefined);
+  // kept apart from sourceLink so a half typed link never becomes the preview
+  const [urlDraft, setUrlDraft] = useState(fileLink ?? "");
 
   useEffect(() => {
     setSourceLink(fileLink);
+    setUrlDraft(fileLink ?? "");
   }, [fileLink]);
 
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -64,6 +78,7 @@ export default function FilePicker({
         },
         onUploaded(result) {
           setSourceLink(result[0].downloadUrl);
+          setUrlDraft(result[0].downloadUrl);
           setUploadProgress(null);
           onUploaded?.(result[0]);
         },
@@ -71,8 +86,25 @@ export default function FilePicker({
     }
   };
 
+  // a pasted link needs no upload, it only reports itself like a finished upload
+  const handleUrlChange = (value: string) => {
+    setUrlDraft(value);
+
+    if (value.trim() === "") {
+      setSourceLink(undefined);
+      onRemoved?.();
+      return;
+    }
+
+    if (!isAssetUrl(value)) return;
+
+    const uploaded = asUploadedFile(value);
+    setSourceLink(uploaded.downloadUrl);
+    onUploaded?.(uploaded);
+  };
+
   return (
-    <>
+    <div className={cn("w-fit space-y-1.5", wrapperClassName)}>
       <input
         onChange={handleInputChange}
         ref={inputRef}
@@ -111,6 +143,7 @@ export default function FilePicker({
                 e.stopPropagation();
                 onRemoved?.();
                 setSourceLink(undefined);
+                setUrlDraft("");
               }}
               size={20}
               className="absolute top-5 right-5 bg-red-500 text-white rounded-2xl p-1 z-10"
@@ -124,6 +157,15 @@ export default function FilePicker({
           </div>
         )}
       </button>
-    </>
+
+      {allowUrl ? (
+        <Input
+          value={urlDraft}
+          onChange={(e) => handleUrlChange(e.target.value)}
+          placeholder={urlPlaceholder}
+          className="w-full h-8 text-xs border-1 border-green-600"
+        />
+      ) : null}
+    </div>
   );
 }

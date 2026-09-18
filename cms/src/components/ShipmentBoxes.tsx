@@ -56,8 +56,9 @@ export default function ShipmentBoxes({ orderId, orderInfo, onSaved }: IProps) {
   // the only place they can still be changed. Past that the goods are packed
   // and on their way, and an edit here would only make the CMS disagree with
   // what actually shipped.
-  const locked =
-    !!orderInfo.bigship_order_id || orderInfo.order_status !== ORDER_PENDING;
+  // Set by whichever partner booked it — the order is with the courier.
+  const bookedId = orderInfo.partner_order_id;
+  const locked = !!bookedId || orderInfo.order_status !== ORDER_PENDING;
 
   // More than one box cannot go as a normal B2C parcel; Bigship books it as a
   // B2B heavy shipment, which is where the ewaybill rules kick in.
@@ -186,8 +187,8 @@ export default function ShipmentBoxes({ orderId, orderInfo, onSaved }: IProps) {
 
       {locked ? (
         <p className="text-sm font-semibold text-amber-700">
-          {orderInfo.bigship_order_id
-            ? `This order is already booked with the courier (${orderInfo.bigship_order_id}), so the boxes can no longer be changed.`
+          {bookedId
+            ? `This order is already booked with the courier (${bookedId}), so the boxes can no longer be changed.`
             : `This order is already ${orderInfo.order_status}, so the boxes can no longer be changed.`}
         </p>
       ) : null}

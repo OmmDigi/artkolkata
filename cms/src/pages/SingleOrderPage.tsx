@@ -1,22 +1,25 @@
 import LabelInput from "@/components/LabelInput";
 import LabelTextArea from "@/components/LabelTextArea";
 import LoadingLayout from "@/components/LoadingLayout";
+import OrderDocuments from "@/components/OrderDocuments";
 import OrderInvoice from "@/components/OrderInvoice";
 import Section from "@/components/Section";
 import ShipmentBoxes from "@/components/ShipmentBoxes";
+import RefundDialog from "@/components/dialogs/RefundDialog";
 import SelectInput from "@/components/SelectInput";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
+  ORDER_CONFIRMED,
   ORDER_PACKED,
+  ORDER_PENDING,
   // ORDER_CANCELLED,
-  // ORDER_CONFIRMED,
   // ORDER_DELIVERED,
-  // ORDER_PACKED,
-  // ORDER_PENDING,
   ORDER_RETURN_INITIATED,
   ORDER_RETURNED,
   ORDER_SHIPPED,
+  REPLACE_INITIATED,
   // ORDER_SHIPPED,
   ORDER_STATUS,
   OUT_FOR_DELIVERY,
@@ -29,7 +32,7 @@ import type { IError, IResponse, OrderResponse } from "@/types";
 import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
-import { MoveLeft } from "lucide-react";
+import { MoveLeft, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -40,6 +43,7 @@ const getSingleOrder = async (orderid: number) => {
 export default function SingleOrderPage() {
   const params = useParams();
   const [orderStatus, setOrderStatus] = useState("");
+  const [refundOpen, setRefundOpen] = useState(false);
 
   if (!params?.id) return <Label>Order id is required</Label>;
 
@@ -51,7 +55,51 @@ export default function SingleOrderPage() {
     queryFn: () => getSingleOrder(parseInt(params.id ?? "0")),
   });
 
+  // Set by whichever partner booked the parcel.
+  const booked = !!data?.data.orderInfo.partner_order_id;
+
+  // Is there a courier integration behind this at all? Defaults to true so an
+  // API build that does not send shippingInfo yet keeps the old, stricter
+  // dropdown rather than quietly unlocking statuses on a live courier shop.
+  const shippingEnabled = data?.data.shippingInfo?.enabled ?? true;
+
   const { isLoading, mutate } = useDoMutation();
+
+  // What the customer was actually billed for delivery. The price_breakdown
+  // snapshot is what the checkout page and the payment slip both show, so it
+  // wins; orders placed before that column existed fall back to the flat
+  // shipping_charge column.
+  const orderInfo = data?.data.orderInfo;
+  const parsedShipping = parseFloat(
+    String(
+      orderInfo?.price_breakdown?.shipping_charge ??
+        orderInfo?.shipping_charge ??
+        0,
+    ),
+  );
+  const shippingCharge = Number.isFinite(parsedShipping) ? parsedShipping : 0;
+  const shippingRuleTitle =
+    orderInfo?.price_breakdown?.shipping_rule?.title ?? null;
+
+  // What the refund panel needs. The payments row carries what was actually
+  // charged; the order total is only a fallback for a row written before the
+  // amount was recorded. Rounded for the same reason the api rounds it — a
+  // floating point remainder would otherwise offer a refund the api refuses.
+  const paymentInfo = data?.data.paymentInfo;
+  const paymentStatus = paymentInfo?.status ?? "";
+  const paidAmount = parseFloat(
+    paymentInfo?.amount ?? orderInfo?.total_amount ?? "0",
+  );
+  const refundedAmount = parseFloat(paymentInfo?.refunded_amount ?? "0");
+  // How they actually paid. Only ever set once the gateway has reported the
+  // attempt, so every field below is rendered only when it is there.
+  const instrumentDetail = paymentInfo?.instrument_detail ?? null;
+  const remainingRefund =
+    Math.round((paidAmount - refundedAmount) * 100) / 100;
+  // Only money that actually arrived can go back, and only what is left of it.
+  const canRefund =
+    (paymentStatus === "PAID" || paymentStatus === "REFUNDED") &&
+    remainingRefund > 0;
 
   useEffect(() => {
     if (data?.data.orderInfo.order_status) {
@@ -76,6 +124,16 @@ export default function SingleOrderPage() {
             <MoveLeft className="mt-1" />
             <span>Single Order {data?.data.orderInfo.order_number}</span>
           </Link>
+
+          {data?.data.orderInfo.is_guest_order ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 text-sm px-3.5 py-2.5">
+              <strong className="font-semibold">Guest order.</strong> This
+              customer checked out without an account, so the shipping details
+              below are the only contact information on file. They can turn it
+              into a full account at any time by setting a password with this
+              email address.
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-3 gap-3.5">
             <div className="col-span-2 space-y-7">
@@ -228,10 +286,16 @@ export default function SingleOrderPage() {
               {data?.data.orderInfo && params.id ? (
                 <>
                   <ShipmentBoxes
-                    key={data.data.orderInfo.bigship_order_id ?? "unbooked"}
+                    key={data.data.orderInfo.partner_order_id ?? "unbooked"}
                     orderId={params.id}
                     orderInfo={data.data.orderInfo}
                     onSaved={() => refetch()}
+                  />
+
+                  <OrderDocuments
+                    orderId={params.id}
+                    orderInfo={data.data.orderInfo}
+                    onGenerated={() => refetch()}
                   />
 
                   <OrderInvoice
@@ -273,6 +337,58 @@ export default function SingleOrderPage() {
                     defaultValue={data?.data.orderInfo.payment_method}
                   />
 
+                  {/* payment_method above only says ONLINE or COD. This is the
+                      one the customer means when they ask which card was
+                      charged — it is null until the gateway reports the
+                      attempt, so an unpaid online order says so instead of
+                      showing an empty box. */}
+                  <LabelInput
+                    label="Paid Using"
+                    disabled={true}
+                    key={paymentInfo?.instrument_label ?? "no-instrument"}
+                    defaultValue={
+                      paymentInfo?.instrument_label ??
+                      (orderInfo?.payment_method === "ONLINE"
+                        ? "Not reported by the gateway yet"
+                        : "—")
+                    }
+                  />
+
+                  {instrumentDetail?.upiId ? (
+                    <LabelInput
+                      label="UPI ID"
+                      disabled={true}
+                      key={instrumentDetail.upiId}
+                      defaultValue={instrumentDetail.upiId}
+                    />
+                  ) : null}
+
+                  {instrumentDetail?.bank ? (
+                    <LabelInput
+                      label={
+                        instrumentDetail.type === "NETBANKING"
+                          ? "Bank"
+                          : "Issuing Bank"
+                      }
+                      disabled={true}
+                      key={instrumentDetail.bank}
+                      defaultValue={instrumentDetail.bank}
+                    />
+                  ) : null}
+
+                  {/* The UTR or RRN. This is the number the customer reads off
+                      their own bank statement when the money left but the
+                      order did not confirm, so it is what a support ticket
+                      gets matched on. */}
+                  {instrumentDetail?.referenceId ? (
+                    <LabelInput
+                      label="Bank Reference (UTR / RRN)"
+                      disabled={true}
+                      key={instrumentDetail.referenceId}
+                      defaultValue={instrumentDetail.referenceId}
+                    />
+                  ) : null}
+
                   <SelectInput
                     onValueChange={(value) => {
                       if (
@@ -295,6 +411,61 @@ export default function SingleOrderPage() {
                     defaultValue={data?.data.paymentInfo.status}
                   />
                 </div>
+
+                {/* Refunds do not go through the status dropdown. A refund is
+                    an amount and a reason, not a status, and it may or may not
+                    be the gateway that moves the money — so it gets its own
+                    dialog. Only staff holding the Orders permission can call
+                    the endpoint behind it. */}
+                {data?.data.paymentInfo ? (
+                  <div className="space-y-3 border-t border-gray-200 pt-4">
+                    {refundedAmount > 0 ? (
+                      <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold">Refunded</span>
+                          <span>
+                            ₹{refundedAmount} of ₹{paidAmount}
+                            {data.data.paymentInfo.refunded_via_gateway ===
+                            false
+                              ? " (recorded by hand)"
+                              : ` (via ${data.data.paymentInfo.provider ?? "gateway"})`}
+                          </span>
+                        </div>
+                        {data.data.paymentInfo.refund_note ? (
+                          <p className="text-gray-600">
+                            {data.data.paymentInfo.refund_note}
+                          </p>
+                        ) : null}
+                        {data.data.paymentInfo.refunded_by_name ? (
+                          <p className="text-xs text-gray-500">
+                            by {data.data.paymentInfo.refunded_by_name}
+                            {data.data.paymentInfo.refunded_at
+                              ? ` on ${new Date(data.data.paymentInfo.refunded_at).toLocaleString("en-IN")}`
+                              : ""}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {canRefund ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => setRefundOpen(true)}
+                      >
+                        <Undo2 className="w-4 h-4" />
+                        Refund {remainingRefund < paidAmount ? "remaining " : ""}
+                        ₹{remainingRefund}
+                      </Button>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        {paymentStatus === "PAID" || paymentStatus === "REFUNDED"
+                          ? "Nothing left to refund on this order."
+                          : `A ${paymentStatus || "PENDING"} payment cannot be refunded.`}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </Section>
             </div>
             <div className="space-y-7">
@@ -345,8 +516,19 @@ export default function SingleOrderPage() {
                 ) : null}
 
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold">Shipping</span>
-                  <span>FREE</span>
+                  <span className="font-semibold">
+                    Shipping
+                    {shippingRuleTitle ? (
+                      <span className="block text-xs font-normal text-gray-500">
+                        {shippingRuleTitle}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span>
+                    {shippingCharge > 0
+                      ? `₹${shippingCharge.toFixed(2)}`
+                      : "FREE"}
+                  </span>
                 </div>
                 <div className="w-full border-t border-gray-300"></div>
                 <div className="flex items-center justify-between">
@@ -408,31 +590,81 @@ export default function SingleOrderPage() {
                   label="Order Status"
                   options={ORDER_STATUS}
                   value={orderStatus}
-                  disabled={!!data?.data.orderInfo.shiprocket_order_id}
                   disabledValues={[
-                    ORDER_PACKED,
-                    ORDER_SHIPPED,
-                    OUT_FOR_DELIVERY,
-                    ORDER_RETURN_INITIATED,
-                    ORDER_RETURNED
+                    // Courier-driven, but only while there is a courier. With a
+                    // partner these arrive from tracking scans and an admin
+                    // setting them by hand would just be overwritten by the next
+                    // webhook. With SHIPPING_PARTNER=none no scan is ever coming,
+                    // so leaving them locked strands every order on CONFIRMED and
+                    // the customer never gets the shipped and out-for-delivery
+                    // emails, which the API sends off the status change itself.
+                    ...(shippingEnabled
+                      ? [
+                          ORDER_PACKED,
+                          ORDER_SHIPPED,
+                          OUT_FOR_DELIVERY,
+                          ORDER_RETURN_INITIATED,
+                          ORDER_RETURNED,
+                        ]
+                      : []),
+                    // Booking is one-way. Once the shipment exists the order
+                    // cannot go back to pending or be confirmed again, but it
+                    // must still be cancellable — cancelling is exactly what
+                    // an admin needs to do when a booked order goes wrong, and
+                    // the API cancels it with the courier too.
+                    //
+                    // Never fires without a partner: nothing writes
+                    // partner_order_id, so a self-shipped order stays freely
+                    // movable in both directions.
+                    ...(booked ? [ORDER_PENDING, ORDER_CONFIRMED] : []),
                   ]}
-                  // disabledValues={[
-                  //   ORDER_PENDING,
-                  //   data?.data.orderInfo.order_status != ORDER_PENDING ? ORDER_CONFIRMED : "",
-                  //   ORDER_PACKED,
-                  //   ORDER_SHIPPED,
-                  //   OUT_FOR_DELIVERY,
-                  //   ORDER_DELIVERED,
-                  //   ORDER_CANCELLED,
-                  //   ORDER_RETURNED,
-                  //   data?.data.orderInfo.order_status === ORDER_DELIVERED
-                  //     ? ""
-                  //     : ORDER_RETURN_INITIATED,
-                  // ]}
                 />
+
+                {/* A replacement is shipped only once the returned goods are
+                    actually back, so it is a deliberate second action rather
+                    than something the return books up front. The API refuses it
+                    unless the order really is in the replace flow. */}
+                {orderInfo?.order_status === REPLACE_INITIATED ||
+                orderInfo?.order_status === ORDER_RETURNED ? (
+                  <Button
+                    type="button"
+                    className="mt-4 w-full bg-green-700 hover:bg-green-900"
+                    disabled={isLoading}
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          "Book the replacement parcel with the courier? Do this only once the returned goods are back at the warehouse.",
+                        )
+                      )
+                        return;
+
+                      mutate({
+                        apiPath: `/api/v1/orders/${params.id}/replacement-shipment`,
+                        method: "post",
+                        formData: {},
+                        onSuccess() {
+                          refetch();
+                        },
+                      });
+                    }}
+                  >
+                    Book Replacement Shipment
+                  </Button>
+                ) : null}
               </Section>
             </div>
           </div>
+
+          {orderInfo && paymentInfo ? (
+            <RefundDialog
+              open={refundOpen}
+              setOpen={setRefundOpen}
+              orderId={params.id ?? ""}
+              orderInfo={orderInfo}
+              paymentInfo={paymentInfo}
+              onDone={() => refetch()}
+            />
+          ) : null}
         </main>
       </LoadingHandler>
     </>

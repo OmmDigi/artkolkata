@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { RotateCcw, Search } from "lucide-react";
 import LabelInput from "./LabelInput";
 import SelectInput from "./SelectInput";
-import { ORDER_STATUS, PAYMENT_STATUS } from "@/constant";
+import { CUSTOMER_TYPE, ORDER_STATUS, PAYMENT_STATUS } from "@/constant";
 
 export default function OrderFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -85,6 +85,17 @@ export default function OrderFilters() {
         label="Order Status"
         options={ORDER_STATUS}
         defaultValue={searchParams.get("ostatus") ?? ORDER_STATUS[0].value}
+      />
+
+      <SelectInput
+        onValueChange={(value) => {
+          const newSearchParams = new URLSearchParams();
+          newSearchParams.set("customer_type", value);
+          setSearchParams(newSearchParams);
+        }}
+        label="Customer"
+        options={CUSTOMER_TYPE}
+        defaultValue={searchParams.get("customer_type") ?? CUSTOMER_TYPE[0].value}
       />
 
       <Button

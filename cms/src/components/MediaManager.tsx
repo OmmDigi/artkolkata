@@ -31,6 +31,10 @@ interface IProps {
   gridClassName?: string;
   /** first item can not be removed (main product media) */
   lockFirstItem?: boolean;
+  /** upload destination passed to the file picker, e.g. "/blog-assets" */
+  folder?: string;
+  /** show a per image alt text box, needed where the alt tag is SEO copy */
+  showAltText?: boolean;
   onUploadStart?: () => void;
   onUploaded?: () => void;
 }
@@ -42,6 +46,8 @@ export default function MediaManager({
   namePrefix = "image",
   gridClassName = "grid grid-cols-1 md:grid-cols-4 gap-2.5",
   lockFirstItem = false,
+  folder,
+  showAltText = false,
   onUploadStart,
   onUploaded,
 }: IProps) {
@@ -161,6 +167,7 @@ export default function MediaManager({
                   className="w-36 h-24! aspect-auto text-xs cursor-grab!"
                   fileLink={item.image === "" ? undefined : item.image}
                   accept="image/*"
+                  folder={folder}
                   onUploadStart={onUploadStart}
                   onUploaded={(image) => {
                     updateItem(index, { image: image?.downloadUrl ?? "" });
@@ -169,6 +176,17 @@ export default function MediaManager({
                   onRemoved={() => updateItem(index, { image: "" })}
                 />
               )}
+
+              {showAltText ? (
+                <Input
+                  className="w-36 border-1 border-green-600 text-xs h-8"
+                  placeholder={item.type === "video" ? "Video title" : "Alt text"}
+                  value={item.alt_tag ?? ""}
+                  onChange={(e) =>
+                    updateItem(index, { alt_tag: e.target.value })
+                  }
+                />
+              ) : null}
 
               <button
                 disabled={lockFirstItem && index === 0}

@@ -23,6 +23,7 @@ import {
 } from "../controllers/discount.controller";
 import { checkUser } from "../middleware/checkUser";
 import { isAuthorizedV2 } from "../middleware/isAuthorizedV2";
+import { rateLimits } from "../middleware/rateLimits";
 
 export const discountRoute = Router();
 
@@ -35,15 +36,55 @@ export const discountRoute = Router();
 discountRoute
   // automatic (no code) order value discounts.
   // registered before "/:id" so the literal path is not read as a coupon id
-  .get("/auto-rules", checkUser, getAutoDiscountRules)
-  .post("/auto-rules", isAuthorizedV2(["1-4"]), createAutoDiscountRule)
-  .get("/auto-rules/:id", isAuthorizedV2(["1-4"]), getSingleAutoDiscountRule)
-  .put("/auto-rules/:id", isAuthorizedV2(["1-4"]), updateAutoDiscountRule)
-  .delete("/auto-rules/:id", isAuthorizedV2(["1-4"]), deleteAutoDiscountRule)
+  .get(
+    "/auto-rules",
+    rateLimits.publicReadUncached,
+    checkUser,
+    getAutoDiscountRules,
+  )
+  .post(
+    "/auto-rules",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-4"]),
+    createAutoDiscountRule,
+  )
+  .get(
+    "/auto-rules/:id",
+    rateLimits.adminRead,
+    isAuthorizedV2(["1-4"]),
+    getSingleAutoDiscountRule,
+  )
+  .put(
+    "/auto-rules/:id",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-4"]),
+    updateAutoDiscountRule,
+  )
+  .delete(
+    "/auto-rules/:id",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-4"]),
+    deleteAutoDiscountRule,
+  )
 
-  .get("/", checkUser, getDiscountList)
-  .delete("/:id", isAuthorizedV2(["1-4"]), deleteDiscount)
-  .post("/", isAuthorizedV2(["1-4"]), createDiscount)
-  .post("/validate", isAuthenticated, validateDiscount)
-  .put("/:id", isAuthorizedV2(["1-4"]), updateDiscount)
-  .get("/:id", isAuthorizedV2(["1-4"]), getSingleDiscount)
+  .get("/", rateLimits.publicReadUncached, checkUser, getDiscountList)
+  .delete(
+    "/:id",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-4"]),
+    deleteDiscount,
+  )
+  .post("/", rateLimits.adminWrite, isAuthorizedV2(["1-4"]), createDiscount)
+  .post(
+    "/validate",
+    rateLimits.couponValidate,
+    isAuthenticated,
+    validateDiscount,
+  )
+  .put("/:id", rateLimits.adminWrite, isAuthorizedV2(["1-4"]), updateDiscount)
+  .get(
+    "/:id",
+    rateLimits.adminRead,
+    isAuthorizedV2(["1-4"]),
+    getSingleDiscount,
+  );

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <title>Verify Your Email - Trinket and Casa</title>
+    <title>Verify Your Email - <%= companyName %></title>
     <style>
       * {
         margin: 0;
@@ -201,7 +201,7 @@
     <div class="email-container">
       <!-- Header -->
       <div class="header">
-        <h1>Art Kolkata</h1>
+        <h1><%= companyName %></h1>
         <p>Your Trusted Platform</p>
       </div>
 
@@ -232,8 +232,8 @@
         <!-- Warning -->
         <div class="warning">
           <strong>Security Notice:</strong> Never share this OTP with anyone.
-          Trinket and Casa will never ask for your OTP via phone, email, or any
-          other method.
+          <%= companyName %> will never ask for your OTP via phone, email, or
+          any other method.
         </div>
       </div>
 
@@ -242,21 +242,21 @@
         <p>This is an automated message, please do not reply to this email.</p>
         <p>
           Need help? Contact us at
-          <a href="mailto:artkolkata921@gmail.com">artkolkata921@gmail.com</a>
+          <a href="mailto:<%= supportEmail %>"><%= supportEmail %></a>
         </p>
 
         <div class="social-links">
-          <a href="https://www.artkolkata.in/privacy-policy">Privacy Policy</a>
+          <a href="https://www.luvlettecurves.in/privacy">Privacy Policy</a>
           •
-          <a href="https://www.artkolkata.in/terms-and-conditions"
+          <a href="https://www.luvlettecurves.in/terms"
             >Terms of Service</a
           >
           •
-          <a href="https://www.artkolkata.in/contact-us">Contact Us</a>
+          <a href="https://www.luvlettecurves.in/contact">Contact Us</a>
         </div>
 
         <p style="margin-top: 20px; font-size: 12px">
-          © <%= new Date().getFullYear() %> Art Kolkata. All rights reserved.
+          © <%= new Date().getFullYear() %> <%= companyName %>. All rights reserved.
         </p>
       </div>
     </div>

@@ -14,6 +14,7 @@
   "dependencies": {
     "@editorjs/editorjs": "^2.31.4",
     "@phonepe-pg/pg-sdk-node": "^2.0.5",
+    "@react-pdf/renderer": "^4.9.0",
     "axios": "^1.13.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -22,6 +23,7 @@
     "editorjs-html": "^4.0.5",
     "ejs": "^3.1.10",
     "express": "^5.1.0",
+    "ioredis": "^6.0.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^8.0.1",
@@ -29,6 +31,7 @@
     "pdfkit": "^0.19.1",
     "pg": "^8.14.1",
     "razorpay": "^2.9.6",
+    "react": "^19.3.0",
     "ts-node": "^10.9.2",
     "uuid": "^11.1.0",
     "winston": "^3.18.3",
@@ -40,11 +43,13 @@
     "@types/crypto-js": "^4.2.2",
     "@types/ejs": "^3.1.5",
     "@types/express": "^5.0.1",
+    "@types/fontkit": "^2.0.9",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.14.1",
     "@types/nodemailer": "^6.4.17",
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.12",
+    "@types/react": "^19.3.0",
     "typescript": "^5.9.3"
   }
 }

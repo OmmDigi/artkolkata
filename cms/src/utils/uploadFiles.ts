@@ -1,10 +1,25 @@
 import type { IResponse, IUploadedFile } from "@/types";
-import { AxiosError } from "axios";
+import axios, { AxiosError } from "axios";
 import uploadApi from "./upload-api";
+
+export type TUploadService = "serverbyt" | "custom" | "imagekit";
+
+const SERVERBYT_UPLOAD_URL = import.meta.env.VITE_SERVERBYT_UPLOAD_URL;
+
+// The php endpoint answers with paths relative to its own host, so they are
+// resolved against the endpoint origin before being handed back.
+const toAbsoluteUrl = (url: string) => {
+  try {
+    return new URL(url, SERVERBYT_UPLOAD_URL).toString();
+  } catch {
+    return url;
+  }
+};
 
 interface IProps<E = AxiosError<IResponse>> {
   files: File[];
   folder: string;
+  uploadService?: TUploadService;
 
   onUploading?: (percent: number) => void;
   onUploaded?: (result: IUploadedFile[]) => void;
@@ -15,6 +30,7 @@ interface IProps<E = AxiosError<IResponse>> {
 export const uploadFiles = async ({
   files,
   folder,
+  uploadService = "custom",
   onUploadStart,
   onUploaded,
   onUploading,
@@ -30,30 +46,63 @@ export const uploadFiles = async ({
   formData.set("folder", folder);
 
   try {
+    if (uploadService === "imagekit") {
+      throw new AxiosError(
+        "ImageKit upload service is not available yet",
+        "ERR_UPLOAD_SERVICE_UNAVAILABLE"
+      );
+    }
+
+    const isServerByt = uploadService === "serverbyt";
+
     for (const file of fileArray) {
       onUploadStart?.();
-      formData.append("files", file);
+      formData.append(isServerByt ? "files[]" : "files", file);
     }
-    const response = await uploadApi.post<IResponse<IUploadedFile[]>>(
-      "/api/v1/upload/multiple",
-      formData,
-      {
-        onUploadProgress(progressEvent) {
-          const { loaded, total } = progressEvent;
-          const percentCompleted = Math.round((loaded * 100) / (total || 0));
-          onUploading?.(percentCompleted);
-        },
-      }
-    );
+
+    const onUploadProgress = (progressEvent: {
+      loaded: number;
+      total?: number;
+    }) => {
+      const { loaded, total } = progressEvent;
+      const percentCompleted = Math.round((loaded * 100) / (total || 0));
+      onUploading?.(percentCompleted);
+    };
+
+    if (isServerByt) {
+      // The php endpoint returns the uploaded files as a bare array.
+      const response = await axios.post<IUploadedFile[]>(
+        SERVERBYT_UPLOAD_URL,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress,
+        }
+      );
+
+      data = (response.data ?? []).map((file) => ({
+        ...file,
+        url: toAbsoluteUrl(file.url),
+        downloadUrl: toAbsoluteUrl(file.downloadUrl),
+      }));
+    } else {
+      const response = await uploadApi.post<IResponse<IUploadedFile[]>>(
+        "/api/v1/upload/multiple",
+        formData,
+        {
+          onUploadProgress,
+        }
+      );
+
+      data = response.data.data;
+    }
 
     if (onUploaded) {
-      onUploaded(response.data.data);
+      onUploaded(data);
     }
-
-    data = response.data.data;
-  } catch (error) {
-    error = error as AxiosError<IResponse>;
-    onError?.(error as AxiosError<IResponse>);
+  } catch (err) {
+    error = err as AxiosError<IResponse>;
+    onError?.(error);
   } finally {
     return { data, error };
   }

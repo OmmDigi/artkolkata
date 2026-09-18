@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { useBanners } from "@/hooks/useSiteSettings";
 import type { IBanner } from "@/types";
 import { uploadFiles } from "@/utils/uploadFiles";
+import { isAssetUrl } from "@/utils/assetUrl";
 import {
   ArrowDown,
   ArrowUp,
@@ -56,6 +57,8 @@ export default function BannerManager() {
   const slotInputRef = useRef<HTMLInputElement>(null);
   const slotTargetRef = useRef<{ id: number; key: BannerSlotKey } | null>(null);
   const [slotUploading, setSlotUploading] = useState<string | null>(null);
+  // link typed in the header box, used to add a banner hosted somewhere else
+  const [newBannerUrl, setNewBannerUrl] = useState("");
 
   const {
     banners,
@@ -115,6 +118,41 @@ export default function BannerManager() {
         },
       });
     }
+  };
+
+  // a banner whose artwork already lives on another host, nothing to upload
+  const addBannerFromUrl = () => {
+    if (!isAssetUrl(newBannerUrl)) {
+      toast.error("Enter a full image url, for example https://cdn.site.com/a.jpg");
+      return;
+    }
+
+    const startPosition =
+      drafts.reduce((max, banner) => Math.max(max, banner.position), 0) + 1;
+
+    mutateBanner({
+      type: "add",
+      data: {
+        image_url: newBannerUrl.trim(),
+        position: startPosition,
+        is_active: true,
+      },
+    });
+    setNewBannerUrl("");
+  };
+
+  // saves a slot link that was typed or pasted instead of uploaded
+  const saveSlotUrl = (banner: IBanner, key: BannerSlotKey) => {
+    const url = (banner[key] ?? "").trim();
+    // the desktop artwork is mandatory, an empty box is left unsaved
+    if (key === "image_url" && url === "") return;
+    if (url !== "" && !isAssetUrl(url)) {
+      toast.error("Enter a full image url, for example https://cdn.site.com/a.jpg");
+      return;
+    }
+    if (url === (banners.find((item) => item.id === banner.id)?.[key] ?? "")) return;
+
+    saveBanner({ ...banner, [key]: url });
   };
 
   // opens the hidden input for one slot of one banner row
@@ -236,6 +274,27 @@ export default function BannerManager() {
         </div>
       </div>
 
+      {/* artwork that is already hosted elsewhere, added without uploading */}
+      <div className="flex items-end gap-2 flex-wrap">
+        <div className="space-y-2 flex-1 min-w-64">
+          <Label htmlFor="banner_asset_url">Add Banner From Url</Label>
+          <Input
+            id="banner_asset_url"
+            value={newBannerUrl}
+            onChange={(e) => setNewBannerUrl(e.target.value)}
+            placeholder="https://cdn.example.com/banner.jpg"
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={addBannerFromUrl}
+          disabled={isMutatingBanner || newBannerUrl.trim() === ""}
+        >
+          Add Url
+        </Button>
+      </div>
+
       <input
         ref={inputRef}
         type="file"
@@ -347,6 +406,18 @@ export default function BannerManager() {
                         </div>
                       ) : null}
                     </div>
+
+                    {/* same slot filled with an outside link instead of an upload */}
+                    <Input
+                      value={url}
+                      onChange={(e) =>
+                        updateDraft(banner.id, { [slot.key]: e.target.value })
+                      }
+                      onBlur={() => saveSlotUrl(banner, slot.key)}
+                      disabled={busy || isMutatingBanner}
+                      placeholder="Paste image url"
+                      className="h-7 text-[10px] border-1 border-green-600"
+                    />
 
                     {url || slot.key === "image_url" ? null : (
                       <span className="text-[10px] text-gray-400 leading-tight block">

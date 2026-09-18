@@ -1,78 +1,58 @@
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import crypto from "crypto";
 import { ErrorHandler } from "../utils/ErrorHandler";
-import { doTransition } from "../utils/doTransition";
 import { httpResponse } from "../utils/httpResponse";
-import { processDelhiveryStatus } from "../services/webhook.service";
+import {
+  processDelhiveryStatus,
+  processShiprocketStatus,
+} from "../services/webhook.service";
 import { getAuthToken } from "../utils/getAuthToken";
+import { getPaymentGateway } from "../services/payment";
+import { recordPaymentEvent } from "../utils/recordPaymentEvent";
 
-export const verifyRazorpayPayment = asyncErrorHandler(async (req, res) => {
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+/**
+ * The one endpoint every payment gateway notifies.
+ *
+ * Nothing here knows which gateway is live: the active IPaymentGateway
+ * authenticates the call and flattens whatever it sent into a PaymentEvent,
+ * and one shared writer puts it in the database. A new gateway needs no change
+ * to this file.
+ *
+ * The old per-gateway paths are still routed here so the URLs already saved in
+ * the PhonePe and Razorpay dashboards keep working.
+ */
+export const verifyPaymentWebhook = asyncErrorHandler(async (req, res) => {
+  const gateway = getPaymentGateway();
 
-  if (!webhookSecret)
-    throw new ErrorHandler(404, "Razorpay webhook secret is required");
+  let event;
 
   try {
-    const receivedSignature = req.headers["x-razorpay-signature"] as string;
-
-    if (!Buffer.isBuffer(req.body)) {
-      throw new ErrorHandler(400, "Invalid body format");
-    }
-
-    const generatedSignature = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(req.body)
-      .digest("hex");
-
-    if (generatedSignature === receivedSignature) {
-      const body = JSON.parse(req.body.toString("utf8"));
-
-      const payment = body.payload.payment.entity;
-      const order_id = payment.order_id;
-      const payment_id = payment.id;
-      const created_at = payment.created_at;
-
-      const date = new Date(created_at * 1000);
-      const formattedDate = date
-        .toISOString()
-        .replace("T", " ")
-        .replace("Z", "");
-
-      await doTransition(async (client) => {
-        if (body.event === "payment.captured") {
-          const paymentInfo = await client.query(
-            "UPDATE payments SET provider_payment_id = $1, status = 'PAID', created_at = $2::timestamp WHERE provider_order_id = $3 RETURNING order_id",
-            [payment_id, formattedDate, order_id],
-          );
-          if (paymentInfo.rowCount == 0)
-            throw new ErrorHandler(400, "Unable to update payment status");
-          await client.query(
-            "UPDATE orders SET payment_status = 'PAID' WHERE order_id = $1",
-            [paymentInfo.rows[0].order_id],
-          );
-        } else if (body.event === "payment.failed") {
-          const paymentInfo = await client.query(
-            "UPDATE payments SET provider_payment_id = $1, status = 'FAILED', created_at = CURRENT_TIMESTAMP WHERE provider_order_id = $2 RETURNING order_id",
-            [payment_id, order_id],
-          );
-          if (paymentInfo.rowCount == 0)
-            throw new ErrorHandler(400, "Unable to update payment status");
-          await client.query(
-            "UPDATE orders SET payment_status = 'FAILED' WHERE order_id = $1",
-            [paymentInfo.rows[0].order_id],
-          );
-        }
-      });
-
-      res.status(200).send("Razorpay Payment Verification Done");
-    } else {
-      console.log("❌ Invalid webhook signature");
-      res.status(400).send("Invalid signature");
-    }
-  } catch (error) {
-    console.error("Webhook processing error:", error);
-    res.status(500).send("Error processing webhook");
+    event = gateway.verifyWebhook({
+      rawBody: req.body,
+      headers: req.headers,
+    });
+  } catch (error: any) {
+    // A bad signature is not our bug to retry — refuse it and say nothing else.
+    console.error(`\u274c Rejected ${gateway.label} webhook :`, error?.message);
+    return res.status(401).send("Invalid webhook");
   }
+
+  // A notification that does not move money. Acknowledged so the gateway stops
+  // retrying it, and otherwise ignored.
+  if (!event) return res.sendStatus(200);
+
+  const { updated, orderId, skipped } = await recordPaymentEvent(event);
+
+  console.log(
+    `\ud83d\udce9 ${gateway.label} webhook : ${event.status} for ${event.providerOrderId}`,
+    { updated, orderId, skipped },
+  );
+
+  // A paid order is not booked with the courier here. The boxes it ships in
+  // are entered in the CMS by hand, so booking waits for an admin to confirm.
+
+  // Answer fast: every gateway re-sends anything not acknowledged in seconds.
+  return res.sendStatus(200);
 });
 
 export const updateOrderStatusWebhook = asyncErrorHandler(async (req, res) => {
@@ -92,96 +72,35 @@ export const updateOrderStatusWebhook = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Thank you for your response");
 });
 
-export const verifyPhonepePayment = asyncErrorHandler(async (req, res) => {
-  // === 1. Check Basic Auth ===
-  // PhonePe uses Basic Auth: username and password that you created in PhonePe dashboard.
-  console.log("WEBHOOK CALLED");
-  const incomingHeader = req.headers["authorization"];
-  if (!incomingHeader) {
-    return res
-      .status(401)
-      .json({ message: "Missing or invalid Authorization header" });
+/**
+ * Shiprocket's tracking webhook. Registered in the Shiprocket panel under
+ * Settings -> API -> Webhooks, where the same secret is entered as the token;
+ * Shiprocket sends it back on every push as the x-api-key header, and that is
+ * the only thing proving the call came from Shiprocket — there is no signature.
+ */
+export const updateShiprocketStatusWebhook = asyncErrorHandler(async (req, res) => {
+  const secret = process.env.SHIPROCKET_WEBHOOK_TOKEN;
+
+  // Refuse rather than run open: with no secret configured every caller on the
+  // internet could rewrite order statuses.
+  if (!secret) throw new ErrorHandler(403, "Forbidden");
+
+  const suppliedKey =
+    (req.headers["x-api-key"] as string) ?? getAuthToken(req) ?? "";
+
+  const supplied = Buffer.from(suppliedKey);
+  const expected = Buffer.from(secret);
+
+  if (
+    supplied.length !== expected.length ||
+    !crypto.timingSafeEqual(supplied, expected)
+  ) {
+    throw new ErrorHandler(403, "Forbidden");
   }
 
-  // Check against your configured webhook credentials
-  const expectedUsername = process.env.PHONEPE_WEBHOOK_USER;
-  const expectedPassword = process.env.PHONEPE_WEBHOOK_PASS;
+  // Shiprocket retries anything that is not answered quickly, so acknowledge
+  // first and do the database work in the background.
+  processShiprocketStatus(req.body);
 
-  const expectedHash = crypto
-    .createHash("sha256")
-    .update(`${expectedUsername}:${expectedPassword}`)
-    .digest("hex");
-
-  if (expectedHash !== incomingHeader) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
-
-  // === 2. Parse payload ===
-  const rawBody = req.body.toString("utf8");
-  const event = JSON.parse(rawBody);
-
-  // Now handle events:
-  console.log("📩 Received PhonePe webhook event:", event);
-
-  // Example: handle event types
-  let status: string | null = null;
-  let paymentid: string | null = null;
-  let created_at: Date | null = null;
-  let orderid: string | null = null;
-  let dbSearchId : string | null = null;
-
-  switch (event.event) {
-    case "checkout.order.completed":
-      // Process completed payment
-      console.log("Order completed:", event.payload);
-      status = "PAID";
-      paymentid = event.payload.paymentDetails[0].transactionId;
-      created_at = new Date(event.payload.paymentDetails[0].timestamp);
-      orderid = event.payload.orderId;
-      dbSearchId = event.payload.merchantOrderId;
-      break;
-
-    case "checkout.order.failed":
-      console.log("Order failed:", event.payload);
-      status = "FAILED";
-      paymentid = event.payload.paymentDetails[0].transactionId;
-      created_at = new Date(event.payload.paymentDetails[0].timestamp);
-      orderid = event.payload.orderId;
-      dbSearchId = event.payload.merchantOrderId;
-      break;
-
-    case "pg.refund.completed":
-      console.log("Refund completed:", event.payload);
-      status = "REFUNDED";
-      created_at = new Date(event.payload.paymentDetails[0].timestamp);
-      orderid = event.payload.orderId;
-      dbSearchId = event.payload.originalMerchantOrderId;
-      paymentid = event.payload.refundId; // Use refundId for tracking
-      break;
-
-    default:
-      console.log("Unhandled PhonePe event:", event.event);
-      return res.sendStatus(200); // Always ack unhandled events
-  }
-
-  await doTransition(async (client) => {
-    const paymentInfo = await client.query(
-      "UPDATE payments SET provider_payment_id = $1, status = $2, created_at = $3::timestamp, provider_order_id = $4 WHERE provider_order_id = $5 RETURNING order_id",
-      [paymentid, status, created_at, orderid, dbSearchId],
-    );
-    if (paymentInfo.rowCount == 0)
-      throw new ErrorHandler(400, "Unable to update payment status");
-    await client.query(
-      "UPDATE orders SET payment_status = $1 WHERE order_id = $2",
-      [status, paymentInfo.rows[0].order_id],
-    );
-  });
-
-  // A paid order is not booked with the courier here. The boxes it ships in
-  // are entered in the CMS by hand, so booking waits for an admin to confirm.
-
-  // === 3. Respond with 200 status quickly ===
-  // PhonePe considers webhook delivered if you return a 2xx status within a few seconds
-  return res.sendStatus(200);
+  httpResponse(res, 200, "Thank you for your response");
 });
-

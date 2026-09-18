@@ -1,7 +1,6 @@
 import { pool } from "..";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { doValidate } from "../utils/doValidate";
-import { ErrorHandler } from "../utils/ErrorHandler";
 import { fetchAllBlogSlugs } from "../utils/fetchAllBlogSlugs";
 import { httpResponse } from "../utils/httpResponse";
 import { objectToSqlInsert } from "../utils/objectToSql";
@@ -23,7 +22,7 @@ export const addEnquiry = asyncErrorHandler(async (req, res) => {
   if (sendEmailTo && rowCount !== 0) {
     const dataToSend = {
       timestamp: rows[0].created_at,
-      adminName: "Art Kolkata",
+      adminName: process.env.COMPANY_NAME,
       inquiry: {
         message: value?.message,
         name: value.name,

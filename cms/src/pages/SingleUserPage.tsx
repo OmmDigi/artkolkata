@@ -10,6 +10,7 @@ import { MoveLeft } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import SingleUserAddressInfo from "./SingleUserAddressInfo";
 import UserOrdersItem from "./UserOrdersItem";
+import SingleUserWishlist from "./SingleUserWishlist";
 import ManageUserForm from "./ManageUserForm";
 import { SIDEBAR_OPTIONS } from "@/constant";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -123,6 +124,14 @@ export default function SingleUserPage({ role }: IProps) {
                     label="Role"
                     defaultValue={data?.data.role ?? role}
                   />
+                </Section>
+              )}
+
+              {userid != "new" && role !== "Employee" && (
+                <Section>
+                  <Label className="text-xl mb-5 block">Wishlist</Label>
+
+                  <SingleUserWishlist userid={userid} />
                 </Section>
               )}
 

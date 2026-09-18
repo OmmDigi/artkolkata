@@ -11,3 +11,4 @@
 logs
 /builder
 upload_to_server_ssh_key
+envs

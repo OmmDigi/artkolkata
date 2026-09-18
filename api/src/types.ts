@@ -284,6 +284,23 @@ export interface IShippingAddress {
   country: string;
 }
 
+// The frozen copy of the delivery address stored on the order as JSONB.
+// Deliberately not IShippingAddress: that is the shape the checkout form posts
+// (fullName, address), while this is the shape written to orders.shipping_address
+// (name, address_line1) and read back by everything downstream — the couriers,
+// the invoice, the return pickup.
+export interface IOrderAddressSnapshot {
+  name: string;
+  phone: string;
+  email?: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country?: string;
+}
+
 export interface ISaveAddress extends IShippingAddress {
   user_id?: number;
   address_id?: number;

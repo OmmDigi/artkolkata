@@ -46,7 +46,7 @@ export const generateInvoicePdf = (invoice: IInvoiceInput): Promise<Buffer> =>
 
       const orderDate = new Date(invoice.orderDate);
 
-      doc.fontSize(20).text("Art Kolkata", { align: "center" });
+      doc.fontSize(20).text(process.env.COMPANY_NAME as string, { align: "center" });
       doc.fontSize(12).text("TAX INVOICE", { align: "center" });
       doc.moveDown(1.5);
 

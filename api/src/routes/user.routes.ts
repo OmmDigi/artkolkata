@@ -17,38 +17,103 @@ import {
 } from "../controllers/user.controller";
 import { isAuthenticated } from "../middleware/isAuthenticated";
 import { isAuthorizedV2 } from "../middleware/isAuthorizedV2";
+import { rateLimits } from "../middleware/rateLimits";
 
 export const userRoute = Router();
 
 userRoute
-  .get("/is-login", isAuthenticated, checkUserLoginInfo)
+  .get(
+    "/is-login",
+    rateLimits.publicReadUncached,
+    isAuthenticated,
+    checkUserLoginInfo,
+  )
 
-  .post("/save", isAuthorizedV2(["1-11"]), saveUserInfo) // save user info
-  .post("/employee/save", isAuthorizedV2(["1-12"]), saveUserInfo)
+  .post("/save", rateLimits.adminWrite, isAuthorizedV2(["1-11"]), saveUserInfo) // save user info
+  .post(
+    "/employee/save",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-12"]),
+    saveUserInfo,
+  )
 
-  .post("/employee/permission", isAuthorizedV2(["1-12"]), saveUserPermission) // permission can only be done to employee
+  .post(
+    "/employee/permission",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-12"]),
+    saveUserPermission,
+  ) // permission can only be done to employee
 
-  .post("/my-address", isAuthenticated, saveUserAddress) // logged-in user manages own addresses
-  .delete("/my-address", isAuthenticated, deleteUserAddress)
+  .post(
+    "/my-address",
+    rateLimits.accountWrite,
+    isAuthenticated,
+    saveUserAddress,
+  ) // logged-in user manages own addresses
+  .delete(
+    "/my-address",
+    rateLimits.accountWrite,
+    isAuthenticated,
+    deleteUserAddress,
+  )
 
-  .post("/address", isAuthorizedV2(["1-11"]), saveUserAddress)
-  .post("/employee/address", isAuthorizedV2(["1-12"]), saveUserAddress)
+  .post(
+    "/address",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-11"]),
+    saveUserAddress,
+  )
+  .post(
+    "/employee/address",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-12"]),
+    saveUserAddress,
+  )
 
-  .delete("/address", isAuthorizedV2(["1-11"]), deleteUserAddress)
-  .delete("/employee/address", isAuthorizedV2(["1-12"]), deleteUserAddress)
+  .delete(
+    "/address",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-11"]),
+    deleteUserAddress,
+  )
+  .delete(
+    "/employee/address",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-12"]),
+    deleteUserAddress,
+  )
 
-  .post("/signup", signUp)
-  .post("/login", login)
-  .post("/verify-otp", verifyOtp)
-  .post("/send-otp", sendOtp)
-  .get("/", isAuthorizedV2(["1-11"]), getUserList)
-  .get("/employee", isAuthorizedV2(["1-12"]), getUserList)
+  // Credential endpoints. login and send-otp each carry two limiters: one
+  // counted per target account, one counted per source address. Neither is
+  // sufficient alone — the first lets an attacker spread guesses across many
+  // accounts, the second lets them rotate addresses against one account.
+  .post("/signup", rateLimits.signup, signUp)
+  .post("/login", rateLimits.loginIp, rateLimits.login, login)
+  .post("/verify-otp", rateLimits.otpVerify, verifyOtp)
+  .post("/send-otp", rateLimits.otpSendIp, rateLimits.otpSend, sendOtp)
+  .get("/", rateLimits.adminRead, isAuthorizedV2(["1-11"]), getUserList)
+  .get("/employee", rateLimits.adminRead, isAuthorizedV2(["1-12"]), getUserList)
 
-  .get("/login/google", loginWithGoogle)
-  .get("/login/google/verify", verifyGoogleLogin)
+  .get("/login/google", rateLimits.oauth, loginWithGoogle)
+  .get("/login/google/verify", rateLimits.oauth, verifyGoogleLogin)
 
-  .get("/orders", isAuthenticated, getUserOrdersList)
+  .get(
+    "/orders",
+    rateLimits.publicReadUncached,
+    isAuthenticated,
+    getUserOrdersList,
+  )
 
-  .get("/profile", isAuthenticated, getSingleUser) //get user profile info
-  .get("/:id", isAuthorizedV2(["1-11"]), getSingleUser) // get single user info admin panel
-  .get("/employee/:id", isAuthorizedV2(["1-12"]), getSingleUser); // get single employee info from admin panel
+  .get(
+    "/profile",
+    rateLimits.publicReadUncached,
+    isAuthenticated,
+    getSingleUser,
+  ) //get user profile info
+  .get("/:id", rateLimits.adminRead, isAuthorizedV2(["1-11"]), getSingleUser) // get single user info admin panel
+  .get(
+    "/employee/:id",
+    rateLimits.adminRead,
+    isAuthorizedV2(["1-12"]),
+    getSingleUser,
+  ); // get single employee info from admin panel

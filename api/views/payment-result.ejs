@@ -311,10 +311,13 @@
         <a href="<%= process.env.FRONTEND_HOST_URL %>" class="btn btn-primary"
           >Go to Home</a
         >
+        <%# A guest has no order history to send them to. The storefront saved
+            this order's token before handing them to the gateway, so the guest
+            confirmation page finds the order without anything in this link. %>
         <a
-          href="<%= process.env.FRONTEND_HOST_URL %>/myaccount/orders"
+          href="<%= process.env.FRONTEND_HOST_URL %><%= typeof isGuestOrder !== 'undefined' && isGuestOrder ? '/guest-order' : '/account?tab=orders' %>"
           class="btn btn-secondary"
-          >View Orders</a
+          ><%= typeof isGuestOrder !== 'undefined' && isGuestOrder ? 'View Order' : 'View Orders' %></a
         >
       </div>
 
@@ -374,7 +377,7 @@
       </div>
 
       <p class="support-text">
-        Need help? Contact our support team at artkolkata921@gmail.com
+        Need help? Contact our support team at <%= supportEmail %>
       </p>
       <% } %>
     </div>

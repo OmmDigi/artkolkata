@@ -10,7 +10,13 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      /* @editorjs/embed ships typings at dist/index.d.ts but its package.json
+         "exports" map declares no "types" condition, so bundler resolution
+         cannot find them and the import would silently degrade to `any`.
+         This affects type checking only — vite still resolves the package
+         itself the normal way. */
+      "@editorjs/embed": ["./node_modules/@editorjs/embed/dist/index.d.ts"]
     },
 
     /* Bundler mode */

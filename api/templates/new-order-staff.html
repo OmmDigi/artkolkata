@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>New Order Received</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .email-container {
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        background: linear-gradient(135deg, #ff6900 0%, #c2410c 100%);
+        color: #ffffff;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+        margin: -30px -30px 30px -30px;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+      .timestamp {
+        font-size: 13px;
+        opacity: 0.9;
+        margin-top: 5px;
+      }
+      .section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+        border-left: 4px solid #ff6900;
+      }
+      .section h3 {
+        margin: 0 0 15px 0;
+        font-size: 17px;
+        color: #c2410c;
+      }
+      .detail-row {
+        display: flex;
+        margin-bottom: 10px;
+      }
+      .detail-label {
+        min-width: 140px;
+        font-weight: 600;
+        color: #555;
+      }
+      .detail-value {
+        color: #222;
+        word-break: break-word;
+      }
+      .total {
+        font-size: 20px;
+        font-weight: 700;
+        color: #c2410c;
+      }
+      .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background: #eef2ff;
+        color: #4338ca;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .footer {
+        margin-top: 30px;
+        font-size: 13px;
+        color: #888;
+        text-align: center;
+      }
+      @media (max-width: 480px) {
+        .detail-row {
+          flex-direction: column;
+        }
+        .detail-label {
+          min-width: auto;
+          margin-bottom: 3px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <div class="header">
+        <h1>🛍️ New Order Received</h1>
+        <div class="timestamp">Placed on <%= orderDate %></div>
+      </div>
+
+      <p>Hello,</p>
+      <p>
+        A new order has just been placed on the website. You are receiving this
+        because you handle orders in the admin panel.
+      </p>
+
+      <div class="section">
+        <h3>Order Details</h3>
+
+        <div class="detail-row">
+          <span class="detail-label">Order Number:</span>
+          <span class="detail-value"><strong><%= orderId %></strong></span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-label">Status:</span>
+          <span class="detail-value">
+            <span class="badge"><%= orderStatus %></span>
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-label">Payment Method:</span>
+          <span class="detail-value"><%= paymentMethod %></span>
+        </div>
+
+        <% if (items) { %>
+        <div class="detail-row">
+          <span class="detail-label">Items:</span>
+          <span class="detail-value"><%= items %></span>
+        </div>
+        <% } %>
+
+        <div class="detail-row">
+          <span class="detail-label">Order Total:</span>
+          <span class="detail-value total">₹<%= totalAmount %></span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Customer</h3>
+
+        <div class="detail-row">
+          <span class="detail-label">Name:</span>
+          <span class="detail-value"><%= customerName %></span>
+        </div>
+
+        <% if (customerEmail) { %>
+        <div class="detail-row">
+          <span class="detail-label">Email:</span>
+          <span class="detail-value">
+            <a href="mailto:<%= customerEmail %>"><%= customerEmail %></a>
+          </span>
+        </div>
+        <% } %> <% if (customerPhone) { %>
+        <div class="detail-row">
+          <span class="detail-label">Phone:</span>
+          <span class="detail-value">
+            <a href="tel:<%= customerPhone %>"><%= customerPhone %></a>
+          </span>
+        </div>
+        <% } %> <% if (shippingAddress) { %>
+        <div class="detail-row">
+          <span class="detail-label">Shipping Address:</span>
+          <span class="detail-value"><%= shippingAddress %></span>
+        </div>
+        <% } %>
+      </div>
+
+      <% if (cmsOrderLink) { %>
+      <div style="text-align: center; margin: 30px 0">
+        <a
+          href="<%= cmsOrderLink %>"
+          style="
+            background: #ff6900;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            display: inline-block;
+          "
+        >
+          Open Orders In Admin Panel
+        </a>
+      </div>
+      <% } %>
+
+      <div class="footer">
+        <p>
+          This email was generated automatically when the order was placed.<br />
+          Please do not reply to this email directly.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

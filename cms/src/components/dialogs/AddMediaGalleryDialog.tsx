@@ -30,12 +30,14 @@ import type { IGalleryItem, IResponse } from "@/types";
 import LoadingLayout from "../LoadingLayout";
 import { api } from "@/utils/api";
 import { uploadFiles } from "@/utils/uploadFiles";
+import { isAssetUrl } from "@/utils/assetUrl";
 import { ButtonLoading } from "../ui/button-loading";
 
 export const formSchema = z
   .object({
     type: z.enum(["youtube-link", "image"]),
     photos: z.any(),
+    image_url: z.string().optional(),
     youtube_link: z.string().optional(),
     altTags: z.string().min(1, { message: "Add Alt Tags" }),
     // media_type: z.enum(["gallery-item", "banner-item"]),
@@ -50,11 +52,24 @@ export const formSchema = z
         });
       }
     } else if (data.type === "image") {
-      if (!(data.photos instanceof FileList) || data.photos.length === 0) {
+      const pastedUrl = data.image_url?.trim() ?? "";
+      const hasPhotos =
+        data.photos instanceof FileList && data.photos.length > 0;
+
+      // an image comes either from an upload or from an outside link
+      if (!hasPhotos && pastedUrl === "") {
         ctx.addIssue({
           path: ["photos"],
           code: z.ZodIssueCode.custom,
-          message: "Please upload at least one photo",
+          message: "Upload at least one photo or paste an image url",
+        });
+      }
+
+      if (!hasPhotos && pastedUrl !== "" && !isAssetUrl(pastedUrl)) {
+        ctx.addIssue({
+          path: ["image_url"],
+          code: z.ZodIssueCode.custom,
+          message: "Enter a full image url, for example https://cdn.site.com/a.jpg",
         });
       }
     }
@@ -89,6 +104,7 @@ export default function AddMediaGalleryDialog({
     defaultValues: {
       type: "image",
       photos: undefined,
+      image_url: "",
       altTags: "",
     },
   });
@@ -112,6 +128,8 @@ export default function AddMediaGalleryDialog({
       form.reset({
         type: data.data?.media_type,
         photos: undefined,
+        image_url:
+          data.data?.media_type === "image" ? data.data?.item_link : "",
         youtube_link: data.data?.item_link,
         altTags: data.data?.alt_tag,
       });
@@ -123,6 +141,7 @@ export default function AddMediaGalleryDialog({
       form.reset({
         type: "image",
         photos: undefined,
+        image_url: "",
         altTags: "",
       });
     }
@@ -138,7 +157,18 @@ export default function AddMediaGalleryDialog({
     const valueToStore: IUploadMediaItem[] = [];
 
     startUploading(async () => {
-      if (values.type === "image") {
+      const pastedUrl = values.image_url?.trim() ?? "";
+      const hasPhotos =
+        values.photos instanceof FileList && values.photos.length > 0;
+
+      if (values.type === "image" && !hasPhotos && pastedUrl !== "") {
+        // nothing to upload, the link already points at a hosted image
+        valueToStore.push({
+          item_link: pastedUrl,
+          alt_tag: values.altTags.split(",")[0] || "",
+          media_type: "image",
+        });
+      } else if (values.type === "image") {
         const { data, error } = await uploadFiles({
           files: media_item_id === 0 ? values.photos : [values.photos[0]],
           folder: "media-gallery",
@@ -296,6 +326,30 @@ export default function AddMediaGalleryDialog({
                   />
                 )}
               </div>
+              {form.watch("type") === "image" ? (
+                <FormField
+                  control={form.control}
+                  name="image_url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Or Paste Image Url</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="https://cdn.example.com/photo.jpg"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Use an image already hosted somewhere else, nothing is
+                        uploaded. Ignored when photos are picked above.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : null}
+
               {uploadPercent === -1 ? null : <Progress value={uploadPercent} />}
               {/* <FormField
               control={form.control}

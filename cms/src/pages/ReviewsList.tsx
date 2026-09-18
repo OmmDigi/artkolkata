@@ -11,11 +11,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { REVIEW_STATUS_APPROVED, REVIEW_STATUS_NOT_APPROVED } from "@/constant";
+import {
+  REVIEW_RATING_ALL,
+  REVIEW_RATINGS,
+  REVIEW_STATUS_APPROVED,
+  REVIEW_STATUS_NOT_APPROVED,
+} from "@/constant";
 import { useDoMutation } from "@/hooks/useDoMutation";
 import { cn } from "@/lib/utils";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import type { IError, IResponse, IReviews } from "@/types";
+import SelectInput from "@/components/SelectInput";
 import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
@@ -38,6 +44,7 @@ export default function ReviewsList() {
   const [currentClickIndex, setCurrentClickIndex] = useState(-1);
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const currentRating = searchParams.get("stars") ?? REVIEW_RATING_ALL;
 
   const whichReviewStatusUpdating = useRef(-1);
 
@@ -84,10 +91,40 @@ export default function ReviewsList() {
           message={data?.data[currentClickIndex]?.message}
         />
       ) : null}
+      <div className="mb-4 flex items-end justify-between">
+        <h2 className="font-semibold text-xl">
+          Ratings
+        </h2>
+
+        <SelectInput
+          label="Filter By Rating"
+          options={REVIEW_RATINGS}
+          value={currentRating}
+          onValueChange={(value) => {
+            setSearchParams((prev) => {
+              if (value === REVIEW_RATING_ALL) {
+                prev.delete("stars");
+              } else {
+                prev.set("stars", value);
+              }
+              // A narrower list is shorter, so page 4 of "all ratings" is
+              // usually empty once a single rating is picked.
+              prev.set("page", "1");
+              return prev;
+            });
+          }}
+        />
+      </div>
+
       <LoadingHandler
         loading={isFetching}
         error={error}
         length={data?.data.length}
+        noDataMsg={
+          currentRating === REVIEW_RATING_ALL
+            ? undefined
+            : `No ${currentRating} star reviews found`
+        }
       >
         <ScrollArea className="w-full whitespace-nowrap pb-3.5">
           <Table className="w-full">

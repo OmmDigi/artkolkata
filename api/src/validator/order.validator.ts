@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { ORDER_STATUSES } from "../constant";
 
 export const VShippingAddress = Joi.object({
   fullName: Joi.string().required(),
@@ -74,17 +75,13 @@ export const VUpdateOrderStatus = Joi.object({
     then: Joi.optional(),
     otherwise: Joi.required(),
   }),
-  status: Joi.string()
-    .required()
-    .valid(
-      "PENDING",
-      "CONFIRMED",
-      "PACKED",
-      "SHIPPED",
-      "DELIVERED",
-      "CANCELLED",
-      "RETURNED",
-    ),
+  // Every status an order can actually hold, taken from the constants rather
+  // than written out again. The list used to be a literal here and had drifted:
+  // the webhook writes OUT FOR DELIVERY and the return flow writes the RETURN
+  // and REPLACE statuses by raw SQL, so they never hit this schema, and an
+  // admin setting one by hand was rejected for a status the order was already
+  // allowed to be in.
+  status: Joi.string().required().valid(...ORDER_STATUSES),
 });
 
 // The boxes an admin keys in against an order before confirming it. Bigship

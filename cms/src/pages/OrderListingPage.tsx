@@ -1,3 +1,4 @@
+import OrderDocumentActions from "@/components/OrderDocumentActions";
 import OrderFilters from "@/components/OrderFilters";
 import { PaginationComp } from "@/components/PaginationComp";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -18,6 +19,8 @@ import {
   ORDER_RETURN_INITIATED,
   ORDER_RETURNED,
   ORDER_SHIPPED,
+  PAYMENT_METHOD_COD,
+  PAYMENT_METHOD_ONLINE,
   PAYMENT_PAID,
   PAYMENT_PENDING,
   PAYMENT_REFUNDED,
@@ -27,7 +30,7 @@ import { type IResponse, type IOrderList, type IError } from "@/types";
 import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
-import { Download, ExternalLink } from "lucide-react";
+import { Calendar, Download, ExternalLink, Hash, Mail, User } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 const getOrderList = async (page: number, filters: string) => {
@@ -39,7 +42,7 @@ export default function OrderListingPage() {
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
 
-  const { isFetching, error, data } = useQuery<
+  const { isFetching, error, data, refetch } = useQuery<
     IResponse<IOrderList[]>,
     AxiosError<IError>
   >({
@@ -59,22 +62,48 @@ export default function OrderListingPage() {
           <Table className="w-max">
             <TableHeader>
               <TableRow className="*:min-w-52 bg-green-600 hover:!bg-green-600 *:text-white">
-                <TableHead className="sticky top-0 left-0 z-20">
-                  ORDER NUMBER
+                <TableHead className="sticky top-0 left-0 z-20 min-w-64">
+                  ORDER DETAILS
                 </TableHead>
-                <TableHead>CUSTOMER NAME</TableHead>
                 <TableHead>TOTAL AMOUNT</TableHead>
+                <TableHead>PAYMENT MODE</TableHead>
                 <TableHead>PAYMENT STATUS</TableHead>
                 <TableHead>ORDER STATUS</TableHead>
-                <TableHead>ORDER DATE</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data?.data?.map((order) => (
                 <TableRow key={order.order_id}>
                   <TableCell>
-                    <span className="block">{order.order_number}</span>
-                    <div className="flex items-center gap-3.5">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <Hash size={13} className="text-gray-500" />
+                      {order.order_number}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-gray-600">
+                      <User size={13} className="text-gray-500" />
+                      {order.user_name}
+                      {/* There is no account behind a guest order, so the only
+                          way to reach this customer is the address on it. */}
+                      {order.is_guest_order ? (
+                        <span
+                          title="Placed without an account"
+                          className="rounded bg-amber-100 text-amber-700 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5"
+                        >
+                          Guest
+                        </span>
+                      ) : null}
+                    </div>
+                    {order.is_guest_order && order.user_email ? (
+                      <div className="flex items-center gap-1.5 text-gray-600">
+                        <Mail size={13} className="text-gray-500" />
+                        {order.user_email}
+                      </div>
+                    ) : null}
+                    <div className="flex items-center gap-1.5 text-gray-600">
+                      <Calendar size={13} className="text-gray-500" />
+                      {order.order_date}
+                    </div>
+                    <div className="flex items-center gap-3.5 pt-1">
                       <Link
                         to={`/orders/${order.order_id}`}
                         className="underline text-green-600 cursor-pointer flex items-center gap-1"
@@ -101,9 +130,28 @@ export default function OrderListingPage() {
                         <Download size={12} />
                       </Link>
                     </div>
+
+                    <OrderDocumentActions
+                      order={order}
+                      onGenerated={() => refetch()}
+                    />
                   </TableCell>
-                  <TableCell>{order.user_name}</TableCell>
                   <TableCell>{order.total_amount}</TableCell>
+                  <TableCell>
+                    {order.payment_method == PAYMENT_METHOD_COD ? (
+                      <span className="inline-block px-3.5 py-1 rounded-full bg-orange-600 text-white shadow-2xl">
+                        COD
+                      </span>
+                    ) : order.payment_method == PAYMENT_METHOD_ONLINE ? (
+                      <span className="inline-block px-3.5 py-1 rounded-full bg-indigo-600 text-white shadow-2xl">
+                        Online
+                      </span>
+                    ) : (
+                      <span className="inline-block px-3.5 py-1 rounded-full bg-gray-500 text-white shadow-2xl">
+                        {order.payment_method ?? "Unknown"}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {order.payment_status == PAYMENT_PENDING ? (
                       <span className="inline-block px-3.5 py-1 rounded-full bg-yellow-600 text-white shadow-2xl">
@@ -162,7 +210,6 @@ export default function OrderListingPage() {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>{order.order_date}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

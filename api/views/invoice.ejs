@@ -229,7 +229,7 @@
   <body>
     <div id="invoice" class="container">
       <div class="header">
-        <h1>Art Kolkata</h1>
+        <h1><%= companyName %></h1>
         <p>
           Thank you for shopping with us. Your account has been charged and your
           transaction is successful. We will be processing your order soon.
@@ -246,7 +246,7 @@
           </div>
           <div class="info-item">
             <span class="info-label">Total</span>
-            <span class="info-value">₹<%= total %></span>
+            <span class="info-value">₹<%= total.toFixed(2) %></span>
           </div>
           <div class="info-item">
             <span class="info-label">Payment Method</span>
@@ -285,22 +285,38 @@
         <div style="margin-top: 20px">
           <div class="summary-row">
             <span class="summary-label">Subtotal:</span>
-            <span class="summary-value">₹<%= subtotal %></span>
+            <span class="summary-value">₹<%= subtotal.toFixed(2) %></span>
           </div>
+          <% if (couponDiscount > 0) { %>
           <div class="summary-row">
-            <span class="summary-label">Gst:</span>
-            <span class="summary-value">5%</span>
+            <span class="summary-label"
+              >Coupon discount<%= couponCode ? ' (' + couponCode + ')' : '' %>:</span
+            >
+            <span class="summary-value">- ₹<%= couponDiscount.toFixed(2) %></span>
+          </div>
+          <% } %>
+          <% if (autoDiscount > 0) { %>
+          <div class="summary-row">
+            <span class="summary-label"
+              ><%= autoDiscountTitle || 'Offer discount' %>:</span
+            >
+            <span class="summary-value">- ₹<%= autoDiscount.toFixed(2) %></span>
+          </div>
+          <% } %>
+          <div class="summary-row">
+            <span class="summary-label">GST (<%= gstPercentage %>% included):</span>
+            <span class="summary-value">₹<%= gstAmount.toFixed(2) %></span>
           </div>
           <div class="summary-row">
             <span class="summary-label">Shipping:</span>
             <span class="summary-value"
-              ><%= shipping === 0 ? 'Free shipping' : '₹' + shipping
+              ><%= shipping === 0 ? 'Free shipping' : '₹' + shipping.toFixed(2)
               %></span
             >
           </div>
           <div class="summary-row total">
             <span class="summary-label">Total:</span>
-            <span class="summary-value">₹<%= total %></span>
+            <span class="summary-value">₹<%= total.toFixed(2) %></span>
           </div>
           <div class="summary-row">
             <span class="summary-label">Payment method:</span>

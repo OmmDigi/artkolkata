@@ -58,7 +58,8 @@ export async function createAdminUser() {
           "1-11": "r-w",
           "1-12": "r-w",
           "1-13": "r-w",
-          "1-14": "r-w"
+          "1-14": "r-w",
+          "1-15": "r-w"
         }')
         ON CONFLICT (user_id) DO UPDATE SET permissions = EXCLUDED.permissions;
     `,

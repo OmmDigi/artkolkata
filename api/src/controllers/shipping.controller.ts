@@ -3,7 +3,7 @@ import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { httpResponse } from "../utils/httpResponse";
-import BigshipService from "../services/bigshipService";
+import { getShippingPartner } from "../services/shipping";
 
 const VCheckServiceability = Joi.object({
   pincode: Joi.string()
@@ -24,13 +24,16 @@ export const checkServiceability = asyncErrorHandler(async (req, res) => {
     cod: boolean;
   }>(VCheckServiceability, req.query ?? {});
 
-  const result = await BigshipService.checkServiceability(
-    value.pincode,
-    value.weight,
-    value.invoiceValue,
-    value.cod,
-  );
+  const result = await getShippingPartner().checkShipment({
+    pincode: value.pincode,
+    weight: value.weight,
+    invoiceValue: value.invoiceValue,
+    cod: value.cod,
+  });
 
+  // NonePartner answers success:true / serviceable:true, so a shop with no
+  // courier integration reports every pincode deliverable rather than erroring
+  // — the storefront widget keeps working untouched.
   if (!result.success) {
     throw new ErrorHandler(500, "Unable to check pincode availability right now");
   }

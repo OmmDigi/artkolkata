@@ -9,9 +9,6 @@ import {
   ORDER_RETURNED,
   ORDER_SHIPPED,
 } from "../constant";
-import { sendEmail } from "./sendEmail";
-import DelhiveryService, { ShipmentData } from "../services/delhiveryService";
-import logger from "./logger";
 
 interface IProps {
   orderid?: number;
@@ -42,6 +39,7 @@ const manageQuantity = async ({
        SELECT
         quantity,
         variant_info->>'id' AS variant_id,
+        variant_info->>'sku' AS variant_sku,
         product_info->>'id' AS product_id
        FROM order_items WHERE ${
          orderid ? "order_id = $1" : "order_item_id = $1"
@@ -51,7 +49,9 @@ const manageQuantity = async ({
   );
 
   const productIdAndQuantity: { id: number; quantity: number }[] = [];
-  const varientIdAndQuantity: { id: number; quantity: number }[] = [];
+  // const varientIdAndQuantity: { id: number; quantity: number }[] = [];
+  const varientSkuAndQuantity : {sku : string, quantity: number}[] = [];
+
   for (const item of rows) {
     if (item.product_id != null) {
       productIdAndQuantity.push({
@@ -59,11 +59,18 @@ const manageQuantity = async ({
         quantity: item.quantity,
       });
     }
-    if (item.variant_id != null) {
-      varientIdAndQuantity.push({
-        id: item.variant_id,
-        quantity: item.quantity,
-      });
+    // if (item.variant_id != null) {
+    //   varientIdAndQuantity.push({
+    //     id: item.variant_id,
+    //     quantity: item.quantity,
+    //   });
+    // }
+
+    if (item.variant_sku != null) {
+      varientSkuAndQuantity.push({
+        sku : item.variant_sku,
+        quantity : item.quantity
+      })
     }
   }
 
@@ -88,9 +95,30 @@ const manageQuantity = async ({
     );
   }
 
-  if (varientIdAndQuantity.length != 0) {
-    const valuesQuery = varientIdAndQuantity
-      .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
+  // if (varientIdAndQuantity.length != 0) {
+  //   const valuesQuery = varientIdAndQuantity
+  //     .map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::int)`)
+  //     .join(",");
+
+  //   await pgClient.query(
+  //     `
+  //         UPDATE product_variants AS pv
+  //           SET quantity = (pv.quantity ${
+  //             actiontype == "increase" ? "+" : "-"
+  //           } v.quantity::int)
+  //           FROM (
+  //             VALUES
+  //               ${valuesQuery}
+  //           ) AS v(id, quantity)
+  //         WHERE pv.id = v.id::int;
+  //         `,
+  //     varientIdAndQuantity.flatMap((item) => [item.id, item.quantity])
+  //   );
+  // }
+
+  if (varientSkuAndQuantity.length != 0) {
+    const valuesQuery = varientSkuAndQuantity
+      .map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2}::int)`)
       .join(",");
 
     await pgClient.query(
@@ -102,10 +130,10 @@ const manageQuantity = async ({
             FROM (
               VALUES
                 ${valuesQuery}
-            ) AS v(id, quantity)
-          WHERE pv.id = v.id::int;
+            ) AS v(sku, quantity)
+          WHERE pv.sku = v.sku;
           `,
-      varientIdAndQuantity.flatMap((item) => [item.id, item.quantity])
+      varientSkuAndQuantity.flatMap((item) => [item.sku, item.quantity])
     );
   }
 
@@ -172,139 +200,12 @@ export const manageStock = async ({
       orderitemid,
     });
 
-    if (order_status == ORDER_CONFIRMED) {
-      const { rows, rowCount } = await pgClient.query(
-        `
-          SELECT
-           u.name,
-           o.order_number,
-           TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
-           u.email,
-           o.total_amount,
-           o.payment_method,
-           STRING_AGG(
-            CASE
-             WHEN oi.variant_info IS NOT NULL
-             THEN oi.variant_info->>'product_name'
-             ELSE oi.product_info->>'name'
-            END,
-            ', '
-           ) AS items,
-           COALESCE(o.shipping_address, '{}'::jsonb) AS shipping_details
-          FROM orders o
-
-          LEFT JOIN users u
-          ON u.id = o.user_id
-
-          LEFT JOIN order_items oi
-          ON oi.order_id = o.order_id
-
-          WHERE ${orderid ? "o.order_id = $1" : "oi.order_item_id = $1"}
-
-          GROUP BY u.id, o.order_id
-        `,
-        [orderid ?? orderitemid]
-      );
-
-      if (rowCount != 0) {
-        // do the shipment craction process
-        const value = rows[0];
-        // Orders placed before the shipping_address JSONB migration have no
-        // snapshot. Fall back to the account details so a missing snapshot
-        // never blocks the status transition.
-        const customerName = value.shipping_details.name ?? value.name;
-        const customerEmail = value.shipping_details.email ?? value.email;
-
-        // const orderData: ShipmentData = {
-        //   customerName: value.shipping_details[0].name,
-        //   customerAddress: value.shipping_details[0].address_line1,
-        //   customerPincode: value.shipping_details[0].pincode,
-        //   customerCity: value.shipping_details[0].city,
-        //   customerState: value.shipping_details[0].state,
-        //   customerPhone: value.shipping_details[0].phone,
-        //   customerEmail: value.shipping_details[0].email,
-
-        //   orderID: value.order_number,
-        //   productDescription: value.items,
-        //   quantity: value.items.split(",").length,
-
-        //   paymentMode: value.payment_method == "ONLINE" ? "Prepaid" : "COD", // or "Prepaid"
-        //   totalAmount: value.total_amount,
-
-        //   // weight: 0.2, // kg
-        //   // length: 20,
-        //   // breadth: 15,
-        //   // height: 5,
-        // };
-
-        // if (value.payment_method != "ONLINE") {
-        //   orderData.codAmount = value.total_amount;
-        // }
-
-        // # THIS IS FOR DELHIVERY PATNER
-        // const shipment = await DelhiveryService.createShipment(
-        //   {
-        //     name: value.shipping_details[0].name,
-        //     add: value.shipping_details[0].address_line1,
-        //     city: value.shipping_details[0].city,
-        //     country: "India",
-        //     phone: value.shipping_details[0].phone,
-        //     pin: value.shipping_details[0].pincode,
-        //     state: value.shipping_details[0].state,
-        //   },
-        //   {
-        //     orderId: value.order_number,
-        //     productDescription: value.items,
-        //     quantity: value.items.split(",").length,
-        //     totalAmount: value.total_amount,
-        //     weight: 0.2,
-        //   },
-        //   value.payment_method
-        // );
-        
-        // if (!shipment.success) {
-        //   throw new ErrorHandler(
-        //     500,
-        //     "Unable to process shipment creation please try again"
-        //   );
-        // }
-
-        // if (orderitemid) {
-        //   await pgClient.query(
-        //     "UPDATE order_items SET waybill = $1 WHERE order_item_id = $2",
-        //     [shipment.waybill, orderitemid]
-        //   );
-        // } else {
-        //   await pgClient.query(
-        //     "UPDATE orders SET waybill = $1 WHERE order_id = $2",
-        //     [shipment.waybill, orderid]
-        //   );
-        //   await pgClient.query(
-        //     "UPDATE order_items SET waybill = $1 WHERE order_id = $2",
-        //     [shipment.waybill, orderid]
-        //   );
-        // }
-
-        if (!customerEmail) {
-          logger.error({
-            message: "Order confirmed but no email address to notify",
-            orderid,
-            orderitemid,
-            order_number: value.order_number,
-          });
-        } else {
-          sendEmail(customerEmail, "ORDER_CONFIRMED_EMAIL", {
-            customerName,
-            orderId: value.order_number,
-            orderDate: value.order_date,
-            customerEmail,
-            totalAmount: value.total_amount,
-            items: value.items,
-            orderLink: `${process.env.FRONTEND_HOST_URL}/myaccount/orders`,
-          });
-        }
-      }
-    }
+    // The customer's "order confirmed" email used to be assembled and sent from
+    // right here, which tied it to the stock decrease: it only went out on the
+    // transition that first reduced stock. Shipped, out for delivery and
+    // delivered have no such moment, so all four now go through
+    // notifyOrderStatus, called after the commit by whoever wrote the status,
+    // and order_email_log — not a stock flag — is what keeps each to one send.
   } else if (
     (order_status == ORDER_CANCELLED ||
       order_status == ORDER_RETURNED ||
