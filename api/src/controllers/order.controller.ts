@@ -12,7 +12,6 @@ import {
   REPLACE_INITIATED,
   REPLACED,
   SHIPMENT_MAPING,
-  GST_PERCENTAGE,
 } from "../constant";
 import { v4 as uuidv4 } from "uuid";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
@@ -23,7 +22,7 @@ import {
 } from "./settings.controller";
 import { calcluteCartAmounts } from "../utils/calcluteCartAmounts";
 import { calculateAutoDiscount } from "../utils/calculateAutoDiscount";
-import { buildPriceBreakdown, IPriceBreakdown } from "../utils/buildPriceBreakdown";
+import { buildPriceBreakdown } from "../utils/buildPriceBreakdown";
 import { doTransition } from "../utils/doTransition";
 import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
@@ -44,6 +43,7 @@ import {
   VGetPriceBreakdown,
   VReturnOrder,
   VTrackOrder,
+  VSetOrderDraft,
   VUpdateOrderStatus,
   VUpdateShipmentBoxes,
   VUploadOrderInvoice,
@@ -73,6 +73,10 @@ import { fetchCustomerOrderById } from "../services/customerOrders.service";
 import logger from "../utils/logger";
 import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
 import { getOrderDocumentData } from "../services/documents/orderDocumentData";
+import {
+  generatePaymentSlip,
+  renderUnstoredPaymentSlip,
+} from "../services/documents/generatePaymentSlip";
 import {
   renderInvoicePdf,
   renderPackingSlipPdf,
@@ -578,6 +582,18 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
     filterValues.push(req.query.ostatus);
   }
 
+  /**
+   * Drafts are parked orders — a test, a duplicate, a phone order keyed in
+   * wrong — and they are off every screen but the one that asks for them.
+   * ?draft=true is that screen: it shows drafts and nothing else, so the two
+   * views never overlap and a total taken from either one is honest.
+   */
+  if (req.query.draft === "true") {
+    filter += ` AND o.is_draft = true`;
+  } else {
+    filter += ` AND COALESCE(o.is_draft, false) = false`;
+  }
+
   // "Show me only the orders nobody was logged in for." Read off the order, not
   // the customer, so a guest who has since made an account does not quietly
   // drop out of the list.
@@ -598,6 +614,9 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
          -- staff can tell at a glance that there is no account behind the
          -- order and the only contact details are the ones on it.
          COALESCE(o.is_guest_order, false) AS is_guest_order,
+         -- Parked by staff: the CMS badges it and offers Restore instead of
+         -- Move to draft.
+         COALESCE(o.is_draft, false) AS is_draft,
          o.total_amount,
          o.payment_status,
          o.payment_method,
@@ -650,6 +669,10 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         -- staff reach the customer: there is no account to look up, only the
         -- address snapshot on the order itself.
         COALESCE(is_guest_order, false) AS is_guest_order,
+        -- Parked by staff. Hidden from the customer and from every analytics
+        -- window while it is true; see setOrderDraft.
+        COALESCE(is_draft, false) AS is_draft,
+        TO_CHAR(drafted_at, 'DD Mon YYYY') AS drafted_at,
         order_number,
         subtotal,
         discount,
@@ -1067,6 +1090,114 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
   }
 
   httpResponse(res, 200, "Order status successfully updated");
+});
+
+/**
+ * Park an order, or bring it back. Admin only.
+ *
+ * A draft is an order that should not count: a test order, a duplicate, a phone
+ * order keyed in wrong. It is a flag beside order_status rather than a status of
+ * its own, so the order keeps whatever it already was and restoring it puts it
+ * back exactly where it sat — nothing has to guess a status, and the courier
+ * webhook, which writes order_status from the newest scan, cannot wipe the mark.
+ *
+ * Drafting gives the stock back, because a parked order is not holding anything
+ * for anyone; restoring takes it out again if the status it returns to is one
+ * that owns stock. manageStock decides both from stock_decreased, so a double
+ * press cannot move a quantity twice.
+ *
+ * The customer stops seeing the order entirely (see customerOrders.service),
+ * its status emails stay unsent (see sendOrderEmail) and every analytics window
+ * ignores it — the three reasons an order gets parked in the first place.
+ */
+export const setOrderDraft = asyncErrorHandler(async (req: CustomRequest, res) => {
+  const orderId = Number(req.params.orderid);
+
+  if (!Number.isInteger(orderId) || orderId <= 0)
+    throw new ErrorHandler(400, "Order id is required!");
+
+  const value = doValidate<{ is_draft: boolean }>(
+    VSetOrderDraft,
+    req.body ?? {},
+  );
+
+  const { rows, rowCount } = await pool.query(
+    "SELECT order_status, COALESCE(is_draft, false) AS is_draft FROM orders WHERE order_id = $1",
+    [orderId],
+  );
+
+  if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
+
+  const order = rows[0];
+
+  // Already where it is being asked to go. Said plainly rather than run again:
+  // the stock move is guarded by stock_decreased, but there is no reason to
+  // restamp drafted_at because someone pressed the button twice.
+  if (order.is_draft === value.is_draft)
+    return httpResponse(
+      res,
+      200,
+      value.is_draft ? "Order is already a draft" : "Order is not a draft",
+      { is_draft: order.is_draft },
+    );
+
+  await doTransition(async (client) => {
+    if (value.is_draft) {
+      // PENDING is the "nobody is holding this stock" side of manageStock, and
+      // it only gives anything back when the order had actually taken it.
+      await manageStock({
+        order_status: ORDER_PENDING,
+        orderid: orderId,
+        client,
+      });
+
+      await client.query(
+        `
+         UPDATE orders
+         SET is_draft = true,
+             drafted_at = CURRENT_TIMESTAMP,
+             drafted_by = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $1
+        `,
+        [orderId, req.token_info?.id ?? null],
+      );
+    } else {
+      await client.query(
+        `
+         UPDATE orders
+         SET is_draft = false,
+             drafted_at = NULL,
+             drafted_by = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $1
+        `,
+        [orderId],
+      );
+
+      // Back to fulfilment: whatever status it kept decides whether it owns
+      // stock again. A restored PENDING order takes nothing, exactly as a
+      // freshly placed one does.
+      await manageStock({
+        order_status: order.order_status ?? ORDER_PENDING,
+        orderid: orderId,
+        client,
+      });
+    }
+  });
+
+  // Quantities moved, and they are part of a product's cached response. After
+  // the commit, for the same reason updateOrderStatus does it there.
+  await invalidateCache(CACHE_TAGS.PRODUCTS);
+
+  httpResponse(
+    res,
+    200,
+    value.is_draft
+      ? "Order moved to draft. It is hidden from the customer and left out of the dashboard."
+      : "Order restored from draft.",
+    { is_draft: value.is_draft },
+  );
 });
 
 //this endpoint for user only
@@ -1734,162 +1865,102 @@ export const downloadPackingSlip = asyncErrorHandler(async (req, res) => {
   return res.send(pdf);
 });
 
-// The document the app renders itself. It records what was ordered and what was
-// paid, so it is a payment slip rather than an invoice, and it is available for
-// every order at any status.
+/**
+ * The payment slip — the receipt for money received against an order.
+ *
+ * Served to anyone holding the order id, as it always has been: it is the
+ * document the customer is sent to from the payment result page and from their
+ * order history, neither of which carries an admin session.
+ *
+ * A paid order is served its stored slip, generated the moment the payment
+ * landed. An order paid before this existed, or whose generate failed at the
+ * time, is generated here on its first download and kept, so the next one is a
+ * straight read.
+ *
+ * An unpaid order still gets a slip, rendered on the spot and stored nowhere:
+ * no receipt number, no paid stamp, and it says in words that it is not a
+ * receipt.
+ */
 export const downloadPaymentSlip = asyncErrorHandler(async (req, res) => {
-  const orderid = req.params.orderid;
-  if (!orderid) throw new ErrorHandler(400, "Invalid request");
+  const orderId = readOrderId(req);
 
-  let objectToSend: any = {};
-
-  await doTransition(async (client) => {
-    const orderInfo = await client.query(
-      `
-       SELECT
-        user_id,
-        order_number,
-        TO_CHAR(created_at, 'DD Mon YYYY') AS order_date,
-        subtotal,
-        discount,
-        coupon_discount,
-        auto_discount,
-        shipping_charge,
-        total_amount,
-        coupon_code,
-        order_status,
-        payment_status,
-        shipping_address,
-        price_breakdown,
-        payment_method
+  const order = await pool.query(
+    `SELECT order_number, payment_status, receipt_number, payment_slip_url
        FROM orders
+      WHERE order_id = $1`,
+    [orderId],
+  );
 
-       WHERE order_id = $1
-      `,
-      [orderid],
+  if (order.rowCount === 0)
+    throw new ErrorHandler(404, "Order information not found!");
+
+  const row = order.rows[0];
+
+  let pdf: Buffer;
+  let documentName = row.receipt_number ?? row.order_number;
+
+  if (row.payment_status === "PAID") {
+    const slip = row.payment_slip_url
+      ? { storedUrl: row.payment_slip_url, receiptNumber: row.receipt_number }
+      : await generatePaymentSlip(orderId);
+
+    if (slip) {
+      documentName = slip.receiptNumber ?? documentName;
+
+      // A stored slip whose file has gone missing is regenerated rather than
+      // refused: the order is paid, so the document is owed either way.
+      pdf = await fetchOrderDocument(slip.storedUrl).catch(async (error) => {
+        logger.warn("Stored payment slip could not be read, regenerating", {
+          order_id: orderId,
+          error: error instanceof Error ? error.message : error,
+        });
+
+        const regenerated = await generatePaymentSlip(orderId, { force: true });
+
+        return regenerated
+          ? fetchOrderDocument(regenerated.storedUrl)
+          : renderUnstoredPaymentSlip(orderId);
+      });
+    } else {
+      // Paid a moment ago and the storage server is refusing uploads. The
+      // customer still gets their receipt; only the stored copy is missing.
+      pdf = await renderUnstoredPaymentSlip(orderId);
+    }
+  } else {
+    pdf = await renderUnstoredPaymentSlip(orderId);
+  }
+
+  res.setHeader("Content-Type", "application/pdf");
+  // inline: this opens from a "view your receipt" link far more often than it is
+  // filed away, and a browser that wants to save it still can.
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="payment-slip-${documentName}.pdf"`,
+  );
+  return res.send(pdf);
+});
+
+/**
+ * Regenerate, for an admin who has corrected something the slip prints.
+ *
+ * The receipt number and date are kept — only the document is rebuilt, and the
+ * superseded file is dropped once the new one is safely stored.
+ */
+export const generateOrderPaymentSlip = asyncErrorHandler(async (req, res) => {
+  const orderId = readOrderId(req);
+
+  const slip = await generatePaymentSlip(orderId, { force: true });
+
+  if (!slip)
+    throw new ErrorHandler(
+      400,
+      "This order has not been paid, so it has no receipt to generate",
     );
 
-    if (orderInfo.rowCount == 0)
-      throw new ErrorHandler(404, "Order information not found!");
-
-    const order = orderInfo.rows[0];
-    const addr = order.shipping_address ?? {};
-
-    // The slip must show the same rows the checkout page showed, so it reads
-    // the price_breakdown snapshot createOrder wrote through buildPriceBreakdown
-    // rather than recomputing anything. Orders placed before that column
-    // existed fall back to the flat columns, with GST reverse calculated the
-    // same way buildPriceBreakdown does.
-    const round2 = (value: number) => parseFloat(value.toFixed(2));
-    const num = (value: any) => {
-      const parsed = parseFloat(value);
-      return Number.isFinite(parsed) ? parsed : 0;
-    };
-    const snapshot: Partial<IPriceBreakdown> = order.price_breakdown ?? {};
-
-    const subtotal = num(snapshot.subtotal ?? order.subtotal);
-    const couponDiscount = num(snapshot.coupon_discount ?? order.coupon_discount);
-    const autoDiscount = num(snapshot.auto_discount ?? order.auto_discount);
-    const total = num(snapshot.total ?? order.total_amount);
-    const gstPercentage = num(snapshot.gst_percentage ?? GST_PERCENTAGE);
-    const gstAmount = round2(
-      num(
-        snapshot.gst_amount ??
-          (total * gstPercentage) / (100 + gstPercentage),
-      ),
-    );
-
-    const orderItemsInfo = await client.query(
-      `
-       SELECT
-        oi.order_item_id,
-        oi.quantity,
-        oi.price,
-        oi.subtotal,
-
-        CASE
-         WHEN oi.variant_info IS NOT NULL
-         THEN oi.variant_info->>'product_name'
-         ELSE oi.product_info->>'name'
-        END AS product_name,
-
-        CASE
-         WHEN oi.variant_info IS NOT NULL
-         THEN oi.variant_info->>'sku'
-         ELSE null
-        END AS sku,
-
-        CASE
-         WHEN oi.variant_info IS NOT NULL
-         THEN oi.variant_info->'images'->0
-         ELSE oi.product_info->'images'->0
-        END AS images,
-
-        -- what a combo line contained, frozen at checkout
-        COALESCE(
-         oi.variant_info->'bundle_items',
-         oi.product_info->'bundle_items',
-         '[]'::jsonb
-        ) AS bundle_items
-
-       FROM order_items oi
-
-       WHERE order_id = $1
-      `,
-      [orderid],
-    );
-
-    objectToSend = {
-      orderNumber: order.order_number,
-      orderDate: order.order_date,
-      total,
-      paymentMethodTxt:
-        order.payment_method == "COD" ? "Cash on delivery" : "Online Paid",
-      paymentMethod: order.payment_method,
-      items: orderItemsInfo.rows.map((item: any) => ({
-        name: item.product_name,
-        quantity: item.quantity,
-        total: item.price,
-        // empty for an ordinary product, so the template can loop
-        // unconditionally
-        bundleItems: ((item.bundle_items ?? []) as any[]).map((child) => ({
-          name: child.name ?? "",
-          variantLabel: child.variant_label ?? null,
-          quantity: num(child.quantity) || 1,
-        })),
-      })),
-
-      subtotal,
-      couponCode: order.coupon_code ?? null,
-      couponDiscount,
-      autoDiscount,
-      // labels the order value discount row with the rule that fired
-      autoDiscountTitle: snapshot.auto_discount_rule?.title ?? null,
-      totalDiscount: round2(couponDiscount + autoDiscount),
-      gstPercentage,
-      gstAmount,
-      shipping: num(snapshot.shipping_charge ?? order.shipping_charge),
-      billingAddress: {
-        name: addr.name,
-        line1: addr.address_line1,
-        city: addr.city,
-        postalCode: addr.pincode,
-        state: addr.state,
-        phone: addr.phone,
-        email: addr.email,
-      },
-      shippingAddress: {
-        name: addr.name,
-        line1: addr.address_line1,
-        city: addr.city,
-        postalCode: addr.pincode,
-        state: addr.state,
-        phone: addr.phone,
-      },
-    };
+  httpResponse(res, 200, "Payment slip generated", {
+    receipt_number: slip.receiptNumber,
+    payment_slip_url: `${process.env.API_BASE_URL}/api/v1/orders/payment-slip/${orderId}`,
   });
-
-  res.render("invoice", objectToSend);
 });
 
 interface ITrack {
@@ -2085,7 +2156,10 @@ export const trackOrder = asyncErrorHandler(async (req, res) => {
         OR wd.waybill = r.waybill
         OR wd.waybill = r.replacement_waybill
 
+      -- A parked order is not out there being delivered, so tracking it says
+      -- nothing rather than showing stale scans.
       WHERE o.order_number = $1
+        AND COALESCE(o.is_draft, false) = false
       GROUP BY o.order_id;
     `,
     [value.order_number],

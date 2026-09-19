@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   Bold,
   Code2,
-  Image as ImageIcon,
+  // Image as ImageIcon,
   Italic,
   Link as LinkIcon,
   List,
@@ -327,9 +327,9 @@ export default function EditorToolbar({ getEditor }: IProps) {
       <ToolbarButton title="Table" onMouseDown={keepSelection} onClick={() => insertBlock("table")}>
         <TableIcon size={16} />
       </ToolbarButton>
-      <ToolbarButton title="Image" onMouseDown={keepSelection} onClick={() => insertBlock("image")}>
+      {/* <ToolbarButton title="Image" onMouseDown={keepSelection} onClick={() => insertBlock("image")}>
         <ImageIcon size={16} />
-      </ToolbarButton>
+      </ToolbarButton> */}
       <ToolbarButton title="Video embed" onMouseDown={keepSelection} onClick={addVideo}>
         <Youtube size={16} />
       </ToolbarButton>

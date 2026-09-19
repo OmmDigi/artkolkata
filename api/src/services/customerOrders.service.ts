@@ -19,6 +19,11 @@ import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
  *
  * Deliberately not the CMS shape: nothing here exposes cost, courier ids or
  * internal status history.
+ *
+ * Both callers also drop drafts. An order staff have parked is one they have
+ * decided did not happen — a test, a duplicate, a mistyped phone order — so the
+ * customer must not find it in their history or behind a guest order token,
+ * and a guest lookup of one reads as "no such order" rather than as an error.
  */
 const buildCustomerOrderQuery = (whereClause: string) => `
      SELECT
@@ -129,7 +134,9 @@ const buildCustomerOrderQuery = (whereClause: string) => `
 /** Every order on one account, newest first. */
 export const fetchOrdersForUser = async (userId: number) => {
   const { rows } = await pool.query(
-    buildCustomerOrderQuery("WHERE o.user_id = $1"),
+    buildCustomerOrderQuery(
+      "WHERE o.user_id = $1 AND COALESCE(o.is_draft, false) = false",
+    ),
     [userId],
   );
 
@@ -146,7 +153,9 @@ export const fetchOrdersForUser = async (userId: number) => {
  */
 export const fetchCustomerOrderById = async (orderId: number) => {
   const { rows } = await pool.query(
-    buildCustomerOrderQuery("WHERE o.order_id = $1"),
+    buildCustomerOrderQuery(
+      "WHERE o.order_id = $1 AND COALESCE(o.is_draft, false) = false",
+    ),
     [orderId],
   );
 

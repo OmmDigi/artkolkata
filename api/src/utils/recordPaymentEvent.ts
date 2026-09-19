@@ -4,6 +4,7 @@ import { doTransition } from "./doTransition";
 import logger from "./logger";
 import { PaymentEvent, PaymentStatus } from "../services/payment/payment.gateway";
 import { notifyOrderReceived } from "./orderEmails";
+import { ensurePaymentSlip } from "../services/documents/generatePaymentSlip";
 
 /**
  * The single writer for gateway-reported payment state.
@@ -115,8 +116,14 @@ export const recordPaymentEvent = async (
   // payment to PAID: a gateway retrying its webhook, or the customer
   // refreshing the status page, is ranked as not-newer and writes nothing.
   // order_email_log is the second guard, for the two that race.
-  if (result.updated && result.orderId && event.status === "PAID")
+  //
+  // The receipt belongs to the same moment for the same reason: money has
+  // arrived, so there is now something to give a receipt for. Both are fire and
+  // forget and both run after the commit — see ensurePaymentSlip.
+  if (result.updated && result.orderId && event.status === "PAID") {
     notifyOrderReceived(result.orderId);
+    ensurePaymentSlip(result.orderId);
+  }
 
   return result;
 };

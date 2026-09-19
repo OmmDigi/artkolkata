@@ -92,6 +92,16 @@ export default function OrderListingPage() {
                           Guest
                         </span>
                       ) : null}
+                      {/* Only ever seen in the Drafts view, where it is the
+                          reminder that none of these rows count anywhere. */}
+                      {order.is_draft ? (
+                        <span
+                          title="Parked by staff: hidden from the customer and left out of the dashboard"
+                          className="rounded bg-gray-200 text-gray-700 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5"
+                        >
+                          Draft
+                        </span>
+                      ) : null}
                     </div>
                     {order.is_guest_order && order.user_email ? (
                       <div className="flex items-center gap-1.5 text-gray-600">

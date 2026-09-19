@@ -5,9 +5,11 @@ import { ErrorHandler } from "../../utils/ErrorHandler";
 import { IOrderAddressSnapshot } from "../../types";
 import { IPriceBreakdown } from "../../utils/buildPriceBreakdown";
 
-// One order, flattened into exactly what the invoice and the packing slip
-// print. Both documents read the same object: the slip ignores the money, the
-// invoice uses all of it, and neither of them touches the database itself.
+// One order, flattened into exactly what the three generated documents print.
+// They all read the same object: the packing slip ignores the money, the
+// invoice uses all of it, the payment slip adds how it was paid, and none of
+// them touches the database itself.
+
 // One product that went inside a combo. It carries no price of its own: the
 // combo was sold and charged as a single line, and these are printed only so
 // the reader knows what that line contained.
@@ -59,11 +61,30 @@ export interface IOrderDocumentData {
   gstAmount: number;
   total: number;
 
+  // PAID, PENDING, FAILED or REFUNDED, as the gateway last reported it — the
+  // payment slip prints it, and prints the paid stamp only for PAID
+  paymentStatus: string;
+  // "COD" or "ONLINE", when the label is not specific enough to branch on
+  paymentMethod: string;
+  // "UPI", "Card ending 4242" … — how the money actually came in. Null for COD
+  // and for an online order nobody has paid yet.
+  instrumentLabel: string | null;
+  // the gateway's own id for the payment, printed as the transaction reference
+  providerPaymentId: string | null;
+  // when the money arrived, which is the receipt date. Null until it has.
+  paidAt: Date | null;
+
   // set once the invoice has been generated at least once
   invoiceNumber: string | null;
   invoiceGeneratedAt: Date | null;
   invoicePdfUrl: string | null;
   packingSlipUrl: string | null;
+
+  // the receipt's own number and stored file, allotted on the first generate
+  // after the payment turned PAID
+  receiptNumber: string | null;
+  paymentSlipUrl: string | null;
+  paymentSlipGeneratedAt: Date | null;
 }
 
 const round2 = (value: number) => parseFloat(value.toFixed(2));
@@ -87,7 +108,7 @@ const buildAddressLines = (address: Partial<IOrderAddressSnapshot>) =>
     .filter((line) => line.length > 0);
 
 /**
- * Loads everything the two documents print.
+ * Loads everything the three documents print.
  *
  * Money is read from the `price_breakdown` snapshot the order was placed with,
  * exactly as the payment slip does, so a generated invoice always agrees with
@@ -120,10 +141,14 @@ export const getOrderDocumentData = async (
       courier_name,
       shipping_address,
       price_breakdown,
+      payment_status,
       invoice_number,
       invoice_generated_at,
       invoice_pdf_url,
-      packing_slip_url
+      packing_slip_url,
+      receipt_number,
+      payment_slip_url,
+      payment_slip_generated_at
      FROM orders
      WHERE order_id = $1
     `,
@@ -170,6 +195,28 @@ export const getOrderDocumentData = async (
     `,
     [orderId],
   );
+
+  // The payment behind the order, for the receipt. Newest row wins: a customer
+  // who abandoned one attempt and paid on the next leaves two, and the one that
+  // went through is the later one. A COD order has no row here at all, and the
+  // fields it would have filled stay null.
+  const paymentInfo = await client.query(
+    `
+     SELECT provider_payment_id, status, instrument_label, created_at
+     FROM payments
+     WHERE order_id = $1
+     ORDER BY payment_id DESC
+     LIMIT 1
+    `,
+    [orderId],
+  );
+
+  const payment = paymentInfo.rows[0] ?? null;
+
+  // orders.payment_status is the one recordPaymentEvent keeps current, so it is
+  // what decides whether this order is paid; the payments row only fills in the
+  // detail of how.
+  const paymentStatus = (order.payment_status ?? "PENDING").toString();
 
   const subtotal = num(snapshot.subtotal ?? order.subtotal);
   const total = num(snapshot.total ?? order.total_amount);
@@ -220,11 +267,29 @@ export const getOrderDocumentData = async (
     gstAmount,
     total,
 
+    paymentStatus,
+    paymentMethod: order.payment_method ?? "COD",
+    instrumentLabel: payment?.instrument_label ?? null,
+    providerPaymentId: payment?.provider_payment_id ?? null,
+    // payments.created_at is stamped with the gateway event's own time by
+    // recordPaymentEvent, so for a paid order it is when the money arrived
+    // rather than when the row was inserted.
+    paidAt:
+      paymentStatus === "PAID" && payment?.created_at
+        ? new Date(payment.created_at)
+        : null,
+
     invoiceNumber: order.invoice_number ?? null,
     invoiceGeneratedAt: order.invoice_generated_at
       ? new Date(order.invoice_generated_at)
       : null,
     invoicePdfUrl: order.invoice_pdf_url ?? null,
     packingSlipUrl: order.packing_slip_url ?? null,
+
+    receiptNumber: order.receipt_number ?? null,
+    paymentSlipUrl: order.payment_slip_url ?? null,
+    paymentSlipGeneratedAt: order.payment_slip_generated_at
+      ? new Date(order.payment_slip_generated_at)
+      : null,
   };
 };

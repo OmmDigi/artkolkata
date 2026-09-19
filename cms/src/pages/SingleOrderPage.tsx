@@ -125,6 +125,16 @@ export default function SingleOrderPage() {
             <span>Single Order {data?.data.orderInfo.order_number}</span>
           </Link>
 
+          {orderInfo?.is_draft ? (
+            <p className="rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-sm px-3.5 py-2.5">
+              <strong className="font-semibold">Draft.</strong> This order is
+              parked: the customer cannot see it, its emails are not sent, its
+              stock has been given back and it counts towards nothing on the
+              dashboard. Restore it to put it back exactly where it was
+              {orderInfo.drafted_at ? ` (drafted on ${orderInfo.drafted_at})` : ""}.
+            </p>
+          ) : null}
+
           {data?.data.orderInfo.is_guest_order ? (
             <p className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 text-sm px-3.5 py-2.5">
               <strong className="font-semibold">Guest order.</strong> This
@@ -619,6 +629,43 @@ export default function SingleOrderPage() {
                     ...(booked ? [ORDER_PENDING, ORDER_CONFIRMED] : []),
                   ]}
                 />
+
+                {/* Parking is deliberately not one of the status options: the
+                    order keeps the status it has, so restoring it needs no
+                    guess about where it belongs. */}
+                <Button
+                  type="button"
+                  variant={orderInfo?.is_draft ? "default" : "outline"}
+                  className={
+                    orderInfo?.is_draft
+                      ? "mt-4 w-full bg-green-700 hover:bg-green-900"
+                      : "mt-4 w-full"
+                  }
+                  disabled={isLoading}
+                  onClick={() => {
+                    const toDraft = !orderInfo?.is_draft;
+
+                    if (
+                      !confirm(
+                        toDraft
+                          ? "Move this order to draft? The customer stops seeing it, its emails stop going out, its stock goes back and the dashboard ignores it."
+                          : "Restore this order? It goes back to the customer, to the dashboard, and takes its stock again.",
+                      )
+                    )
+                      return;
+
+                    mutate({
+                      apiPath: `/api/v1/orders/${params.id}/draft`,
+                      method: "patch",
+                      formData: { is_draft: toDraft },
+                      onSuccess() {
+                        refetch();
+                      },
+                    });
+                  }}
+                >
+                  {orderInfo?.is_draft ? "Restore From Draft" : "Move To Draft"}
+                </Button>
 
                 {/* A replacement is shipped only once the returned goods are
                     actually back, so it is a deliberate second action rather

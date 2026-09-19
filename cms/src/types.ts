@@ -1,3 +1,5 @@
+import type { OutputData } from "@editorjs/editorjs";
+
 export interface IResponse<T = null> {
   statusCode: number;
   message: string;
@@ -219,6 +221,9 @@ export interface IOrderList {
   // placed without logging in. Read off the order rather than the customer, so
   // a guest who has since made an account still shows as one here.
   is_guest_order: boolean;
+  // Parked by staff. The list only shows these in the Drafts view, and they are
+  // left out of every dashboard number.
+  is_draft: boolean;
   total_amount: number;
   payment_status: string;
   // ONLINE or COD. Older rows predate the column, so it can come back null.
@@ -303,6 +308,10 @@ export interface OrderInfo {
   // Placed without logging in. There is no account to look up behind it, so
   // the shipping details on the order are the only way to reach the customer.
   is_guest_order: boolean;
+  // Parked by staff: hidden from the customer, kept out of the dashboard, and
+  // the status it holds is untouched so restoring puts it straight back.
+  is_draft: boolean;
+  drafted_at: string | null;
   order_number: string;
   subtotal: string;
   discount: string;
@@ -767,4 +776,24 @@ export interface IAnalyticsOrderStatus {
   order_status: IAnalyticsBreakdownRow[];
   payment_status: IAnalyticsBreakdownRow[];
   payment_method: IAnalyticsBreakdownRow[];
+}
+
+/**
+ * One of the store's legal pages — terms, privacy, returns and refunds. The
+ * set is fixed and seeded by the api: the CMS edits content, it never creates
+ * or deletes a page.
+ */
+export interface ISitePage {
+  id: number;
+  slug: string;
+  title: string;
+  /** Editor.js OutputData, same shape as a blog's content_json */
+  content_json: OutputData | null;
+  meta_title: string | null;
+  meta_description: string | null;
+  status: "draft" | "published";
+  /** meta_title, falling back to the page title */
+  resolved_meta_title: string;
+  updated_at: string;
+  updated_at_label: string | null;
 }

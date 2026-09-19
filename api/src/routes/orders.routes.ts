@@ -13,9 +13,11 @@ import {
   downloadPaymentSlip,
   generateOrderInvoice,
   generateOrderPackingSlip,
+  generateOrderPaymentSlip,
   getOrderList,
   getPriceBreakdown,
   getSingleOrderInfo,
+  setOrderDraft,
   trackOrder,
   updateOrderStatus,
   updateShipmentBoxes,
@@ -58,6 +60,14 @@ orderRoutes
     downloadPaymentSlip,
   )
   .patch("/", rateLimits.adminWrite, isAuthorizedV2(["1-5"]), updateOrderStatus)
+  // Parking an order takes stock back and hides it from the customer, so it is
+  // an admin write like any status change.
+  .patch(
+    "/:orderid/draft",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-5"]),
+    setOrderDraft,
+  )
   .put(
     "/:orderid/shipment-boxes",
     rateLimits.adminWrite,
@@ -91,6 +101,14 @@ orderRoutes
     rateLimits.adminWrite,
     isAuthorizedV2(["1-5"]),
     emailOrderInvoice,
+  )
+  // Regenerate. The slip itself is made automatically the moment the payment
+  // turns PAID — this is for an admin who has corrected something it prints.
+  .post(
+    "/:orderid/payment-slip/generate",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-5"]),
+    generateOrderPaymentSlip,
   )
   .post(
     "/:orderid/packing-slip/generate",

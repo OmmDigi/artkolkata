@@ -2,6 +2,7 @@ import FilePicker from "@/components/FilePicker";
 import AddressList from "@/components/settings/AddressList";
 import BannerManager from "@/components/settings/BannerManager";
 import ContactEntryList from "@/components/settings/ContactEntryList";
+import PolicyPages from "@/components/settings/PolicyPages";
 import ShippingChargeRules from "@/components/settings/ShippingChargeRules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ export default function SettingsPage() {
           <TabsTrigger value="ribbon">Ribbon Section</TabsTrigger>
           <TabsTrigger value="banners">Banners</TabsTrigger>
           <TabsTrigger value="shipping">Shipping Charge</TabsTrigger>
+          {/* <TabsTrigger value="policies">Policies</TabsTrigger> */}
         </TabsList>
 
         <TabsContent value="general">
@@ -63,6 +65,12 @@ export default function SettingsPage() {
         <TabsContent value="shipping">
           <div className="border rounded-lg p-6">
             <ShippingChargeRules />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="policies">
+          <div className="border rounded-lg p-6">
+            <PolicyPages />
           </div>
         </TabsContent>
       </Tabs>

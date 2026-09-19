@@ -84,6 +84,15 @@ export const VUpdateOrderStatus = Joi.object({
   status: Joi.string().required().valid(...ORDER_STATUSES),
 });
 
+/**
+ * Park an order or bring it back. A bare boolean, and required: the CMS sends
+ * the state it wants rather than a toggle, so two admins pressing at once
+ * cannot flip it back and forth.
+ */
+export const VSetOrderDraft = Joi.object({
+  is_draft: Joi.boolean().required(),
+});
+
 // The boxes an admin keys in against an order before confirming it. Bigship
 // types the box edges as int cm and rejects a decimal outright, so they are
 // held to integers here rather than silently rounded at booking time.

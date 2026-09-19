@@ -1047,6 +1047,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number
   WHERE invoice_number IS NOT NULL;
 
 -- ------------------------------------------------------------
+-- Payment slip
+--
+-- The receipt for money actually received, generated the moment a payment
+-- turns PAID and kept from then on. receipt_number is allotted once and
+-- survives a regenerate for the same reason invoice_number does: a customer
+-- holding PAY-100023 must not be handed a second copy under another number.
+--
+-- A slip is also rendered for an order that has not been paid yet, because the
+-- route has always answered for every order at any status — that one carries no
+-- receipt number and no paid stamp, and is not stored.
+-- ------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS receipt_number_seq START WITH 100001;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(30);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_slip_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_slip_generated_at TIMESTAMP;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_receipt_number
+  ON orders(receipt_number)
+  WHERE receipt_number IS NOT NULL;
+
+-- ------------------------------------------------------------
 -- Customer email log
 --
 -- Which of the customer-facing order emails have already gone out, one row per
@@ -1185,3 +1207,71 @@ ON cart (user_id, product_id, COALESCE(variant_id, 0));
 
 CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart(user_id);
 CREATE INDEX IF NOT EXISTS idx_cart_product_id ON cart(product_id);
+
+-- ============================================================
+-- SITE PAGES — the store's legal/policy pages
+--
+-- Terms and conditions, privacy policy, return and refund policy. One row per
+-- page, keyed by the slug the storefront links to, with the body stored as
+-- Editor.js output exactly like blogs.content_json — same editor in the CMS,
+-- same renderer on the website.
+--
+-- The three rows are seeded below and the api exposes no create or delete:
+-- an admin edits the content of a page that always exists, so a footer link
+-- can never point at a slug that was removed.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS site_pages (
+    id SERIAL PRIMARY KEY,
+
+    -- what the storefront url ends in, and the only handle the api takes
+    slug TEXT UNIQUE NOT NULL,
+
+    title TEXT NOT NULL,
+
+    -- Editor.js OutputData, same shape as blogs.content_json
+    content_json JSONB,
+
+    meta_title TEXT,
+    meta_description TEXT,
+
+    -- 'draft' hides the body from the storefront while a long legal document
+    -- is being rewritten; the seeded rows start published so the links work
+    -- from the first deploy
+    status TEXT NOT NULL DEFAULT 'published',
+
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_site_pages_slug ON site_pages(slug);
+
+-- The fixed set. ON CONFLICT DO NOTHING so re-running this file never
+-- overwrites content an admin has already written.
+INSERT INTO site_pages (slug, title, status) VALUES
+  ('terms-and-conditions',   'Terms and Conditions',      'published'),
+  ('privacy-policy',         'Privacy Policy',            'published'),
+  ('return-and-refund-policy','Return and Refund Policy', 'published')
+ON CONFLICT (slug) DO NOTHING;
+
+-- ============================================================
+-- DRAFT ORDERS
+--
+-- A draft is an order staff have parked: a test order, a duplicate, a phone
+-- order that was keyed in wrong. It is a flag beside the status rather than a
+-- status of its own, because the order keeps whatever it already was —
+-- restoring it puts it back exactly where it sat, and the courier webhook,
+-- which writes order_status straight from the newest scan, can never wipe the
+-- draft mark by doing its job.
+--
+-- Everything that counts or shows orders reads this column: the CMS list hides
+-- drafts unless asked for them, the customer-facing queries drop them outright,
+-- the status emails stay unsent, and every analytics window ignores them.
+-- ============================================================
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_draft BOOLEAN DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS drafted_at TIMESTAMP;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS drafted_by INT REFERENCES users(id);
+
+-- Partial: drafts are the rare row, and the only query that asks for them by
+-- this column is the CMS draft view. Every other query filters them out, which
+-- a sequential scan handles just as well.
+CREATE INDEX IF NOT EXISTS idx_orders_is_draft ON orders(is_draft) WHERE is_draft;
