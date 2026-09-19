@@ -2,7 +2,7 @@ import { PoolClient } from "pg";
 import { pool } from "../..";
 import { GST_PERCENTAGE } from "../../constant";
 import { ErrorHandler } from "../../utils/ErrorHandler";
-import { IOrderAddressSnapshot } from "../../types";
+import { IOrderAddressSnapshot, IOrderGstDetails } from "../../types";
 import { IPriceBreakdown } from "../../utils/buildPriceBreakdown";
 
 // One order, flattened into exactly what the three generated documents print.
@@ -47,6 +47,13 @@ export interface IOrderDocumentData {
   addressLines: string[];
   customerEmail: string | null;
   customerPhone: string | null;
+
+  // The buyer's own GST registration, given at checkout when they are buying
+  // as a business. Null on most orders, so every document that prints it has
+  // to guard first. Not the store's GST — that is gstAmount below, and it is
+  // reported on every document whether or not the buyer is registered.
+  customerGstNumber: string | null;
+  customerBusinessName: string | null;
 
   items: IOrderDocumentItem[];
 
@@ -140,6 +147,7 @@ export const getOrderDocumentData = async (
       payment_method,
       courier_name,
       shipping_address,
+      gst_details,
       price_breakdown,
       payment_status,
       invoice_number,
@@ -160,6 +168,7 @@ export const getOrderDocumentData = async (
 
   const order = orderInfo.rows[0];
   const address: Partial<IOrderAddressSnapshot> = order.shipping_address ?? {};
+  const gstDetails: Partial<IOrderGstDetails> = order.gst_details ?? {};
   const snapshot: Partial<IPriceBreakdown> = order.price_breakdown ?? {};
 
   const orderItems = await client.query(
@@ -242,6 +251,11 @@ export const getOrderDocumentData = async (
     addressLines: buildAddressLines(address),
     customerEmail: (address.email ?? "").trim() || null,
     customerPhone: (address.phone ?? "").trim() || null,
+
+    // Empty string reads as absent: an order saved with a blank GSTIN should
+    // print nothing rather than an empty "GSTIN:" label.
+    customerGstNumber: (gstDetails.gst_number ?? "").trim() || null,
+    customerBusinessName: (gstDetails.business_name ?? "").trim() || null,
 
     items: orderItems.rows.map((item: any) => ({
       name: item.product_name ?? "",

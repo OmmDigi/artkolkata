@@ -39,6 +39,11 @@ const buildCustomerOrderQuery = (whereClause: string) => `
       -- and on the account side it is what the order was actually sent to,
       -- which the address book no longer tells you once it has been edited.
       o.shipping_address,
+      -- The buyer's own GSTIN, when they gave one at checkout. Null on most
+      -- orders. Sent so the confirmation page can show the customer what will
+      -- be printed on their invoice, while there is still time to tell us it
+      -- is wrong.
+      o.gst_details,
       o.price_breakdown,
       o.is_guest_order,
       CASE

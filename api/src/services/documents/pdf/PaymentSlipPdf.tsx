@@ -463,7 +463,24 @@ const PaymentSlipPdf = ({ data, company }: IProps) => {
         <View style={styles.summaryRow}>
           <View style={styles.summaryLeft}>
             <Text style={styles.sectionHeading}>CUSTOMER DETAILS</Text>
-            <Text style={styles.customerName}>{data.customerName}</Text>
+            {/* A business buyer is named by its registered entity first: that
+                is who paid, and it is the name the GSTIN belongs to. Both
+                lines are absent on an ordinary order. */}
+            {data.customerBusinessName ? (
+              <Text style={styles.customerName}>
+                {data.customerBusinessName}
+              </Text>
+            ) : null}
+            <Text
+              style={
+                data.customerBusinessName ? undefined : styles.customerName
+              }
+            >
+              {data.customerName}
+            </Text>
+            {data.customerGstNumber ? (
+              <Text>GSTIN: {data.customerGstNumber}</Text>
+            ) : null}
             {data.customerPhone ? (
               <Text>Mobile: {data.customerPhone}</Text>
             ) : null}

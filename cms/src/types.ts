@@ -322,6 +322,10 @@ export interface OrderInfo {
   payment_status: string;
   payment_method: string;
   price_breakdown: PriceBreakdown | null;
+  // The buyer's own GST registration, given at checkout. Null on most orders —
+  // only a customer purchasing as a business has one, and it is what the
+  // invoice is billed to.
+  gst_details: OrderGstDetails | null;
   // Whoever booked the parcel writes the same three columns — see the api's
   // IShippingPartner. partner_order_id being set means it is with the courier.
   shipping_partner: string | null;
@@ -340,6 +344,11 @@ export interface OrderInfo {
   invoice_number: string | null;
   invoice_generated_at: string | null;
   packing_slip_generated_at: string | null;
+}
+
+export interface OrderGstDetails {
+  gst_number: string;
+  business_name: string;
 }
 
 export interface AddressInfo {

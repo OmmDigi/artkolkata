@@ -14,8 +14,15 @@ import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getRequest, postRequest } from "@/lib/fetcher";
 import { toast } from "react-toastify";
-import { useSiteInfo } from "@/hooks/useSiteSettings";
+import { useSiteInfo, isGuestCheckoutEnabled } from "@/hooks/useSiteSettings";
 import { setGuestOrderToken } from "@/lib/guestOrder";
+import {
+  getCheckoutIdempotencyKey,
+  resetCheckoutIdempotencyKey,
+} from "@/lib/idempotency";
+import { setPendingOrder } from "@/lib/pendingOrder";
+import { useIsLoggedIn } from "@/hooks/useUserStore";
+import { useIsHydrated } from "@/hooks/useIsHydrated";
 import CustomImage from "@/Component1/CustomImage";
 
 const CheckoutPage = () => {
@@ -27,7 +34,22 @@ const CheckoutPage = () => {
   );
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showCoupon, setShowCoupon] = useState(false);
-  const { removeFromCart, updateQuantity, cart } = useCartStore();
+  const { removeFromCart, updateQuantity, cart, clearCart } = useCartStore();
+  const isLoggedIn = useIsLoggedIn();
+
+  // Missing means allowed. Turning it off makes the API refuse guest orders
+  // with 401 ACCOUNT_EXISTS, so the form is replaced with a login prompt
+  // rather than letting the customer fill it in and get bounced.
+  const guestCheckoutAllowed = isGuestCheckoutEnabled(siteInfo as any);
+
+  // The token is only readable in the browser, so isLoggedIn is false while
+  // rendering on the server whether or not there is a session. Without this
+  // gate the guest banner would be baked into the HTML of a page a logged-in
+  // customer requested.
+  const isHydrated = useIsHydrated();
+
+  const isGuest = isHydrated && !isLoggedIn;
+  const checkoutBlocked = isGuest && !guestCheckoutAllowed;
 
   const [showGstDetails, setShowGstDetails] = useState(false);
   const [gstDetails, setGstDetails] = useState({
@@ -46,6 +68,24 @@ const CheckoutPage = () => {
     country: "India",
   });
 
+  /**
+   * A guest who is bounced to the login screen (ACCOUNT_EXISTS) comes back to
+   * this page afterwards. sessionStorage, not localStorage: the draft belongs
+   * to this tab and this visit, and should not still be here tomorrow.
+   */
+  const CHECKOUT_DRAFT_KEY = "checkoutShippingDraft";
+
+  const saveCheckoutDraft = () => {
+    try {
+      sessionStorage.setItem(
+        CHECKOUT_DRAFT_KEY,
+        JSON.stringify(shippingDetails),
+      );
+    } catch {
+      /* storage blocked : the customer retypes it */
+    }
+  };
+
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(false);
   const [showCouponError, setShowCouponError] = useState(false);
@@ -55,6 +95,22 @@ const CheckoutPage = () => {
   const [selectedAddressId, setSelectedAddressId] = useState<number | "new">(
     "new",
   );
+
+  useEffect(() => {
+    try {
+      const draft = sessionStorage.getItem(CHECKOUT_DRAFT_KEY);
+      if (!draft) return;
+      sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+
+      const parsed = JSON.parse(draft);
+      if (parsed && typeof parsed === "object") {
+        setShippingDetails((prev) => ({ ...prev, ...parsed }));
+        setSelectedAddressId("new");
+      }
+    } catch {
+      /* an unreadable draft is simply not restored */
+    }
+  }, []);
 
   useEffect(() => {
     const methods = (siteInfo as any)?.payment_methods;
@@ -69,9 +125,18 @@ const CheckoutPage = () => {
 
   console.log("siteInfo", siteInfo);
 
+  /**
+   * The saved address book, for a customer who has one.
+   *
+   * `enabled` is not cosmetic: /users/profile is behind isAuthenticated, so
+   * for a guest this is a guaranteed 401, and a 401 used to run the axios
+   * interceptor's logout — which clears the browser cart. Opening checkout as
+   * a guest emptied the cart before it could be ordered.
+   */
   const { data: profileData } = useQuery({
     queryKey: ["userProfileCheckout"],
     queryFn: () => getRequest<any>("/api/v1/users/profile"),
+    enabled: isLoggedIn,
   });
   const savedAddresses = profileData?.data?.user_address || [];
 
@@ -150,25 +215,59 @@ const CheckoutPage = () => {
     });
 
   const { mutateAsync: placeOrder, isPending: isPlacingOrder } = useMutation({
+    /**
+     * Idempotency-Key is required, not optional: readIdempotencyKey() on the
+     * API rejects the call with 400 without it. The key is stable across this
+     * checkout attempt, so a retry after a timeout replays the original reply
+     * — the same gateway URL for the same order — instead of filing a second.
+     */
     mutationFn: (data: any) =>
-      postRequest({ url: "/api/v1/orders/place-order", body: data }),
-    onSuccess: (response: any) => {
+      postRequest({
+        url: "/api/v1/orders/place-order",
+        body: data,
+        headers: { "Idempotency-Key": getCheckoutIdempotencyKey() },
+      }),
+    onSuccess: async (response: any) => {
       toast.success(response?.message || "Order placed successfully");
       setCouponCode("");
 
-      if (response?.data?.isGuestOrder && response?.data?.guestToken) {
+      const isGuestOrder = !!response?.data?.isGuestOrder;
+      const gatewayUrl = response?.data?.gatewayUrl;
+
+      // The order exists now, so this key has done its job. Anything the
+      // customer places after this is a different order.
+      resetCheckoutIdempotencyKey();
+
+      // guestToken is the only way back into a guest order — there is no
+      // account to list it under — and it has to survive the round trip to
+      // the gateway, so it is stored before anything navigates away.
+      if (isGuestOrder && response?.data?.guestToken) {
         setGuestOrderToken(response.data.guestToken);
       }
 
-      if (response?.data?.gatewayUrl) {
-        window.location.href = `${response?.data?.gatewayUrl}`;
-      } else {
-        if (response?.data?.isGuestOrder) {
-          window.location.href = "/guest-order";
-        } else {
-          window.location.href = "/account/orders";
-        }
+      if (gatewayUrl) {
+        /**
+         * Online payment: the order is placed but not paid for. The cart is
+         * deliberately left alone — a customer who abandons the gateway or
+         * whose card is declined comes back to the items they were buying.
+         * OrderCompletionWatcher empties it once this order reads PAID.
+         */
+        setPendingOrder(response?.data?.orderNumber, isGuestOrder);
+        window.location.href = `${gatewayUrl}`;
+        return;
       }
+
+      // COD: nothing further has to happen for this order to be real, so the
+      // cart goes now — on the server too, for an account. Awaited, because
+      // the redirect below would otherwise cancel the DELETE in flight and the
+      // account cart would come back on the next hydrate.
+      await clearCart();
+
+      // /account/orders is not a route; the orders list is a tab on /account,
+      // which is also where the API's payment result page sends people back to.
+      window.location.href = isGuestOrder
+        ? "/guest-order"
+        : "/account?tab=orders";
     },
     onError: (error: any) => {
       const status =
@@ -177,11 +276,22 @@ const CheckoutPage = () => {
         error?.status;
       const errorKey = error?.response?.data?.key;
 
-      if (status === 409 && errorKey === "ACCOUNT_EXISTS") {
-        toast.error("An account with this email already exists. Please log in.");
-        window.location.href = "/account?redirect=/checkout";
-      } else if (status === 401 && errorKey === "ACCOUNT_EXISTS") {
-        toast.error("Guest checkout disabled or account exists. Please log in.");
+      /**
+       * Both ACCOUNT_EXISTS shapes end at the login screen, so the form is
+       * parked first and read back when the customer returns to checkout —
+       * otherwise logging in costs them the address they just typed.
+       *
+       * The idempotency key is left alone: the API throws both of these
+       * before it reserves one, so nothing was burned and the key is still
+       * good for the retry.
+       */
+      if (errorKey === "ACCOUNT_EXISTS" && (status === 409 || status === 401)) {
+        saveCheckoutDraft();
+        toast.error(
+          status === 409
+            ? "An account with this email already exists. Please log in."
+            : "Guest checkout is not available. Please log in to continue.",
+        );
         window.location.href = "/account?redirect=/checkout";
       } else if (status === 400 && errorKey === "ACCOUNT_DISABLED") {
         toast.error("That email has been disabled. Please contact support.");
@@ -221,6 +331,29 @@ const CheckoutPage = () => {
     ...(appliedCouponCode ? { code: appliedCouponCode } : {}),
   };
 
+  /**
+   * Mirrors the API's check (validator/order.validator.ts). A GSTIN is 2 digit
+   * state code, 10 character PAN, entity number, a literal Z, and a checksum
+   * character. Validated here as well as there so a typo is caught while the
+   * customer is still looking at the field, rather than coming back as a 400
+   * after they press Place Order.
+   */
+  const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+  const gstNumberInput = gstDetails.gstNumber.trim().toUpperCase();
+  const gstBusinessNameInput = gstDetails.businessName.trim();
+
+  const gstNumberError =
+    showGstDetails && gstNumberInput.length > 0 && !GSTIN_PATTERN.test(gstNumberInput)
+      ? "Enter a valid 15 character GSTIN, for example 29ABCDE1234F1Z5"
+      : null;
+
+  // The API requires both together: an invoice carrying a GSTIN has to name
+  // the entity it belongs to.
+  const isGstReady =
+    !showGstDetails ||
+    (GSTIN_PATTERN.test(gstNumberInput) && gstBusinessNameInput.length >= 2);
+
   const pincode = shippingDetails.pincode.trim();
   const isPincodeReady = /^\d{6}$/.test(pincode);
   const hasItems = cart.length > 0;
@@ -237,8 +370,24 @@ const CheckoutPage = () => {
   const handleOrderPlace = async () => {
     if (!agreedToTerms) return;
 
+    // The button is already disabled in this state; this is the backstop. The
+    // login card at the top of the page is the way out, so nothing navigates
+    // here — the customer is not dragged off a form they were filling in.
+    if (checkoutBlocked) {
+      toast.error("This store does not accept guest orders. Please log in.");
+      return;
+    }
+
     if (!isPincodeReady) {
       toast.error("Enter a 6 digit pincode to continue");
+      return;
+    }
+
+    if (!isGstReady) {
+      toast.error(
+        gstNumberError ??
+          "Enter your GST number and business name, or untick GST details",
+      );
       return;
     }
 
@@ -262,8 +411,13 @@ const CheckoutPage = () => {
       product: cartProduct,
     };
 
+    // Trimmed and upper cased on the way out so the order stores the GSTIN the
+    // way a GSTIN is written, whatever the customer typed.
     if (showGstDetails) {
-      orderData["gstDetails"] = gstDetails;
+      orderData["gstDetails"] = {
+        gstNumber: gstNumberInput,
+        businessName: gstBusinessNameInput,
+      };
     }
 
     try {
@@ -331,7 +485,11 @@ const CheckoutPage = () => {
     !!breakdown &&
     isServiceable &&
     !isLoadingBreakdown &&
-    !isPlacingOrder;
+    !isPlacingOrder &&
+    // the API would refuse this with 401 ACCOUNT_EXISTS anyway
+    !checkoutBlocked &&
+    // a half-filled or malformed GST block is a 400 from the API
+    isGstReady;
 
   const countries = [
     "United Kingdom (UK)",
@@ -375,8 +533,57 @@ const CheckoutPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Shipping Details & Payment */}
           <div className="lg:col-span-2 space-y-6">
+            {/*
+              Guest checkout is on by default. The banner is a reminder, not a
+              gate — an existing customer who types their account email here is
+              refused by the API with ACCOUNT_EXISTS, so it is worth offering
+              the login before they fill the whole form in.
+            */}
+            {isGuest && !checkoutBlocked && (
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-blue-900">
+                  You are checking out as a guest. Already have an account?
+                </p>
+                <Link
+                  href="/account?redirect=/checkout"
+                  onClick={saveCheckoutDraft}
+                  className="text-sm font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900"
+                >
+                  Log in
+                </Link>
+              </div>
+            )}
+
+            {/*
+              The owner has switched guest checkout off in the CMS. The API is
+              what enforces it, this just stops the customer filling in a form
+              that is going to be refused.
+            */}
+            {checkoutBlocked && (
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 text-center space-y-3">
+                <Lock className="mx-auto text-gray-800" />
+                <h2 className="text-xl font-bold text-gray-900">
+                  Please log in to continue
+                </h2>
+                <p className="text-sm text-gray-600">
+                  This store does not accept guest orders. Your cart is saved
+                  and will still be here after you log in.
+                </p>
+                <Link
+                  href="/account?redirect=/checkout"
+                  className="inline-block px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition"
+                >
+                  Log in or sign up
+                </Link>
+              </div>
+            )}
+
             {/* SHIPPING DETAILS */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <div
+              className={`bg-white p-6 rounded-2xl shadow-sm border border-gray-200 ${
+                checkoutBlocked ? "hidden" : ""
+              }`}
+            >
               <div className="flex items-center mb-6 space-x-3">
                 <MapPin className="text-gray-800" />
                 <h2 className="text-xl font-bold text-gray-900">
@@ -535,9 +742,25 @@ const CheckoutPage = () => {
                             gstNumber: e.target.value,
                           })
                         }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-gray-900 transition"
-                        placeholder="Enter GST Number"
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none transition uppercase ${
+                          gstNumberError
+                            ? "border-red-400 focus:border-red-500"
+                            : "border-gray-300 focus:border-gray-900"
+                        }`}
+                        placeholder="29ABCDE1234F1Z5"
+                        maxLength={15}
+                        autoCapitalize="characters"
+                        spellCheck={false}
                       />
+                      {gstNumberError ? (
+                        <p className="mt-1 text-xs text-red-600">
+                          {gstNumberError}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-gray-500">
+                          This is what your invoice will be billed to.
+                        </p>
+                      )}
                     </div>
                     <div className="mt-2">
                       <label className="block text-sm font-semibold text-gray-900 mb-2">

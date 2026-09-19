@@ -61,9 +61,48 @@ The body is **unchanged** from the logged-in flow:
     "pincode": "560001", "country": "India"
   },
   "paymentMethod": "COD",
+  "gstDetails": { "gstNumber": "29ABCDE1234F1Z5", "businessName": "Acme Pvt Ltd" },
   "product": { "product_ids": [], "varient_ids": [], "code": "OPTIONAL" }
 }
 ```
+
+`Idempotency-Key` is **required**, not advisory: a request without one is
+rejected with `400`. Keep the same key across retries of the same attempt and
+mint a new one once the order exists.
+
+### `gstDetails` — optional
+
+Send it only when the customer is buying as a business and wants a GST invoice.
+Omit the key entirely otherwise; `null` and `{}` are both rejected.
+
+- `gstNumber` — a GSTIN, 15 characters, matched against
+  `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$`. Case is not significant on
+  the way in; it is stored upper case.
+- `businessName` — 2 to 200 characters. Required whenever `gstNumber` is sent:
+  an invoice carrying a GSTIN has to name the entity it belongs to.
+
+A malformed GSTIN is a `400` with the offending field in the message, so
+validate it client side too rather than letting the customer find out after
+pressing Place Order.
+
+This is the **buyer's** registration, and it has nothing to do with the GST the
+store charges — that is already inside every price and is reported on every
+document regardless. It is frozen onto the order the way the shipping address
+is, so a company that later changes its registered name does not rewrite an
+invoice that has already been filed.
+
+Once stored it appears on:
+
+| Where | How |
+|-------|-----|
+| The generated invoice | Billed-to block: business name above the customer's, `GSTIN: …` under the address |
+| The payment slip | `CUSTOMER DETAILS`: business name, then `GSTIN: …` |
+| The order confirmation email | Two extra rows in the order summary |
+| `GET /orders/guest/order` and `GET /users/orders` | `gst_details: { gst_number, business_name }`, `null` when there is none |
+| CMS single order | A **Customer GST Details** block under Shipping Details, hidden when absent |
+
+The packing slip deliberately does not print it — it is a picking document, and
+the GSTIN is a billing fact.
 
 Send no `Authorization` header and it is a guest order. `shippingDetails.email` is the
 identity: it is lowercased, and it is what the shadow user row is keyed on.

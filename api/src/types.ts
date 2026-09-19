@@ -301,6 +301,21 @@ export interface IOrderAddressSnapshot {
   country?: string;
 }
 
+/**
+ * The customer's own GST registration, captured at checkout when they are
+ * buying as a business and need a GST invoice to claim input tax credit.
+ *
+ * Nothing to do with the GST the store charges: that is already inside every
+ * price and is reported on the documents regardless. This is the buyer's
+ * identity on the invoice, and it is absent on most orders.
+ */
+export interface IOrderGstDetails {
+  // 15 characters, normalised to upper case before it is stored
+  gst_number: string;
+  // the registered name the GSTIN belongs to, which is who the invoice bills
+  business_name: string;
+}
+
 export interface ISaveAddress extends IShippingAddress {
   user_id?: number;
   address_id?: number;

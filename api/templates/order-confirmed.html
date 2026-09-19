@@ -192,6 +192,19 @@
             <span class="detail-value"><%= items %></span>
           </div>
           <% } %>
+          <!-- Only a customer buying as a business has these. Shown back to
+               them here because the invoice is billed to this name and number,
+               and a typo is cheap to fix now and expensive to fix later. -->
+          <% if (typeof gstNumber !== 'undefined' && gstNumber) { %>
+          <div class="detail-row">
+            <span class="detail-label">Business Name: </span>
+            <span class="detail-value"><%= gstBusinessName %></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">GSTIN: </span>
+            <span class="detail-value"><%= gstNumber %></span>
+          </div>
+          <% } %>
           <div class="detail-row total">
             <span class="detail-label">Total Amount: </span>
             <span class="detail-value"><%= totalAmount %></span>

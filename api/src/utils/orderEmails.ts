@@ -73,6 +73,7 @@ const getOrderEmailData = async (orderId: number) => {
       o.courier_name,
       TO_CHAR(o.delivered_at, 'DD Mon YYYY') AS delivered_date,
       COALESCE(o.shipping_address, '{}'::jsonb) AS shipping_details,
+      COALESCE(o.gst_details, '{}'::jsonb) AS gst_details,
       u.name AS account_name,
       u.email AS account_email,
       STRING_AGG(
@@ -103,6 +104,7 @@ const getOrderEmailData = async (orderId: number) => {
 
   const order = rows[0];
   const shipping = order.shipping_details ?? {};
+  const gst = order.gst_details ?? {};
 
   const recipient = String(shipping.email ?? order.account_email ?? "").trim();
 
@@ -121,6 +123,12 @@ const getOrderEmailData = async (orderId: number) => {
       totalAmount: order.total_amount,
       paymentMethod: order.payment_method,
       items: order.items ?? "",
+      // Only set when the customer gave a GSTIN at checkout. The template
+      // prints these two rows together or not at all, so a business buyer can
+      // check the number on the confirmation rather than on the invoice, when
+      // it is too late to correct.
+      gstNumber: gst.gst_number ?? null,
+      gstBusinessName: gst.business_name ?? null,
       waybill: order.waybill,
       courierName: order.courier_name,
       deliveredDate: order.delivered_date,

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getGuestOrderToken } from "@/lib/guestOrder";
-import { getRequest } from "@/lib/fetcher";
+// import { getRequest } from "@/lib/fetcher";
 import Link from "next/link";
 import { CheckCircle, Package } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
@@ -26,7 +26,7 @@ const GuestOrderPage = () => {
 
     const fetchOrder = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/orders/guest/order`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}api/v1/orders/guest/order`, {
           headers: {
             "x-guest-order-token": token,
           },
@@ -139,6 +139,26 @@ const GuestOrderPage = () => {
           </div>
         </div>
 
+        {/*
+          Only a customer who checked out as a business has this. Shown back to
+          them because it is what their invoice will be billed to, and a wrong
+          GSTIN is far cheaper to report now than after the invoice is filed.
+        */}
+        {order.gst_details?.gst_number ? (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <h3 className="font-bold text-gray-900 mb-4">GST Details</h3>
+            <div className="text-gray-600 space-y-1 text-sm">
+              <p className="font-medium text-gray-900">
+                {order.gst_details.business_name}
+              </p>
+              <p>GSTIN: {order.gst_details.gst_number}</p>
+              <p className="pt-2 text-xs text-gray-500">
+                Your invoice will be issued to this business.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
           <h3 className="font-bold text-gray-900 mb-4">Shipping Address</h3>
           <div className="text-gray-600 space-y-1 text-sm">
@@ -151,8 +171,8 @@ const GuestOrderPage = () => {
         </div>
         
         <div className="text-center">
-           <Link href="/account" className="text-blue-600 hover:underline font-medium text-sm">
-              Want to track your orders? Create an account with the same email.
+           <Link href="/forgotPassword" className="text-blue-600 hover:underline font-medium text-sm">
+              Want to track your orders? Change Your Password and login.
            </Link>
         </div>
       </div>

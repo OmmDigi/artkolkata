@@ -35,12 +35,18 @@ const InvoicePdf = ({ data, company, invoiceNumber, invoiceDate }: IProps) => (
       <View style={styles.columns}>
         {/* Billed to and shipped to are the same address: checkout collects one.
             Both are printed because an invoice is read by people who expect to
-            find both, and the day billing splits off only this block changes. */}
+            find both, and the day billing splits off only this block changes.
+
+            The buyer's GSTIN goes on the billing block alone. It identifies who
+            is claiming the input tax credit, which is a billing fact; the
+            parcel is delivered to a person at an address either way. */}
         <AddressBlock
           name={data.customerName}
           lines={data.addressLines}
           email={data.customerEmail}
           phone={data.customerPhone}
+          businessName={data.customerBusinessName}
+          gstNumber={data.customerGstNumber}
         />
         <AddressBlock
           heading="Ship To:"

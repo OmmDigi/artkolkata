@@ -24,18 +24,27 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
-// Intercept responses to handle 401/403 errors globally
+/**
+ * A 401/403 ends the session — but only if there was a session to end.
+ *
+ * A guest has no token, so an authenticated endpoint answering 401 to them is
+ * the expected answer, not an expired login. Logging out on it anyway ran
+ * useUserStore.logout(), which calls resetLocalCart(), which deletes the
+ * browser copy of the cart. A guest who opened checkout (where the profile
+ * request 401s) therefore watched their cart empty itself. Checking for a
+ * token first keeps the logout for the case it was written for: a token that
+ * the API has stopped accepting.
+ */
 API.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (
-      error.response &&
-      (error.response.status === 401 || error.response.status === 403)
-    ) {
-      if (typeof window !== "undefined") {
+    const status = error?.response?.status;
+
+    if (status === 401 || status === 403) {
+      if (typeof window !== "undefined" && localStorage.getItem("token")) {
         try {
           useUserStore.getState().logout();
-        } catch (e) {
+        } catch {
           localStorage.removeItem("token");
         }
         // if (window.location.pathname !== "/account") {

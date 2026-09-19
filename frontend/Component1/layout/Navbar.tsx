@@ -13,6 +13,7 @@ import ShoppingCartSidebar from "@/app/Component/trending/ShoppingCartSidebar";
 import LanguageSelector from "@/app/Component/LanguageSelector";
 import { useSiteInfo } from "@/hooks/useSiteSettings";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 interface ApiCategory {
   id?: string | number;
@@ -291,8 +292,10 @@ export default function Navbar() {
                 href="/"
                 className="text-2xl font-bold text-gray-900 transition pointer-events-auto"
               >
-                <CustomImage
-                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}`}
+                <img
+                  src={processImageUrl(
+                    siteInfo?.site_logo ?? "/Art-Kolkata-Logo.png",
+                  )}
                   alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
                   className="h-12 md:h-16 object-contain"
                 />
@@ -383,7 +386,9 @@ export default function Navbar() {
                                 {category.image && (
                                   <CustomImage
                                     src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
-                                    alt={category.alt_tag || category.name || ""}
+                                    alt={
+                                      category.alt_tag || category.name || ""
+                                    }
                                     className="w-16 h-16 object-cover rounded"
                                   />
                                 )}

@@ -1,45 +1,7 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-
-export interface User {
-  id?: string;
-  name?: string;
-  email?: string;
-  token?: string;
-  role?: string;
-}
-
-interface UserState {
-  user: User | null;
-  setUser: (user: User) => void;
-  logout: () => void;
-}
-
-export const useUserStore = create<UserState>()(
-  persist(
-    (set) => ({
-      user: null,
-      setUser: (user) => {
-        if (user.token) localStorage.setItem("token", user.token);
-        set({ user });
-      },
-      logout: () => {
-        localStorage.removeItem("token");
-        set({ user: null });
-      },
-    }),
-    {
-      name: "user-store", // name of the item in the storage (must be unique)
-    }
-  )
-);
-
-// hook
-export const useIsLoggedIn = () => {
-  const user = useUserStore((state) => state.user);
-  const token =
-    user?.token || typeof window !== "undefined"
-      ? window.localStorage.getItem("token")
-      : "";
-  return !!token;
-};
+// The user store lives in @/hooks/useUserStore. This file used to hold a second
+// copy of it, which meant the navbar's logout wrote to a different store than
+// the axios interceptor and the OTP login did — and, worse, that copy's logout
+// never cleared the cart or the wishlist, so the next customer on the browser
+// inherited the previous one's. Re-exporting keeps the old import path working
+// against the one real store.
+export * from "@/hooks/useUserStore";

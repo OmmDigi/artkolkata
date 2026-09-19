@@ -6,7 +6,6 @@ import { Router } from "express";
 //   getAllDiscountList,
 //   validateDiscountController,
 // } from "../controllers/discount.controller";
-import { isAuthenticated } from "../middleware/isAuthenticated";
 import { isAuthorized } from "../middleware/isAuthorized";
 import {
   createAutoDiscountRule,
@@ -75,12 +74,17 @@ discountRoute
     deleteDiscount,
   )
   .post("/", rateLimits.adminWrite, isAuthorizedV2(["1-4"]), createDiscount)
-  .post(
-    "/validate",
-    rateLimits.couponValidate,
-    isAuthenticated,
-    validateDiscount,
-  )
+  /**
+   * checkUser, not isAuthenticated: applying a coupon is part of checkout, and
+   * checkout no longer requires a session. validateDiscount reads nothing off
+   * req.token_info — it is cart maths over the posted lines — and
+   * POST /orders/price-breakdown already runs the same calculation with the
+   * same code for anyone. Requiring a session here only meant a guest could
+   * see the discounted total but never press Apply, and place-order would then
+   * take the code from them anyway. Abuse is capped the same way it is there:
+   * rateLimits.couponValidate is keyed by ip, not by user.
+   */
+  .post("/validate", rateLimits.couponValidate, checkUser, validateDiscount)
   .put("/:id", rateLimits.adminWrite, isAuthorizedV2(["1-4"]), updateDiscount)
   .get(
     "/:id",

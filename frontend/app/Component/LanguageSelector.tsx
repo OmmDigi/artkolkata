@@ -89,7 +89,7 @@ export default function LanguageSelector() {
           {isLoading ? (
             <Loader2 size={18} className="animate-spin" />
           ) : (
-            <CustomImage src="https://flagcdn.com/w20/in.png" width="18" alt="Indian Flag" />
+            <img src="/flag-in.png" width="18" alt="Indian Flag" />
           )}
           <span className="font-medium uppercase hidden xl:block">{currentLang}</span>
           <ChevronDown size={14} className={`transition ${isOpen ? "rotate-180" : ""}`} />

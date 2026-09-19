@@ -187,7 +187,7 @@ export default function Profile() {
                             >
                               {order.order_status}
                             </div>
-                            <button
+                            {/* <button
                               onClick={() => {
                                 setSelectedOrder(order);
                                 setActiveTab("tracking");
@@ -196,7 +196,7 @@ export default function Profile() {
                               className="px-3 py-1 text-sm bg-[#02F8C5]   text-white transition"
                             >
                               Track Order
-                            </button>
+                            </button> */}
                           </div>
                         </div>
 
@@ -319,7 +319,7 @@ export default function Profile() {
                       {selectedOrder?.ordered_products?.[0]?.product_name}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-3">
+                  {/* <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => cancleOrder(selectedOrder?.order_number)}
                       disabled={
@@ -345,7 +345,7 @@ export default function Profile() {
                       )}
                       {cancleMutating ? "Cancelling..." : "Cancel Order"}
                     </button>
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* Tracking Steps */}

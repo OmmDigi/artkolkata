@@ -15,7 +15,7 @@ import {
 } from "../constant";
 import { v4 as uuidv4 } from "uuid";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
-import { CustomRequest, IShippingAddress } from "../types";
+import { CustomRequest, IOrderGstDetails, IShippingAddress } from "../types";
 import {
   assertGuestCheckoutEnabled,
   assertPaymentMethodEnabled,
@@ -107,6 +107,9 @@ export const createOrder = asyncErrorHandler(
     const value = doValidate<{
       shippingDetails: IShippingAddress;
       paymentMethod: "ONLINE" | "COD";
+      // present only when the customer is buying as a business and wants a
+      // GST invoice they can claim input tax credit against
+      gstDetails?: { gstNumber: string; businessName: string };
       product: {
         code?: string;
         product_ids: { id: number; quantity: number }[];
@@ -255,6 +258,22 @@ export const createOrder = asyncErrorHandler(
           country: value.shippingDetails.country ?? "India",
         };
 
+        /**
+         * Frozen on the order for the same reason the address is: it is what
+         * the customer declared for this purchase. A company that later
+         * changes its registered name must not silently rewrite an invoice it
+         * has already filed.
+         *
+         * Joi has already normalised the GSTIN to upper case and rejected
+         * anything that is not one, so nothing here needs to re-check it.
+         */
+        const gstDetailsSnapshot: IOrderGstDetails | null = value.gstDetails
+          ? {
+              gst_number: value.gstDetails.gstNumber,
+              business_name: value.gstDetails.businessName,
+            }
+          : null;
+
         // the address typed at checkout also goes to the user's address book,
         // the order snapshot above is only a frozen copy of it. A guest gets
         // one too — the row is theirs the day they set a password and the
@@ -287,8 +306,8 @@ export const createOrder = asyncErrorHandler(
 
         const orderInfo = await client.query(
           `INSERT INTO orders
-              (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, shipping_rule_id, total_amount, coupon_code, shipping_address, price_breakdown, payment_method, shipment_dimensions, is_guest_order)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING order_id`,
+              (user_id, order_number, subtotal, discount, coupon_discount, auto_discount, auto_discount_rule_id, shipping_charge, shipping_rule_id, total_amount, coupon_code, shipping_address, price_breakdown, payment_method, shipment_dimensions, is_guest_order, gst_details)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING order_id`,
           [
             customerId,
             orderNumber,
@@ -306,6 +325,10 @@ export const createOrder = asyncErrorHandler(
             value.paymentMethod,
             JSON.stringify(shipmentDimensions),
             isGuestOrder,
+            // null, not '{}': "this order has no GST details" is a real
+            // answer, and every reader checks for the key rather than for an
+            // empty object
+            gstDetailsSnapshot ? JSON.stringify(gstDetailsSnapshot) : null,
           ],
         );
 
@@ -682,6 +705,10 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         order_status,
         payment_status,
         shipping_address,
+        -- the buyer's own GSTIN, when they gave one. Staff need it on screen
+        -- because it is what the invoice bills to, and a wrong one is a
+        -- support call rather than something they can fix afterwards.
+        gst_details,
         price_breakdown,
         payment_method,
         shipping_partner,

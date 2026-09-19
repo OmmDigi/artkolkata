@@ -28,13 +28,30 @@ export interface IAddressEntry {
   is_primary: boolean;
 }
 
+export interface IPaymentMethodSettings {
+  online_enabled: boolean;
+  cod_enabled: boolean;
+}
+
+export interface IGuestCheckoutSettings {
+  enabled: boolean;
+}
+
 export interface ISiteInfo {
   site_logo: string;
   site_logo_alt: string;
   contact_emails: IContactEntry[];
   contact_phones: IContactEntry[];
   site_addresses: IAddressEntry[];
+  payment_methods?: IPaymentMethodSettings;
+  // Absent means allowed — a store that has never saved the setting takes
+  // guest orders, and the API defaults the same way.
+  guest_checkout?: IGuestCheckoutSettings;
 }
+
+/** Guest checkout is on unless the CMS has explicitly turned it off. */
+export const isGuestCheckoutEnabled = (siteInfo?: ISiteInfo | null) =>
+  siteInfo?.guest_checkout?.enabled !== false;
 
 export interface IBanner {
   id: number;

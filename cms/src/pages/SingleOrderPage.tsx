@@ -78,6 +78,13 @@ export default function SingleOrderPage() {
     ),
   );
   const shippingCharge = Number.isFinite(parsedShipping) ? parsedShipping : 0;
+  // Absent on most orders; an empty object from an older row reads the same as
+  // absent, so both the number and the name have to be there to show the block.
+  const gstDetails =
+    orderInfo?.gst_details?.gst_number && orderInfo?.gst_details?.business_name
+      ? orderInfo.gst_details
+      : null;
+
   const shippingRuleTitle =
     orderInfo?.price_breakdown?.shipping_rule?.title ?? null;
 
@@ -198,6 +205,31 @@ export default function SingleOrderPage() {
                     defaultValue={"India"}
                   />
                 </div>
+
+                {/*
+                  Only a customer buying as a business gives these, so the
+                  whole block is absent on an ordinary order rather than
+                  showing two empty fields. This is what the invoice is billed
+                  to — if it is wrong, it has to be corrected before the
+                  invoice is generated.
+                */}
+                {gstDetails ? (
+                  <div className="space-y-2.5 rounded-md border border-gray-300 bg-gray-50 p-3.5">
+                    <Label>Customer GST Details</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      <LabelInput
+                        label="Business Name"
+                        disabled={true}
+                        defaultValue={gstDetails.business_name}
+                      />
+                      <LabelInput
+                        label="GSTIN"
+                        disabled={true}
+                        defaultValue={gstDetails.gst_number}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </Section>
 
               <Section>

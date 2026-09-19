@@ -94,6 +94,12 @@ export const styles = StyleSheet.create({
     fontWeight: 700,
     marginBottom: 2,
   },
+  // the buyer's own GSTIN, set apart from the address it sits under: it is a
+  // tax identifier, not another line of the postal address
+  gstLine: {
+    marginTop: 3,
+    fontWeight: 700,
+  },
   metaColumn: {
     marginLeft: "auto",
     width: 192,
@@ -222,27 +228,45 @@ export const MetaRow = ({ label, value }: { label: string; value: string }) => (
 );
 
 /** The customer's name and address, optionally under a "Ship To:" heading. */
+/**
+ * An address block on a document.
+ *
+ * `businessName` and `gstNumber` are the buyer's own GST registration, given
+ * at checkout by a customer purchasing as a business. When there is one, the
+ * registered entity is named first and the individual second, because the
+ * GSTIN belongs to the company and that is who the document bills — and the
+ * GSTIN is printed, because an invoice without it cannot be claimed against.
+ * Both are absent on most orders, and the block then reads exactly as before.
+ */
 export const AddressBlock = ({
   heading,
   name,
   lines,
   email,
   phone,
+  businessName,
+  gstNumber,
 }: {
   heading?: string;
   name: string;
   lines: string[];
   email?: string | null;
   phone?: string | null;
+  businessName?: string | null;
+  gstNumber?: string | null;
 }) => (
   <View style={styles.addressColumn}>
     {heading ? <Text style={styles.columnHeading}>{heading}</Text> : null}
+    {businessName ? (
+      <Text style={{ fontWeight: 700 }}>{businessName}</Text>
+    ) : null}
     <Text>{name}</Text>
     {lines.map((line, index) => (
       <Text key={`${line}-${index}`}>{line}</Text>
     ))}
     {email ? <Text>{email}</Text> : null}
     {phone ? <Text>{phone}</Text> : null}
+    {gstNumber ? <Text style={styles.gstLine}>GSTIN: {gstNumber}</Text> : null}
   </View>
 );
 

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useSyncExternalStore } from "react";
 import { useWishlistStore } from "@/store/useWishlistStore";
 import { useCartStore } from "@/store/useCartStore";
 
@@ -39,12 +40,38 @@ export const useUserStore = create<UserState>()(
   )
 );
 
-// hook
-export const useIsLoggedIn = () => {
-  const user = useUserStore((state) => state.user);
-  const token =
-    user?.token || typeof window !== "undefined"
-      ? window.localStorage.getItem("token")
-      : "";
-  return !!token;
+/**
+ * Whether there is a usable session.
+ *
+ * The token lives in localStorage, which the server does not have. Reading it
+ * while rendering therefore made the server and the first client render
+ * disagree, and React threw a hydration mismatch. useSyncExternalStore is the
+ * supported way to read something React does not own: it renders the server
+ * snapshot (false) during hydration and corrects to the real value in the same
+ * pass, before the browser paints.
+ *
+ * Subscribing to the user store picks up a login or a logout without a reload;
+ * the `storage` event picks up the same happening in another tab.
+ *
+ * (The previous version read `user?.token || typeof window !== "undefined" ? … : ""`,
+ * which JavaScript groups as `(user?.token || isBrowser) ? … : ""` — the token
+ * never took part in the decision.)
+ */
+const subscribeToSession = (onChange: () => void) => {
+  const unsubscribe = useUserStore.subscribe(onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    unsubscribe();
+    window.removeEventListener("storage", onChange);
+  };
 };
+
+const hasToken = () => !!localStorage.getItem("token");
+
+export const useIsLoggedIn = () =>
+  useSyncExternalStore(
+    subscribeToSession,
+    hasToken,
+    // the server has no token and must say so, or hydration disagrees
+    () => false,
+  );

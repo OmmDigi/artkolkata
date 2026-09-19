@@ -31,7 +31,9 @@ interface CartState {
 
   isInCart: (id: number, variantId: number | null) => boolean;
   getItemQty: (id: number, variantId: number | null) => number;
-  clearCart: () => void;
+  // resolves once the account cart is gone too, so a caller that is about to
+  // navigate away can wait for the DELETE instead of having it cancelled
+  clearCart: () => Promise<void>;
 
   // read the account cart and make it the local one (call on app mount)
   hydrateCart: () => Promise<void>;
@@ -92,6 +94,22 @@ const toCartItems = (rows: any[]): CartItem[] =>
   }));
 
 export const useCartStore = create<CartState>((set, get) => {
+  /**
+   * The browser copy is pulled in on first use rather than when the module is
+   * evaluated. The server renders this file too, where there is no
+   * localStorage, so seeding `cart` from it made the server send an empty cart
+   * and the browser immediately render a full one — a hydration mismatch that
+   * React resolves by throwing the first render away.
+   *
+   * hydrateCart() does this on mount. Every action calls it as well, so a
+   * click that somehow lands first still writes on top of the stored cart
+   * instead of on top of an empty one.
+   */
+  const ensureLocalCart = () => {
+    if (get().hydrated || typeof window === "undefined") return;
+    set({ cart: readLocalCart(), hydrated: true });
+  };
+
   // the server's reply is the whole cart, so it replaces what is on screen
   const applyServerCart = (res: any) => {
     const cart = toCartItems(res?.data);
@@ -143,11 +161,14 @@ export const useCartStore = create<CartState>((set, get) => {
   };
 
   return {
-    cart: readLocalCart(),
+    // starts empty on both sides of the render, filled by ensureLocalCart()
+    cart: [],
     hydrated: false,
 
     // ✅ ADD TO CART
     addToCart: (product, variantId, quantity = 1) => {
+      ensureLocalCart();
+
       set((state) => {
         const exists = state.cart.find(
           (item) => item.id === product.id && item.variantId === variantId
@@ -202,6 +223,8 @@ export const useCartStore = create<CartState>((set, get) => {
 
     // ❌ REMOVE ITEM
     removeFromCart: (id, variantId) => {
+      ensureLocalCart();
+
       set((state) => {
         const newCart = state.cart.filter(
           (item) => !(item.id === id && item.variantId === variantId)
@@ -217,7 +240,9 @@ export const useCartStore = create<CartState>((set, get) => {
       if (!isLoggedIn()) return;
 
       deleteRequest({
-        url: `/api/v1/cart/${id}${variantId ? `?variant_id=${variantId}` : ""}`,
+        url: `/api/v1/cart/${id}${
+          variantId != null ? `?variant_id=${variantId}` : ""
+        }`,
       })
         .then(applyServerCart)
         .catch(resync);
@@ -225,6 +250,8 @@ export const useCartStore = create<CartState>((set, get) => {
 
     // 🔄 UPDATE QUANTITY
     updateQuantity: (id, variantId, quantity) => {
+      ensureLocalCart();
+
       set((state) => {
         const newCart = state.cart.map((item) =>
           item.id === id && item.variantId === variantId
@@ -255,25 +282,30 @@ export const useCartStore = create<CartState>((set, get) => {
 
     // 🗑️ CLEAR CART — also empties the account cart, this is what runs once an
     // order has been placed
-    clearCart: () => {
+    clearCart: async () => {
       // a stepper still settling would otherwise write a line back in
       cancelAllPendingSync();
 
       if (typeof window !== "undefined") localStorage.removeItem("cart");
-      set({ cart: [] });
+      set({ cart: [], hydrated: true });
 
       if (!isLoggedIn()) return;
 
-      deleteRequest({ url: "/api/v1/cart" }).catch(() => {
+      try {
+        await deleteRequest({ url: "/api/v1/cart" });
+      } catch {
         /* the next write or reload resyncs it */
-      });
+      }
     },
 
     hydrateCart: async () => {
       cancelAllPendingSync();
 
+      // A guest's cart only ever exists in this browser, so hydrating is
+      // reading it back. Nothing is requested: the cart endpoints all need a
+      // session and a 401 here is noise, not information.
       if (!isLoggedIn()) {
-        set({ hydrated: true });
+        set({ cart: readLocalCart(), hydrated: true });
         return;
       }
 
@@ -293,7 +325,7 @@ export const useCartStore = create<CartState>((set, get) => {
         applyServerCart(res);
       } catch {
         // keep whatever is in localStorage rather than blanking the cart
-        set({ hydrated: true });
+        set({ cart: readLocalCart(), hydrated: true });
       }
     },
 
@@ -332,7 +364,8 @@ export const useCartStore = create<CartState>((set, get) => {
       cancelAllPendingSync();
 
       if (typeof window !== "undefined") localStorage.removeItem("cart");
-      set({ cart: [], hydrated: false });
+      // known-empty, not unknown : nothing left to read back in
+      set({ cart: [], hydrated: true });
     },
   };
 });

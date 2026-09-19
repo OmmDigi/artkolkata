@@ -12,10 +12,51 @@ export const VShippingAddress = Joi.object({
   country: Joi.string().required(),
 });
 
+/**
+ * A GSTIN: 15 characters, and the layout is fixed by the GST system itself —
+ * 2 digit state code, the holder's 10 character PAN, a 1 character entity
+ * number, a literal "Z", and a checksum character.
+ *
+ * Checked rather than waved through because this number is printed on a tax
+ * document the buyer files against. A typo that reaches the invoice is found
+ * weeks later by an accountant; a typo caught here is found by the customer
+ * while they are still looking at the field.
+ *
+ * Case is not significant on the way in — normalised to upper case below,
+ * which is how a GSTIN is written.
+ */
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+
+export const VGstDetails = Joi.object({
+  gstNumber: Joi.string()
+    .trim()
+    .uppercase()
+    .pattern(GSTIN_PATTERN)
+    .required()
+    .messages({
+      "string.pattern.base":
+        "Enter a valid 15 character GSTIN, for example 29ABCDE1234F1Z5",
+      "string.empty": "GST number is required when billing to a business",
+    }),
+
+  // An invoice carrying a GSTIN has to name the entity it belongs to, so the
+  // two travel together or not at all.
+  businessName: Joi.string().trim().min(2).max(200).required().messages({
+    "string.empty": "Business name is required when a GST number is given",
+  }),
+});
+
 export const VCreateOrder = Joi.object({
   shippingDetails: VShippingAddress.required(),
 
   paymentMethod: Joi.string().valid("ONLINE", "COD").required(),
+
+  /**
+   * Optional: only a customer buying as a business sends this. The storefront
+   * puts it behind a "I have a GST number" checkbox and omits the key
+   * entirely when the box is unticked.
+   */
+  gstDetails: VGstDetails.optional(),
 
   product: Joi.object({
     code: Joi.string().optional(),

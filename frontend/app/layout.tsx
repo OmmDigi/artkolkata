@@ -13,6 +13,7 @@ import MainWrapper from "./Component/MainWrapper";
 import Footer from "@/Component1/layout/Footer";
 import MobileBottomNav from "@/Component1/layout/MobileBottomNav";
 import FloatingWhatsApp from "@/Component1/FloatingWhatsApp";
+import OrderCompletionWatcher from "./Component/OrderCompletionWatcher";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -86,6 +87,8 @@ export default function RootLayout({
         </Script>
         <QueryClientWrapper>
           <ToastContainer position="top-center" autoClose={2000} />
+          {/* empties the cart once a gateway payment reads back as PAID */}
+          <OrderCompletionWatcher />
 
           {/* <Marquee /> */}
           <Navbar />

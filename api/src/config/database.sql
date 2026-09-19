@@ -1275,3 +1275,19 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS drafted_by INT REFERENCES users(id);
 -- this column is the CMS draft view. Every other query filters them out, which
 -- a sequential scan handles just as well.
 CREATE INDEX IF NOT EXISTS idx_orders_is_draft ON orders(is_draft) WHERE is_draft;
+
+-- ============================================================
+-- CUSTOMER GST DETAILS
+--
+-- A business buying for itself gives its GSTIN at checkout so the invoice it
+-- gets back can be claimed as input tax credit. It is optional — most orders
+-- are to individuals and have nothing here.
+--
+-- Stored as a snapshot on the order, like shipping_address, and for the same
+-- reason: it is what the customer declared when they placed this order. A
+-- company that later changes its registered name must not retroactively edit
+-- an invoice that has already been filed.
+--
+-- Shape: { "gst_number": "29ABCDE1234F1Z5", "business_name": "Acme Pvt Ltd" }
+-- ============================================================
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_details JSONB;
