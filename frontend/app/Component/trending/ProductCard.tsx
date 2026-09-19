@@ -22,7 +22,8 @@ const ProductCard = ({
   const [currentImage, setCurrentImage] = useState(image);
   const { wishlist, toggleWishlist } = useWishlistStore();
   const { addToCart, removeFromCart, isInCart } = useCartStore();
-  const inCart = isInCart(product?.id, null);
+  const firstVariant = product?.variants?.[0] || null;
+  const inCart = isInCart(product?.id, firstVariant?.id || null);
   const inWishlist = wishlist.some((w) => w?.id === product?.id);
 
   const handleIconClick = (type: any) => {
@@ -32,9 +33,9 @@ const ProductCard = ({
       if (type === "wish") toggleWishlist(product);
       if (type === "cart") {
         if (inCart) {
-          removeFromCart(product?.id, null);
+          removeFromCart(product?.id, firstVariant?.id || null);
         } else {
-          addToCart(product, null, 1);
+          addToCart(product, firstVariant?.id || null, 1);
         }
       }
     }, 100);
@@ -175,7 +176,7 @@ const ProductCard = ({
             e.preventDefault();
             e.stopPropagation();
             if (!inCart) {
-              addToCart(product, null, 1);
+              addToCart(product, firstVariant?.id || null, 1);
             }
             router.push("/checkout");
           }}

@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  Star,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -25,7 +26,9 @@ import {
 } from "@/Component1/ShopSection";
 
 import { CollapsibleDescription } from "@/app/Component/CollapsibleDescription";
+import EditorJsDescription from "@/app/Component/EditorJsDescription";
 import ProductReviewSummary from "@/app/Component/ProductReviewSummary";
+import CustomImage from "@/Component1/CustomImage";
 
 const ProductPage = () => {
   const [mainImage, setMainImage] = useState<any>(null);
@@ -197,7 +200,6 @@ const ProductPage = () => {
         `/api/v1/products?tag=${encodeURI("Best Seller")}&limit=-1`,
       ),
   });
-  console.log("mostPopularData", mostPopularData);
 
   const relatedProducts = relatedData?.data || [];
   const relatedMapped = relatedProducts
@@ -221,6 +223,26 @@ const ProductPage = () => {
     enabled: !!fullProduct?.id,
   });
   const productReview = productReviewData as any;
+
+  let allReviews: any[] = [];
+  if (productReview) {
+    if (Array.isArray(productReview)) {
+      allReviews = [...productReview];
+    } else if (Array.isArray(productReview.data)) {
+      allReviews = [...productReview.data];
+    }
+  }
+
+  const ratingCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  allReviews.forEach((r) => {
+    const starVal = Number(r.stars);
+    if (starVal >= 1 && starVal <= 5) {
+      ratingCounts[starVal as keyof typeof ratingCounts]++;
+    }
+  });
+
+  const [showRatingPopover, setShowRatingPopover] = useState(false);
+  const [isUpdatingQty, setIsUpdatingQty] = useState(false);
 
   const trimMessage = (message: string, wordCount: number) => {
     if (!message) return "";
@@ -394,7 +416,7 @@ const ProductPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-2 md:py-8">
+      <div className="w-full max-w-[1600px] mx-auto px-4 py-2 md:py-8">
         {/* Product Grid */}
         <div className=" gap-12 mb-12">
           {/* Images Section */}
@@ -435,7 +457,7 @@ const ProductPage = () => {
                             : "border-gray-200 opacity-100 hover:opacity-100"
                         }`}
                       >
-                        <img
+                        <CustomImage
                           src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(img)}`}
                           className="w-full h-full object-contain bg-white"
                           alt=""
@@ -476,7 +498,7 @@ const ProductPage = () => {
                 >
                   {mainImage && (
                     <>
-                      <img
+                      <CustomImage
                         src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(mainImage)}`}
                         className="w-full h-full object-contain"
                         alt="Product"
@@ -574,7 +596,7 @@ const ProductPage = () => {
                               className="w-full h-full flex-shrink-0 relative cursor-pointer"
                               onClick={() => openModal(img)}
                             >
-                              <img
+                              <CustomImage
                                 src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(img)}`}
                                 className="w-full h-full object-contain bg-gray-100"
                                 alt={`Product ${idx}`}
@@ -745,12 +767,158 @@ const ProductPage = () => {
                   );
                 })()}
 
-                <div className="flex items-center gap-1 mt-2">
-                  <span className="text-amber-500">★</span>
-                  <span className="text-sm text-gray-600">
-                    {parseFloat(fullProduct?.rating ?? "0.0").toFixed(1)} (
-                    {fullProduct?.total_ratings})
-                  </span>
+                <div className="relative inline-block ">
+                  <div
+                    className="flex items-center gap-1 cursor-pointer group"
+                    onClick={() => {
+                      router.push(window.location.pathname + "#reviews");
+                      setTimeout(() => {
+                        document
+                          .getElementById("reviews")
+                          ?.scrollIntoView({ behavior: "smooth" });
+                      }, 100);
+                    }}
+                  >
+                    <span className="text-sm font-medium text-gray-700">
+                      {parseFloat(fullProduct?.rating ?? "0.0").toFixed(1)}
+                    </span>
+                    <div
+                      onMouseEnter={() => setShowRatingPopover(true)}
+                      onMouseLeave={() => setShowRatingPopover(false)}
+                      className="flex text-amber-500 gap-2 py-3 "
+                    >
+                      <div className="flex text-amber-500">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            size={16}
+                            className={
+                              star <=
+                              Math.round(
+                                Number(
+                                  parseFloat(fullProduct?.rating ?? "0.0"),
+                                ),
+                              )
+                                ? "fill-amber-500 text-amber-500"
+                                : "text-amber-500"
+                            }
+                          />
+                        ))}
+                      </div>
+                      <ChevronDown
+                        size={14}
+                        className="text-gray-600 group-hover:text-black"
+                      />
+                      <span className="text-sm text-blue-600 hover:text-red-500 hover:underline">
+                        {fullProduct?.total_ratings || allReviews.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {showRatingPopover && (
+                    <div
+                      className="absolute top-full left-0 z-50 bg-white p-5 border border-gray-300 rounded shadow-2xl w-[320px] mt-0"
+                      onMouseEnter={() => setShowRatingPopover(true)}
+                      onMouseLeave={() => setShowRatingPopover(false)}
+                    >
+                      {/* Arrow / pointer for the popover */}
+                      <div className="absolute -top-[9px] left-8 w-4 h-4 bg-white border-t border-l border-gray-300 transform rotate-45"></div>
+
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex text-amber-500">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  size={22}
+                                  className={
+                                    star <=
+                                    Math.round(
+                                      Number(
+                                        parseFloat(
+                                          fullProduct?.rating ?? "0.0",
+                                        ),
+                                      ),
+                                    )
+                                      ? "fill-amber-500 text-amber-500"
+                                      : "text-amber-500"
+                                  }
+                                />
+                              ))}
+                            </div>
+                            <span className="font-bold text-lg text-gray-800">
+                              {parseFloat(fullProduct?.rating ?? "0.0").toFixed(
+                                1,
+                              )}{" "}
+                              out of 5
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setShowRatingPopover(false)}
+                            className="text-gray-400 hover:text-gray-800 rounded p-1"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+
+                        <div className="text-gray-500 text-[15px] mb-4">
+                          {fullProduct?.total_ratings || allReviews.length}{" "}
+                          global ratings
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                          {[5, 4, 3, 2, 1].map((star) => {
+                            const count =
+                              ratingCounts[star as keyof typeof ratingCounts] ||
+                              0;
+                            const total = allReviews.length || 1;
+                            const percentage = Math.round(
+                              (count / total) * 100,
+                            );
+                            return (
+                              <div
+                                key={star}
+                                className="flex items-center gap-3 text-sm text-blue-700 hover:text-red-600 hover:underline cursor-pointer font-medium group"
+                              >
+                                <div className="w-12 whitespace-nowrap">
+                                  {star} star
+                                </div>
+                                <div className="flex-1 h-[16px] bg-gray-100 border border-gray-400 rounded-sm overflow-hidden flex shadow-inner group-hover:border-red-500">
+                                  <div
+                                    className="h-full bg-amber-500 transition-all duration-500 border-r border-gray-400"
+                                    style={{ width: `${percentage}%` }}
+                                  ></div>
+                                </div>
+                                <div className="w-10 text-right">
+                                  {percentage}%
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="border-t border-gray-200 mt-5 pt-3 text-center">
+                          <button
+                            onClick={() => {
+                              setShowRatingPopover(false);
+                              router.push(
+                                window.location.pathname + "#reviews",
+                              );
+                              setTimeout(() => {
+                                document
+                                  .getElementById("reviews")
+                                  ?.scrollIntoView({ behavior: "smooth" });
+                              }, 100);
+                            }}
+                            className="text-sm font-medium text-blue-700 hover:text-red-600 hover:underline inline-flex items-center gap-1"
+                          >
+                            See customer reviews <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -795,47 +963,63 @@ const ProductPage = () => {
                   <div className="shrink-0">
                     <div className="flex items-center gap-4">
                       <button
-                        className="px-3 py-2 border rounded-lg"
+                        className="px-3 py-2 border rounded-lg disabled:opacity-50"
+                        disabled={isUpdatingQty}
                         onClick={() => {
-                          if (itemAlreadyInCart) {
-                            if (cartQuantity > 1) {
-                              updateQuantity(
-                                fullProduct.id,
-                                variantId,
-                                cartQuantity - 1,
-                              );
+                          setIsUpdatingQty(true);
+                          setTimeout(() => {
+                            if (itemAlreadyInCart) {
+                              if (cartQuantity > 1) {
+                                updateQuantity(
+                                  fullProduct.id,
+                                  variantId,
+                                  cartQuantity - 1,
+                                );
+                              }
+                            } else {
+                              if (localQuantity > 1) {
+                                setLocalQuantity(localQuantity - 1);
+                              }
                             }
-                          } else {
-                            if (localQuantity > 1) {
-                              setLocalQuantity(localQuantity - 1);
-                            }
-                          }
+                            setIsUpdatingQty(false);
+                          }, 400);
                         }}
                       >
                         -
                       </button>
 
-                      <span className="text-xl font-bold w-6 text-center">
-                        {itemAlreadyInCart ? cartQuantity : localQuantity}
-                      </span>
+                      <div className="w-8 flex items-center justify-center">
+                        {isUpdatingQty ? (
+                          <div className="w-5 h-5 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <span className="text-xl font-bold text-center">
+                            {itemAlreadyInCart ? cartQuantity : localQuantity}
+                          </span>
+                        )}
+                      </div>
 
                       <button
-                        className="px-3 py-2 border rounded-lg"
+                        className="px-3 py-2 border rounded-lg disabled:opacity-50"
+                        disabled={isUpdatingQty}
                         onClick={() => {
-                          const stock = getAvailableStock();
-                          if (itemAlreadyInCart) {
-                            if (cartQuantity < stock) {
-                              updateQuantity(
-                                fullProduct.id,
-                                variantId,
-                                cartQuantity + 1,
-                              );
+                          setIsUpdatingQty(true);
+                          setTimeout(() => {
+                            const stock = getAvailableStock();
+                            if (itemAlreadyInCart) {
+                              if (cartQuantity < stock) {
+                                updateQuantity(
+                                  fullProduct.id,
+                                  variantId,
+                                  cartQuantity + 1,
+                                );
+                              }
+                            } else {
+                              if (localQuantity < stock) {
+                                setLocalQuantity(localQuantity + 1);
+                              }
                             }
-                          } else {
-                            if (localQuantity < stock) {
-                              setLocalQuantity(localQuantity + 1);
-                            }
-                          }
+                            setIsUpdatingQty(false);
+                          }, 400);
                         }}
                       >
                         +
@@ -887,16 +1071,21 @@ const ProductPage = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold mb-4">Description</h1>
-                <CollapsibleDescription
-                  htmlContent={fullProduct?.description || ""}
-                />
+                {fullProduct?.description_json ? (
+                  <EditorJsDescription data={fullProduct.description_json} />
+                ) : (
+                  // <CollapsibleDescription
+                  //   htmlContent={fullProduct?.description || ""}
+                  // />
+                  <p className="text-gray-500 text-sm">No description</p>
+                )}
               </div>
 
               {/* Feature Icons */}
               <div className="flex overflow-x-auto gap-4 py-4 scrollbar-hide my-4 border-y border-gray-200">
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <img
+                    <CustomImage
                       src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-cod.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Pay on Delivery"
@@ -909,7 +1098,7 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <img
+                    <CustomImage
                       src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-free-shipping.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Free Delivery"
@@ -922,7 +1111,7 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <img
+                    <CustomImage
                       src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-secure-payment.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Secure transaction"
@@ -935,7 +1124,7 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <img
+                    <CustomImage
                       src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-top-brand._CB562506657_.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Top Brand"
@@ -948,7 +1137,7 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <img
+                    <CustomImage
                       src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-warranty._CB485935626_.png`}
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="1 Year Warranty"
@@ -1037,7 +1226,9 @@ const ProductPage = () => {
         </div>
       )}
 
-      <ProductReviewSummary fullProduct={fullProduct} />
+      <div id="reviews">
+        <ProductReviewSummary fullProduct={fullProduct} />
+      </div>
 
       {/* Image Modal */}
       {isModalOpen && zoomMedia && (
@@ -1068,7 +1259,7 @@ const ProductPage = () => {
                 ></iframe>
               </div>
             ) : (
-              <img
+              <CustomImage
                 src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${zoomMedia.image}`}
                 className="w-full object-contain max-h-[85vh]"
                 alt="Zoomed product"

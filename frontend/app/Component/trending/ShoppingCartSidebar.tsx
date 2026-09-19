@@ -38,13 +38,20 @@ const ShoppingCartSidebar = ({
     router.push("/checkout");
   };
 
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+
   const changeQty = (item: any, diff: number) => {
     const newQty = item.quantity + diff;
     if (newQty <= 0) {
       removeFromCart(item.id, item.variantId);
       return;
     }
-    updateQuantity(item.id, item.variantId, newQty);
+    const itemKey = `${item.id}-${item.variantId}`;
+    setUpdatingItemId(itemKey);
+    setTimeout(() => {
+      updateQuantity(item.id, item.variantId, newQty);
+      setUpdatingItemId(null);
+    }, 400);
   };
 
   const deleteItem = (item: any) => {
@@ -167,9 +174,15 @@ const ShoppingCartSidebar = ({
                           >
                             −
                           </button>
-                          <span className="text-sm text-gray-700">
-                            {item.quantity}
-                          </span>
+                          <div className="w-6 flex items-center justify-center">
+                            {updatingItemId === `${item.id}-${item.variantId}` ? (
+                              <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <span className="text-sm text-gray-700">
+                                {item.quantity}
+                              </span>
+                            )}
+                          </div>
 
                           <button
                             onClick={() => changeQty(item, 1)}

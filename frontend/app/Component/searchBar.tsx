@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { getRequest } from "@/lib/fetcher";
+import CustomImage from "@/Component1/CustomImage";
 
 export default function SearchBar() {
   const [query, setQuery] = useState("");
@@ -87,7 +88,7 @@ export default function SearchBar() {
                 onClick={handleItemClick}
                 className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg transition cursor-pointer"
               >
-                <img
+                <CustomImage
                   src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image}`}
                   className="w-12 h-12 object-cover rounded-lg border"
                   alt={item.name}

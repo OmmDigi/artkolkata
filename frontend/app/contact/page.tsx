@@ -89,9 +89,7 @@ export default function page() {
             <h3 className="font-bold text-sm tracking-wider mb-4">
               WE'RE OPEN
             </h3>
-            <p className="text-gray-600 text-sm mb-4 leading-relaxed">
-              Our store has re-opened for shopping, exchanges
-            </p>
+
             <p className="font-semibold">Every day 10am to 6pm</p>
           </div>
 

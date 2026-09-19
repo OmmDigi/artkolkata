@@ -1,31 +1,73 @@
-export default function ReturnsRefunds() {
+import React from "react";
+import { notFound } from "next/navigation";
+import { Metadata } from "next";
+import EditorJsDescription from "@/app/Component/EditorJsDescription";
+
+export const revalidate = 300;
+
+async function getPage(slug: string) {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://192.168.0.184:8080";
+    const baseUrl = apiUrl.replace(/\/$/, "");
+    const res = await fetch(
+      `${baseUrl}/api/v1/pages/${slug}`,
+      {
+        next: { revalidate: 300 },
+      }
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data;
+  } catch (error) {
+    console.error(`Failed to fetch page ${slug}:`, error);
+    return null;
+  }
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const page = await getPage("return-and-refund-policy");
+
+  if (!page) {
+    return {
+      title: "Return and Refund Policy | ART KOLKATA",
+      description: "Return and Refund Policy",
+    };
+  }
+
+  return {
+    title: page.resolved_meta_title,
+    description: page.meta_description ?? undefined,
+  };
+}
+
+export default async function ReturnAndRefundPolicy() {
+  const page = await getPage("return-and-refund-policy");
+
+  if (!page) {
+    notFound();
+  }
+
   return (
     <main className="max-w-4xl mx-auto py-16 px-5 min-h-[70vh] bg-white">
-      <h1 className="text-4xl font-bold mb-8 text-gray-700">
-        Returns and Refunds
+      <h1 className="text-4xl font-bold mb-4 text-gray-700">
+        {page.title}
       </h1>
+      
+      {page.updated_at_label && (
+        <p className="text-sm text-gray-500 mb-8 font-medium">
+          Last updated: {page.updated_at_label}
+        </p>
+      )}
 
-      <div className="space-y-6 text-gray-700 leading-relaxed">
-        <section>
-          <h2 className="text-2xl font-semibold mb-3">Refund Policy</h2>
-          <p>We do not provide any kind of refunds.</p>
-          <p>We do not provide any kind of return.</p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold mb-3">Shipping Policy</h2>
-          <p>Orders will be delivered within 2-3 business days.</p>
-        </section>
-
-        <section className="mt-8 pt-8 border-t border-gray-200">
-          <h2 className="text-2xl font-semibold mb-3">Contact Information</h2>
-          <p className="mb-2">For any queries, please contact:</p>
-          <p className="font-semibold">ART KOLKATA</p>
-          <p>Duttapukur, North 24 Parganas, West Bengal – 743248</p>
-          <p>Email: artkolkata921@gmail.com</p>
-          <p>Phone: +91 8621803898</p>
-        </section>
-      </div>
+      {!page.content_json ? (
+        <div className="py-12 text-center text-gray-500">
+          This policy is currently being updated.
+        </div>
+      ) : (
+        <div className="mt-8 prose prose-gray max-w-none">
+          <EditorJsDescription data={page.content_json} />
+        </div>
+      )}
     </main>
   );
 }

@@ -15,6 +15,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { getRequest, postRequest } from "@/lib/fetcher";
 import { toast } from "react-toastify";
 import { useSiteInfo } from "@/hooks/useSiteSettings";
+import { setGuestOrderToken } from "@/lib/guestOrder";
+import CustomImage from "@/Component1/CustomImage";
 
 const CheckoutPage = () => {
   const { data: siteInfo } = useSiteInfo();
@@ -103,13 +105,20 @@ const CheckoutPage = () => {
     }
   };
 
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+
   const changeQty = (item: any, diff: number) => {
     const newQty = item.quantity + diff;
     if (newQty <= 0) {
       removeFromCart(item.id, item.variantId);
       return;
     }
-    updateQuantity(item.id, item.variantId, newQty);
+    const itemKey = `${item.id}-${item.variantId}`;
+    setUpdatingItemId(itemKey);
+    setTimeout(() => {
+      updateQuantity(item.id, item.variantId, newQty);
+      setUpdatingItemId(null);
+    }, 400);
   };
 
   const deleteItem = (item: any) => {
@@ -146,10 +155,19 @@ const CheckoutPage = () => {
     onSuccess: (response: any) => {
       toast.success(response?.message || "Order placed successfully");
       setCouponCode("");
+
+      if (response?.data?.isGuestOrder && response?.data?.guestToken) {
+        setGuestOrderToken(response.data.guestToken);
+      }
+
       if (response?.data?.gatewayUrl) {
         window.location.href = `${response?.data?.gatewayUrl}`;
       } else {
-        window.location.href = "/account/orders";
+        if (response?.data?.isGuestOrder) {
+          window.location.href = "/guest-order";
+        } else {
+          window.location.href = "/account/orders";
+        }
       }
     },
     onError: (error: any) => {
@@ -157,7 +175,17 @@ const CheckoutPage = () => {
         error?.response?.status ||
         error?.response?.data?.statusCode ||
         error?.status;
-      if (status === 401 || status === 403) {
+      const errorKey = error?.response?.data?.key;
+
+      if (status === 409 && errorKey === "ACCOUNT_EXISTS") {
+        toast.error("An account with this email already exists. Please log in.");
+        window.location.href = "/account?redirect=/checkout";
+      } else if (status === 401 && errorKey === "ACCOUNT_EXISTS") {
+        toast.error("Guest checkout disabled or account exists. Please log in.");
+        window.location.href = "/account?redirect=/checkout";
+      } else if (status === 400 && errorKey === "ACCOUNT_DISABLED") {
+        toast.error("That email has been disabled. Please contact support.");
+      } else if (status === 401 || status === 403) {
         toast.error("Please login to place an order");
         window.location.href = "/account";
       } else {
@@ -603,7 +631,7 @@ const CheckoutPage = () => {
                             href={`/product/${item?.product?.slug}`}
                             className="flex-shrink-0"
                           >
-                            <img
+                            <CustomImage
                               src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${
                                 item?.product?.images?.[0]?.image ||
                                 item?.product?.image1
@@ -648,7 +676,13 @@ const CheckoutPage = () => {
                                 >
                                   −
                                 </button>
-                                <span className="text-sm">{item.quantity}</span>
+                                <div className="w-6 flex items-center justify-center">
+                                  {updatingItemId === `${item.id}-${item.variantId}` ? (
+                                    <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                                  ) : (
+                                    <span className="text-sm">{item.quantity}</span>
+                                  )}
+                                </div>
                                 <button
                                   onClick={() => changeQty(item, 1)}
                                   className="px-2 py-1 hover:bg-gray-100 transition-colors text-gray-600"

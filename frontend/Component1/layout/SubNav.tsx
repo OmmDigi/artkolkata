@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { Menu, X } from "lucide-react";
+import CustomImage from "@/Component1/CustomImage";
 
 interface ApiCategory {
   id?: string | number;
@@ -155,7 +156,7 @@ export default function SubNav() {
                 className="w-full flex items-center gap-0 p-1 hover:bg-gray-200 transition rounded-md border border-transparent hover:border-gray-200 text-left"
               >
                 {category.image ? (
-                  <img
+                  <CustomImage
                     src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
                     alt={category.alt_tag || category.name || "Category"}
                     className="w-12 h-12 object-cover rounded shadow-sm"

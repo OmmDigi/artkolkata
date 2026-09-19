@@ -23,7 +23,7 @@ interface SortOption {
 const ProductsPage = () => {
   // paging + filter + sort states
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(100);
   const [sortBy, setSortBy] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [sortedProducts, setSortedProducts] = useState<Product[]>([]);
@@ -84,6 +84,7 @@ const ProductsPage = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(currentPage));
     params.set("limit", String(limit));
+    params.set("variants", "true");
     const query = params.toString();
     return `/api/v1/products${query ? `?${query}` : ""}`;
   };
@@ -419,6 +420,7 @@ const ProductsPage = () => {
                   <option value={10}>10 per page</option>
                   <option value={20}>20 per page</option>
                   <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
                 </select>
               </div>
 

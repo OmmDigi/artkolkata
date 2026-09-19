@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
+import CustomImage from "@/Component1/CustomImage";
 
 const LANGUAGES = [
   { code: "en", label: "English - EN" },
@@ -88,7 +89,7 @@ export default function LanguageSelector() {
           {isLoading ? (
             <Loader2 size={18} className="animate-spin" />
           ) : (
-            <img src="https://flagcdn.com/w20/in.png" width="18" alt="Indian Flag" />
+            <CustomImage src="https://flagcdn.com/w20/in.png" width="18" alt="Indian Flag" />
           )}
           <span className="font-medium uppercase hidden xl:block">{currentLang}</span>
           <ChevronDown size={14} className={`transition ${isOpen ? "rotate-180" : ""}`} />

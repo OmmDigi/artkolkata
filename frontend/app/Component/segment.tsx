@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import CustomImage from "@/Component1/CustomImage";
 
 interface Category {
   id: number;
@@ -60,7 +61,7 @@ const Segment: React.FC<CategoryImageProps> = ({
                       </div>
                     </div>
                     <div className="cover-img flex-shrink-0 w-full overflow-hidden">
-                      <img
+                      <CustomImage
                         src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.imageUrl}`}
                         alt={category.name}
                         className="w-full h-auto object-cover

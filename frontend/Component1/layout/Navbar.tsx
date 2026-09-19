@@ -3,21 +3,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Heart,
-  User,
-  Search,
-  Menu,
-  X,
-  MapPin,
-} from "lucide-react";
+import { Heart, User, Search, Menu, X, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "../../store/useWishlistStore";
 import { useUserStore, useIsLoggedIn } from "../../store/useUserStore";
+import { useCartStore } from "../../store/useCartStore";
 import ShoppingCartSidebar from "@/app/Component/trending/ShoppingCartSidebar";
 import LanguageSelector from "@/app/Component/LanguageSelector";
 import { useSiteInfo } from "@/hooks/useSiteSettings";
+import CustomImage from "@/Component1/CustomImage";
 
 interface ApiCategory {
   id?: string | number;
@@ -34,6 +29,7 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const mobileSearchContainerRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -44,6 +40,10 @@ export default function Navbar() {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
+  useEffect(() => {
+    useCartStore.getState().hydrateCart();
+  }, []);
+
   const {
     data: searchResults,
     isLoading: isSearchLoading,
@@ -52,10 +52,11 @@ export default function Navbar() {
     queryKey: ["searchProducts", debouncedQuery],
     queryFn: () =>
       getRequest<any>(
-        `/api/v1/products?search=${encodeURIComponent(debouncedQuery!)}&limit=5`,
+        `/api/v1/products?search=${encodeURI(debouncedQuery!)}&limit=5`,
       ),
     enabled: !!debouncedQuery,
   });
+
   const [locationLabel, setLocationLabel] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [locationError, setLocationError] = useState("");
@@ -72,7 +73,8 @@ export default function Navbar() {
   const { data: siteInfo } = useSiteInfo();
 
   useEffect(() => {
-    const fullText = (siteInfo as any)?.ribbon_section?.text || "Festive sale 20% off";
+    const fullText =
+      (siteInfo as any)?.ribbon_section?.text || "Festive sale 20% off";
     let currentCharIdx = 0;
     let isDeleting = false;
     let timeoutId: NodeJS.Timeout;
@@ -123,7 +125,9 @@ export default function Navbar() {
       }
       if (
         searchContainerRef.current &&
-        !searchContainerRef.current.contains(target)
+        !searchContainerRef.current.contains(target) &&
+        (!mobileSearchContainerRef.current ||
+          !mobileSearchContainerRef.current.contains(target))
       ) {
         setSearchQuery("");
         setDebouncedQuery(null);
@@ -287,7 +291,7 @@ export default function Navbar() {
                 href="/"
                 className="text-2xl font-bold text-gray-900 transition pointer-events-auto"
               >
-                <img
+                <CustomImage
                   src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${siteInfo?.site_logo || "/Art-Kolkata-Logo.png"}`}
                   alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
                   className="h-12 md:h-16 object-contain"
@@ -377,9 +381,9 @@ export default function Navbar() {
                             >
                               <div className="flex items-center space-x-3 p-3">
                                 {category.image && (
-                                  <img
+                                  <CustomImage
                                     src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
-                                    alt={category.alt_tag || category.name}
+                                    alt={category.alt_tag || category.name || ""}
                                     className="w-16 h-16 object-cover rounded"
                                   />
                                 )}
@@ -426,16 +430,16 @@ export default function Navbar() {
                       </p>
                     ) : searchResults?.data?.length > 0 ? (
                       searchResults.data.map((item: any) => (
-                        <Link
+                        <button
                           key={item.id}
-                          href={`/product/${item.slug}`}
                           onClick={() => {
+                            router.push(`/product/${item.slug}`);
                             setSearchQuery("");
                             setDebouncedQuery(null);
                           }}
-                          className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
+                          className="flex items-center gap-3 w-full text-left p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                         >
-                          <img
+                          <CustomImage
                             src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image || item?.image1}`}
                             className="w-12 h-12 object-cover rounded border"
                             alt={item.name}
@@ -448,7 +452,7 @@ export default function Navbar() {
                               ₹{item.price}
                             </p>
                           </div>
-                        </Link>
+                        </button>
                       ))
                     ) : (
                       <p className="text-gray-600 p-3 text-sm">
@@ -559,7 +563,10 @@ export default function Navbar() {
           </div>
         </div>
         {/* Mobile Search Bar */}
-        <div className="md:hidden w-full px-4 pb-3 pt-1">
+        <div
+          ref={mobileSearchContainerRef}
+          className="md:hidden w-full px-4 pb-3 pt-1"
+        >
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-500 h-4 w-4" />
             <input
@@ -580,16 +587,17 @@ export default function Navbar() {
                   </p>
                 ) : searchResults?.data?.length > 0 ? (
                   searchResults.data.map((item: any) => (
-                    <Link
+                    <button
                       key={item.id}
-                      href={`/product/${item.slug}`}
                       onClick={() => {
+                        router.push(`/product/${item.slug}`);
                         setSearchQuery("");
                         setDebouncedQuery(null);
+                        setIsMenuOpen(false);
                       }}
-                      className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
+                      className="flex items-center gap-3 w-full text-left p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                     >
-                      <img
+                      <CustomImage
                         src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image || item?.image1}`}
                         className="w-12 h-12 object-cover rounded border"
                         alt={item.name}
@@ -600,7 +608,7 @@ export default function Navbar() {
                         </p>
                         <p className="text-xs text-gray-500">₹{item.price}</p>
                       </div>
-                    </Link>
+                    </button>
                   ))
                 ) : (
                   <p className="text-gray-600 p-3 text-sm">

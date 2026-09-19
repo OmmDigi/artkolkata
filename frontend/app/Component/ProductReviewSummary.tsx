@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Star, ShieldCheck } from "lucide-react";
 import { toast } from "react-toastify";
 import { postRequest, getRequest } from "@/lib/fetcher";
@@ -31,6 +31,7 @@ export default function ProductReviewSummary({
   const [page, setPage] = useState(1);
   const [starFilter, setStarFilter] = useState("All Ratings");
   const [sortBy, setSortBy] = useState("Most Recent");
+  const componentRef = useRef<HTMLDivElement>(null);
 
   const isLoggedIn = useIsLoggedIn();
   const router = useRouter();
@@ -56,7 +57,6 @@ export default function ProductReviewSummary({
       getRequest(`/api/v1/products/reviews?product_id=${fullProduct?.id}`),
     enabled: !!fullProduct?.id,
   });
-  console.log("productReviewData", productReviewData);
 
   const productReview = productReviewData as any;
 
@@ -151,7 +151,7 @@ export default function ProductReviewSummary({
   // Summary is already calculated above
 
   return (
-    <div className="max-w-9xl mx-auto py-12 px-4 font-sans bg-white">
+    <div ref={componentRef} className="max-w-9xl mx-auto py-12 px-4 font-sans bg-white">
       {/* Title Area */}
       <div className="text-center mb-12">
         <div className="flex items-center justify-center gap-3 mb-3">
@@ -276,19 +276,19 @@ export default function ProductReviewSummary({
           </div>
 
           {loadingProductReview ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-2">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
             </div>
           ) : paginatedReviews.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-2 text-gray-500">
               No reviews found for this filter.
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {paginatedReviews.map((review: Review) => (
                 <div
                   key={review.id}
-                  className="bg-white border border-gray-200 rounded-lg p-6 flex flex-col sm:flex-row gap-6"
+                  className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col sm:flex-row gap-6"
                 >
                   {/* User Info */}
                   <div className="flex items-start gap-4 sm:w-1/3 shrink-0">
@@ -362,7 +362,12 @@ export default function ProductReviewSummary({
               {totalPages > 1 && (
                 <div className="flex justify-center gap-4 mt-8">
                   <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    onClick={() => {
+                      setPage((p) => Math.max(1, p - 1));
+                      setTimeout(() => {
+                        componentRef.current?.scrollIntoView({ behavior: "smooth" });
+                      }, 100);
+                    }}
                     disabled={page === 1}
                     className={`px-3 py-1.5 border rounded-lg font-medium transition-colors text-sm ${page === 1 ? "border-gray-200 text-gray-400 cursor-not-allowed" : "border-orange-500 text-orange-500 hover:bg-orange-50"}`}
                   >
@@ -372,7 +377,12 @@ export default function ProductReviewSummary({
                     {page} of {totalPages}
                   </div>
                   <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() => {
+                      setPage((p) => Math.min(totalPages, p + 1));
+                      setTimeout(() => {
+                        componentRef.current?.scrollIntoView({ behavior: "smooth" });
+                      }, 100);
+                    }}
                     disabled={page === totalPages}
                     className={`px-3 py-1.5 border rounded-lg font-medium transition-colors text-sm ${page === totalPages ? "border-gray-200 text-gray-400 cursor-not-allowed" : "border-orange-500 text-orange-500 hover:bg-orange-50"}`}
                   >

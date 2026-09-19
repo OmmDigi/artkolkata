@@ -14,6 +14,7 @@ import ShoppingCartSidebar from "@/app/Component/trending/ShoppingCartSidebar";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "@/store/useWishlistStore";
+import CustomImage from "@/Component1/CustomImage";
 
 interface ApiCategory {
   id?: string | number;
@@ -135,7 +136,7 @@ const MobileBottomNav = () => {
                     >
                       <div className="w-20 h-20 rounded-sm bg-gray-100 overflow-hidden border border-gray-200">
                         {category.image ? (
-                          <img
+                          <CustomImage
                             src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
                             alt={category.alt_tag ?? categoryName}
                             className="w-full h-full object-cover"

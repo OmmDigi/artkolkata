@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { X, Heart } from "lucide-react";
 import Link from "next/link";
 import { useWishlistStore } from "@/store/useWishlistStore";
+import CustomImage from "@/Component1/CustomImage";
 
 interface WishlistItem {
   id: number;
@@ -119,7 +120,7 @@ const WishlistPage = () => {
                         }
                         className="block"
                       >
-                        <img
+                        <CustomImage
                           src={
                             item.image1 ||
                             item.image ||

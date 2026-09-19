@@ -1,6 +1,7 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
+import CustomImage from "@/Component1/CustomImage";
 
 interface BannerProps {
   backgroundImage?: string;
@@ -45,7 +46,7 @@ const BodyBanner: React.FC<BannerProps> = ({
 
           {/* Image */}
           {/* <div className="w-full  mb-8">
-            <img
+            <CustomImage
               src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${imageUrl}`}
               alt="Product showcase"
               className="w-full h-full"

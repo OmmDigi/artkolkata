@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, FC, ChangeEvent, FormEvent } from "react";
 import { toast } from "react-toastify";
+import { useCartStore } from "../../../../store/useCartStore";
 import { useUserStore } from "../../../../store/useUserStore";
 
 interface SignInProps {
@@ -67,12 +68,13 @@ const SignIn: FC<SignInProps> = ({
         body: loginData as any,
       }),
 
-    onSuccess: (res: LoginResponse) => {
+    onSuccess: async (res: LoginResponse) => {
       setUser({
         token: res.data.refreshToken,
         name: res.data.user?.name,
         email: res.data.user?.email,
       });
+      await useCartStore.getState().mergeGuestCart();
       const redirectUrl = searchParams.get("redirect") || "/";
       router.push(redirectUrl);
       toast.success("Signed in successfully!");

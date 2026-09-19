@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Heart, Eye, Scale } from "lucide-react";
 import { getRequest } from "@/lib/fetcher";
 import { useQuery } from "@tanstack/react-query";
 import ProductCard from "./trending/ProductCard";
+import CustomImage from "@/Component1/CustomImage";
 
 interface Product {
   id: number;
@@ -71,7 +72,7 @@ export default function NewDesign() {
           <div className="relative   overflow-hidden bg-gray-100 h-full  flex items-center justify-center md:sticky md:top-30 md:h-fit ">
             <div className="text-center group relative py-10 ">
               <div className="h-150 overflow-hidden   relative">
-                <img
+                <CustomImage
                   alt="apollotran.com"
                   src="https://apollotran.com/demo/at_auros/themes/at_auros/assets/img/modules/appagebuilder/icon/h1-bn-3.jpg"
                   className="w-full h-full object-cover transition-transform duration-300 ease-in-out scale-110 group-hover:scale-130"

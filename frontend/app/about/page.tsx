@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle, Globe, Settings, Shield } from "lucide-react";
 import Image from "next/image";
+import CustomImage from "@/Component1/CustomImage";
 
 function AnimatedCounter({
   end,
@@ -161,7 +162,7 @@ export default function AboutPage() {
             </p>
           </div>
           <div className="relative h-96 md:h-full min-h-[400px] rounded-2xl overflow-hidden shadow-xl">
-            <img
+            <CustomImage
               src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/about/office.png`}
               alt="Art Kolkata Office"
               className="w-full h-full object-cover"
@@ -174,7 +175,7 @@ export default function AboutPage() {
       <section className="py-10 md:py-20 px-5 bg-gray-50">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
           <div className="relative h-96 md:h-full min-h-[400px] rounded-2xl overflow-hidden order-last md:order-first shadow-xl">
-            <img
+            <CustomImage
               src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/about/Factory final.png`}
               alt="Art Kolkata Factory"
               className="w-full h-full object-cover"
@@ -301,7 +302,7 @@ export default function AboutPage() {
                 className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 group"
               >
                 <div className="relative h-80 overflow-hidden bg-gradient-to-b from-gray-100 to-gray-200 flex justify-center items-end pt-4">
-                  <img
+                  <CustomImage
                     src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${member.image}`}
                     alt={member.name}
                     className="w-auto h-[95%] object-cover group-hover:scale-105 transition-transform duration-500 drop-shadow-xl"

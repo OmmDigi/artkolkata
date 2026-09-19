@@ -64,6 +64,7 @@ export const mapApiProduct = (item: ApiProduct): Product => {
     price,
     originalPrice,
     tag: item.tag || item.tags?.[0] || undefined,
+    product_variants: item.product_variants || [],
   };
 };
 
@@ -76,7 +77,8 @@ export function ProductCard({ product }: { product: Product }) {
   const { addToCart, removeFromCart, isInCart } = useCartStore();
 
   const isInWishlist = wishlist.some((item) => item.id === product.id);
-  const inCart = isInCart(product.id, null);
+  const firstVariant = (product as any).product_variants?.[0] || null;
+  const inCart = isInCart(product.id, firstVariant?.id || null);
 
   const handleAction = (type: "cart" | "wish") => {
     setLoadingIcon(type);
@@ -85,9 +87,9 @@ export function ProductCard({ product }: { product: Product }) {
       if (type === "wish") toggleWishlist(product);
       if (type === "cart") {
         if (inCart) {
-          removeFromCart(product.id, null);
+          removeFromCart(product.id, firstVariant?.id || null);
         } else {
-          addToCart(product, null, 1);
+          addToCart(product, firstVariant?.id || null, 1);
         }
       }
     }, 150);
@@ -213,8 +215,9 @@ export function ProductCard({ product }: { product: Product }) {
                 price: Number(product.price ?? 0),
                 slug: product.href.split("/product/")[1],
                 images: [{ image: product.image1 }, { image: product.image2 }],
+                product_variants: (product as any).product_variants || [],
               };
-              addToCart(productObj as any, null, 1);
+              addToCart(productObj as any, firstVariant?.id || null, 1);
             }
             router.push("/checkout");
           }}

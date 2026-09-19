@@ -6,6 +6,7 @@ import { getRequest } from "@/lib/fetcher";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, PlayCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import CustomImage from "@/Component1/CustomImage";
 
 const getYoutubeId = (url: string) => {
   if (!url) return null;
@@ -59,7 +60,7 @@ const renderEditorJsBlocks = (blocks: any[]) => {
         );
       case "image":
         return (
-          <img
+          <CustomImage
             key={block.id || index}
             src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${block.data.file?.url}`}
             alt={block.data.caption || "Image"}
@@ -163,7 +164,7 @@ export default function SingleBlogPage() {
 
           <div className="flex items-center text-gray-500 text-sm mt-8">
             {blog.author?.image && (
-              <img
+              <CustomImage
                 src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blog.author.image}`}
                 alt={blog.author.name}
                 className="w-10 h-10 rounded-full object-cover mr-3 border border-gray-200"
@@ -216,7 +217,7 @@ export default function SingleBlogPage() {
                         className="w-full h-full relative cursor-pointer group"
                         onClick={() => setPlayingVideoId(item.id)}
                       >
-                        <img
+                        <CustomImage
                           src={`https://img.youtube.com/vi/${getYoutubeId(item.image)}/maxresdefault.jpg`}
                           alt="Video Thumbnail"
                           className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
@@ -229,7 +230,7 @@ export default function SingleBlogPage() {
                       </div>
                     )
                   ) : (
-                    <img
+                    <CustomImage
                       src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item.image}`}
                       alt={item.alt_tag || "Blog Media"}
                       className="w-full h-full object-contain"
@@ -314,7 +315,7 @@ export default function SingleBlogPage() {
         <div className="max-w-3xl mx-auto px-5 mt-16 pt-12 border-t border-gray-200">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 bg-gray-50 p-8 rounded-2xl">
             {blog.author.image && (
-              <img
+              <CustomImage
                 src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blog.author.image}`}
                 alt={blog.author.name}
                 className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md flex-shrink-0"
