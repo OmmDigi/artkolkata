@@ -5,6 +5,7 @@ import { Home } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 export default function BlogPage() {
   const { data, isLoading, isError } = useQuery({
@@ -75,7 +76,7 @@ export default function BlogPage() {
             >
               <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
                 <CustomImage
-                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blog.cover_image || "/placeholder-image.jpg"}`}
+                  src={processImageUrl(blog.cover_image || "/placeholder-image.jpg")}
                   alt={blog.title}
                   className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                 />

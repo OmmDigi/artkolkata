@@ -385,7 +385,7 @@ export default function Navbar() {
                               <div className="flex items-center space-x-3 p-3">
                                 {category.image && (
                                   <CustomImage
-                                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
+                                    src={processImageUrl(category.image)}
                                     alt={
                                       category.alt_tag || category.name || ""
                                     }
@@ -445,7 +445,7 @@ export default function Navbar() {
                           className="flex items-center gap-3 w-full text-left p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                         >
                           <CustomImage
-                            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image || item?.image1}`}
+                            src={processImageUrl(item?.images?.[0]?.image || item?.image1)}
                             className="w-12 h-12 object-cover rounded border"
                             alt={item.name}
                           />
@@ -603,7 +603,7 @@ export default function Navbar() {
                       className="flex items-center gap-3 w-full text-left p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                     >
                       <CustomImage
-                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image || item?.image1}`}
+                        src={processImageUrl(item?.images?.[0]?.image || item?.image1)}
                         className="w-12 h-12 object-cover rounded border"
                         alt={item.name}
                       />

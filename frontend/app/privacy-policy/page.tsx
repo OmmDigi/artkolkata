@@ -1,7 +1,7 @@
-import React from "react";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import EditorJsDescription from "@/app/Component/EditorJsDescription";
+import { unstable_noStore } from "next/cache";
 
 export const revalidate = 300;
 
@@ -25,6 +25,7 @@ async function getPage(slug: string) {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
+  unstable_noStore();
   const page = await getPage("privacy-policy");
 
   if (!page) {

@@ -6,6 +6,7 @@ import Image from "next/image";
 
 import { useBanners } from "@/hooks/useSiteSettings";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 export default function HeroSection() {
   const { data: banners } = useBanners();
@@ -47,14 +48,18 @@ export default function HeroSection() {
             <>
               {banner.mobile_image_url && (
                 <CustomImage
-                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${banner.mobile_image_url}`}
+                  src={processImageUrl(banner.mobile_image_url)}
+                  fallbackSrc={processImageUrl(banner.mobile_image_url)}
                   alt={banner.alt_text ?? "Banner"}
                   className={`${imageClass} md:hidden block`}
+                  sizes="100vw"
                 />
               )}
               <CustomImage
-                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${banner.image_url}`}
+                src={processImageUrl(banner.image_url)}
+                fallbackSrc={processImageUrl(banner.image_url)}
                 alt={banner.alt_text ?? "Banner"}
+                sizes="100vw"
                 className={`${imageClass} ${banner.mobile_image_url ? "hidden md:block" : "block"}`}
               />
             </>

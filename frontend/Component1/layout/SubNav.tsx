@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { Menu, X } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 interface ApiCategory {
   id?: string | number;
@@ -157,7 +158,7 @@ export default function SubNav() {
               >
                 {category.image ? (
                   <CustomImage
-                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${category.image}`}
+                    src={processImageUrl(category.image)}
                     alt={category.alt_tag || category.name || "Category"}
                     className="w-12 h-12 object-cover rounded shadow-sm"
                   />

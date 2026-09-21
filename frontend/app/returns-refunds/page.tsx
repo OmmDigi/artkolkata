@@ -1,7 +1,7 @@
-import React from "react";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import EditorJsDescription from "@/app/Component/EditorJsDescription";
+import { unstable_noStore } from "next/cache";
 
 export const revalidate = 300;
 
@@ -41,6 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function ReturnAndRefundPolicy() {
+  unstable_noStore();
   const page = await getPage("return-and-refund-policy");
 
   if (!page) {

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { processImageUrl } from "@/lib/utils";
 
 const HeroSlideshow = () => {
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -69,7 +70,7 @@ const HeroSlideshow = () => {
           >
             {/* Background Image */}
             <Image
-              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${slide.image}`}
+              src={processImageUrl(slide.image)}
               alt={slide.title}
               fill
               priority={index === 0}

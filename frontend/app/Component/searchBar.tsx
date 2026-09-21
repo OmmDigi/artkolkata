@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { getRequest } from "@/lib/fetcher";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 export default function SearchBar() {
   const [query, setQuery] = useState("");
@@ -30,7 +31,7 @@ export default function SearchBar() {
     queryKey: ["search-products", debouncedQuery],
     queryFn: () =>
       getRequest(
-        `/api/v1/products?search=${encodeURIComponent(debouncedQuery!)}&limit=5`
+        `/api/v1/products?search=${encodeURIComponent(debouncedQuery!)}&limit=5&variants=true`
       ),
     enabled: !!debouncedQuery, // 🔥 only fetch when query exists
     staleTime: 500,
@@ -89,7 +90,7 @@ export default function SearchBar() {
                 className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg transition cursor-pointer"
               >
                 <CustomImage
-                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.[0]?.image}`}
+                  src={processImageUrl(item?.images?.[0]?.image)}
                   className="w-12 h-12 object-cover rounded-lg border"
                   alt={item.name}
                 />

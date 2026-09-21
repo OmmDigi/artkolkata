@@ -9,6 +9,7 @@ import { PiShoppingCartSimpleLight } from "react-icons/pi";
 import { useIsLoggedIn } from "@/hooks/useUserStore";
 import { useRouter } from "next/navigation";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 interface CartVariation {
   name: string;
@@ -57,17 +58,13 @@ const ShoppingCartSidebar = ({
   const deleteItem = (item: any) => {
     removeFromCart(item.id, item.variantId);
   };
-  const subtotal = isMounted ? cart.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0,
-  ) : 0;
+  const subtotal = isMounted
+    ? cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+    : 0;
 
-  const totalItems = isMounted ? cart.reduce((sum, item) => sum + item.quantity, 0) : 0;
-  const getFullUrl = (url: string) => {
-    if (!url) return "";
-    if (url.startsWith("http") || url.startsWith("//")) return url;
-    return `${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL || ""}${url}`;
-  };
+  const totalItems = isMounted
+    ? cart.reduce((sum, item) => sum + item.quantity, 0)
+    : 0;
   const portalContent = (
     <>
       {/* Overlay */}
@@ -111,102 +108,106 @@ const ShoppingCartSidebar = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {cart?.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-4 pb-4 border-b border-gray-100 last:border-0"
-                  >
-                    {/* Product Image */}
-                    <Link
-                      href={`/product/${item?.product?.slug}`}
-                      className="flex-shrink-0"
+                {cart?.map((item, index) => {
+                  const processedImageUrl = processImageUrl(
+                    item?.product?.images?.[0]?.image || item?.product?.image1,
+                  );
+                  return (
+                    <div
+                      key={index}
+                      className="flex gap-4 pb-4 border-b border-gray-100 last:border-0"
                     >
-                      <CustomImage
-                        src={getFullUrl(
-                          item?.product?.images?.[0]?.image ||
-                            item?.product?.image1,
-                        )}
-                        alt={
-                          item?.product?.images?.[0]?.alt_tag ||
-                          item?.product?.name
-                        }
-                        sizes="80px"
-                        className="w-20 h-24 object-cover rounded"
-                      />
-                    </Link>
-
-                    {/* Product Details */}
-                    <div className="flex-1 min-w-0">
+                      {/* Product Image */}
                       <Link
                         href={`/product/${item?.product?.slug}`}
-                        className="text-sm font-medium text-gray-900 hover:text-pink-600 transition-colors block mb-2"
+                        className="flex-shrink-0"
                       >
-                        {/* {item?.product?.name} */}
-                        {item?.product?.name?.length > 30
-                          ? `${item?.product?.name.slice(0, 30)}...`
-                          : item?.product?.name}{" "}
+                        <CustomImage
+                          src={processedImageUrl}
+                          alt={
+                            item?.product?.images?.[0]?.alt_tag ||
+                            item?.product?.name
+                          }
+                          sizes="80px"
+                          fallbackSrc={processedImageUrl}
+                          className="w-20 h-24 object-cover rounded"
+                        />
                       </Link>
-                      <p></p>
-                      {/* Variations */}
-                      {/* {item.product?.variations.find(item.)} */}
-                      {item?.product?.variations &&
-                        item?.product?.variations.length > 0 && (
-                          <dl className="text-xs text-gray-600 space-y-1 mb-3">
-                            {item?.product?.variations.map(
-                              (variation: any, index: number) => (
-                                <div key={index} className="flex gap-1">
-                                  <dt className="font-medium">
-                                    {variation.name}:
-                                  </dt>
-                                  <dd>{variation.value}</dd>
-                                </div>
-                              ),
-                            )}
-                          </dl>
-                        )}
-                      {/* Quantity and Price */}
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center border border-gray-300 rounded">
-                          <button
-                            onClick={() => changeQty(item, -1)}
-                            className="px-2 py-1 hover:bg-gray-100 transition-colors text-gray-600"
-                            aria-label="Decrease quantity"
-                          >
-                            −
-                          </button>
-                          <div className="w-6 flex items-center justify-center">
-                            {updatingItemId === `${item.id}-${item.variantId}` ? (
-                              <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <span className="text-sm text-gray-700">
-                                {item.quantity}
-                              </span>
-                            )}
+
+                      {/* Product Details */}
+                      <div className="flex-1 min-w-0">
+                        <Link
+                          href={`/product/${item?.product?.slug}`}
+                          className="text-sm font-medium text-gray-900 hover:text-pink-600 transition-colors block mb-2"
+                        >
+                          {/* {item?.product?.name} */}
+                          {item?.product?.name?.length > 30
+                            ? `${item?.product?.name.slice(0, 30)}...`
+                            : item?.product?.name}{" "}
+                        </Link>
+                        <p></p>
+                        {/* Variations */}
+                        {/* {item.product?.variations.find(item.)} */}
+                        {item?.product?.variations &&
+                          item?.product?.variations.length > 0 && (
+                            <dl className="text-xs text-gray-600 space-y-1 mb-3">
+                              {item?.product?.variations.map(
+                                (variation: any, index: number) => (
+                                  <div key={index} className="flex gap-1">
+                                    <dt className="font-medium">
+                                      {variation.name}:
+                                    </dt>
+                                    <dd>{variation.value}</dd>
+                                  </div>
+                                ),
+                              )}
+                            </dl>
+                          )}
+                        {/* Quantity and Price */}
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center border border-gray-300 rounded">
+                            <button
+                              onClick={() => changeQty(item, -1)}
+                              className="px-2 py-1 hover:bg-gray-100 transition-colors text-gray-600"
+                              aria-label="Decrease quantity"
+                            >
+                              −
+                            </button>
+                            <div className="w-6 flex items-center justify-center">
+                              {updatingItemId ===
+                              `${item.id}-${item.variantId}` ? (
+                                <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                <span className="text-sm text-gray-700">
+                                  {item.quantity}
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => changeQty(item, 1)}
+                              className="px-2 py-1 hover:bg-gray-100 transition-colors text-gray-600"
+                              aria-label="Increase quantity"
+                            >
+                              +
+                            </button>
                           </div>
-
-                          <button
-                            onClick={() => changeQty(item, 1)}
-                            className="px-2 py-1 hover:bg-gray-100 transition-colors text-gray-600"
-                            aria-label="Increase quantity"
-                          >
-                            +
-                          </button>
+                          <span className="text-sm font-medium text-gray-900">
+                            ₹{(item?.product?.price * item.quantity).toFixed(2)}
+                          </span>
                         </div>
-                        <span className="text-sm font-medium text-gray-900">
-                          ₹{(item?.product?.price * item.quantity).toFixed(2)}
-                        </span>
                       </div>
-                    </div>
 
-                    {/* Remove Button */}
-                    <button
-                      onClick={() => deleteItem(item)}
-                      className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-800 text-red-600 cursor-pointer"
-                    >
-                      <TrashIcon className="text-lg" />
-                    </button>
-                  </div>
-                ))}
+                      {/* Remove Button */}
+                      <button
+                        onClick={() => deleteItem(item)}
+                        className="flex-shrink-0 self-start p-2  rounded transition-colors text-gray-400 hover:text-red-800 text-red-600 cursor-pointer"
+                      >
+                        <TrashIcon className="text-lg" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

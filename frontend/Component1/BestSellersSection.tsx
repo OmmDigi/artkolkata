@@ -7,6 +7,7 @@ import { TrendingUp } from "lucide-react";
 import ScrollingText from "./UI/ScrollingText";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
+import { processImageUrl } from "@/lib/utils";
 
 interface BestSellerProduct {
   id: any;
@@ -101,7 +102,7 @@ function BestSellerCard({ product }: { product: BestSellerProduct }) {
         {/* Image Container */}
         <div className="relative w-full h-full">
           <Image
-            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${hoveredImage ? product.image2 : product.image1}`}
+            src={processImageUrl(hoveredImage ? product.image2 : product.image1)}
             alt={product.name}
             fill
             className="object-cover transition-opacity duration-300"
@@ -125,7 +126,7 @@ function BestSellerCard({ product }: { product: BestSellerProduct }) {
             }`}
           >
             <Image
-              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${product.image1}`}
+              src={processImageUrl(product.image1)}
               alt={`${product.name} view 1`}
               width={32}
               height={32}
@@ -139,7 +140,7 @@ function BestSellerCard({ product }: { product: BestSellerProduct }) {
             }`}
           >
             <Image
-              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${product.image2}`}
+              src={processImageUrl(product.image2)}
               alt={`${product.name} view 2`}
               width={32}
               height={32}
@@ -191,7 +192,7 @@ export default function BestSellersSection() {
     queryKey: ["products-by-category", activeCategory],
     queryFn: () =>
       getRequest<{ data: ApiProduct[] }>(
-        `/api/v1/products?category=${activeCategory}`,
+        `/api/v1/products?category=${activeCategory}&variants=true`,
       ),
     enabled: Boolean(activeCategory),
   });

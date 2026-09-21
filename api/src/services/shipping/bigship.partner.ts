@@ -232,6 +232,11 @@ export class BigshipPartner implements IShippingPartner {
         orderId,
         orderNumber: order.order_number,
         category: isB2B ? "b2b" : "b2c",
+        // Set when the draft was created but the placement failed: the draft
+        // is sitting in the Bigship panel and can be placed or cancelled by
+        // hand there. Nothing is stored against the order, so a retry books a
+        // fresh draft rather than resuming this one.
+        draftOrderId: result.bigshipOrderId,
         error: result.error,
       });
       return { created: false, error: result.error };
@@ -298,13 +303,17 @@ export class BigshipPartner implements IShippingPartner {
   }
 
   // ============================================================
-  // CANCEL — Bigship cancels by AWB alone.
+  // CANCEL
+  //
+  // The outbound API cancels by CustomGlobalOrderId — the id stored on
+  // orders.partner_order_id — not by AWB, and only up to Rider-Assigned.
+  // An order that was never booked has nothing to cancel.
   // ============================================================
   async cancelShippingOrder(
     input: CancelShipmentInput,
   ): Promise<CancelShipmentResult> {
-    if (!input.waybill) return { success: true };
-    return BigshipClient.cancelOrder(input.waybill);
+    if (!input.partnerOrderId) return { success: true };
+    return BigshipClient.cancelOrder(input.partnerOrderId);
   }
 
   // ============================================================

@@ -41,8 +41,10 @@ services:
       - ./api/.env
     environment:
       - NODE_ENV=${NODE_ENV}
+      - REDIS_URL=redis://art_kolkata_redis_1:6379
     depends_on:
       - art_kolkata_postgres_1
+      - art_kolkata_redis_1
     volumes:
       - ./logs/api-logs:/app/logs
     networks:
@@ -64,9 +66,49 @@ services:
       - ./uploaded-files/private:/app/private
     depends_on:
       - art_kolkata_postgres_1
+      - art_kolkata_redis_1
     networks:
       - art_kolkata_newtork
       - shared_network
+
+  art_kolkata_redis_1:
+    image: redis:7.4-alpine
+    container_name: art_kolkata_redis_1
+    # Nothing in here is a source of truth, it is all rebuildable from
+    # postgres, so persistence is turned off on purpose : no RDB snapshots, no
+    # AOF, no volume to keep in sync or restore. A restart just starts cold and
+    # the next requests repopulate it.
+    #
+    # allkeys-lru instead of the default noeviction, because a cache that
+    # refuses writes when it fills up is worse than one that drops its coldest
+    # entries. Evicting a tag set only costs the entries under it their early
+    # invalidation, and they still expire on their own TTL.
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
+    # Deliberately not published to the host : it holds cached storefront
+    # responses and has no password, so it stays reachable only from inside the
+    # compose network.
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    # Only opu_network : shared_network is external, and an unauthenticated
+    # redis has no business being reachable from other stacks on this host.
+    # The api is the sole client and it sits on opu_network too.
+    networks:
+      - art_kolkata_newtork
 
   art_kolkata_postgres_1:
     image: postgres:17.4-alpine

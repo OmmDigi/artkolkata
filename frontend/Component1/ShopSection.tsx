@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "@/store/useWishlistStore";
 import { useCartStore } from "@/store/useCartStore";
+import { processImageUrl } from "@/lib/utils";
 
 export interface Product {
   id: any;
@@ -20,6 +21,7 @@ export interface Product {
   price: number;
   originalPrice: number;
   tag?: string;
+  product_variants : any[]
 }
 
 interface ApiCategory {
@@ -44,12 +46,12 @@ export interface ApiProduct {
   category_id?: string | number;
   tag?: string;
   tags?: string[];
+  variants?: any[]
 }
 
 export const mapApiProduct = (item: ApiProduct): Product => {
   const image1 =
-    item.images?.[0]?.image ??
-    "https://framerusercontent.com/images/dfydRQ0hineaQjqYigxtJ3UUI.jpg";
+    item.images?.[0]?.image ?? ""
   const image2 = item.images?.[1]?.image ?? image1;
   const price = item.selling_price ?? item.price ?? 0;
   const originalPrice =
@@ -64,7 +66,7 @@ export const mapApiProduct = (item: ApiProduct): Product => {
     price,
     originalPrice,
     tag: item.tag || item.tags?.[0] || undefined,
-    product_variants: item.product_variants || [],
+    product_variants: item.variants || [],
   };
 };
 
@@ -110,7 +112,7 @@ export function ProductCard({ product }: { product: Product }) {
         )}
         <Link href={product.href} className="block w-full h-full relative">
           <Image
-            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${hoveredImage ? product.image2 : product.image1}`}
+            src={processImageUrl(hoveredImage ? product.image2 : product.image1)}
             alt={product.name}
             fill
             className="object-cover transition-opacity duration-300"
@@ -267,7 +269,7 @@ export default function ShopSection() {
   } = useQuery({
     queryKey: ["all-products"],
     queryFn: () =>
-      getRequest<{ data: ApiProduct[] }>("/api/v1/products?limit=-1"),
+      getRequest<{ data: ApiProduct[] }>("/api/v1/products?limit=-1&variants=true"),
   });
 
   const allProducts = allProductsData?.data || [];

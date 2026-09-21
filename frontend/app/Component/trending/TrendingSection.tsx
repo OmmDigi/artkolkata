@@ -52,7 +52,7 @@ const TrendingSection = () => {
     refetch,
   } = useQuery({
     queryKey: ["all-products"],
-    queryFn: () => getRequest(`/api/v1/products`),
+    queryFn: () => getRequest(`/api/v1/products?variants=true`),
   });
 
   return (

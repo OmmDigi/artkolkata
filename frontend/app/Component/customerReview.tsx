@@ -2,6 +2,7 @@
 import React, { FC } from "react";
 import { Star, Quote } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 interface Testimonial {
   id: number;
@@ -74,7 +75,7 @@ const TestimonialComponent: FC<TestimonialProps> = ({
         <div className="flex items-center gap-4">
           {testimonial.image && (
             <CustomImage
-              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${testimonial.image}`}
+              src={processImageUrl(testimonial.image)}
               alt={testimonial.name}
               className="w-12 h-12 rounded-full object-cover"
             />
@@ -127,7 +128,7 @@ const TestimonialComponent: FC<TestimonialProps> = ({
             <div className="flex items-center gap-4">
               {currentTestimonial.image && (
                 <CustomImage
-                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${currentTestimonial.image}`}
+                  src={processImageUrl(currentTestimonial.image)}
                   alt={currentTestimonial.name}
                   className="w-12 h-12 rounded-full object-cover"
                 />
@@ -215,7 +216,7 @@ const TestimonialComponent: FC<TestimonialProps> = ({
               <div className="flex items-center gap-3 pt-6 border-t">
                 {testimonial.image && (
                   <CustomImage
-                    src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${testimonial.image}`}
+                    src={processImageUrl(testimonial.image)}
                     alt={testimonial.name}
                     className="w-10 h-10 rounded-full object-cover"
                   />

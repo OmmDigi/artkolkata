@@ -10,6 +10,7 @@ import { useCartStore } from "@/store/useCartStore";
 import AddressManager from "./AddressManager";
 import Link from "next/link";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 export default function Profile() {
   const [activeTab, setActiveTab] = useState("account");
@@ -209,7 +210,7 @@ export default function Profile() {
                                 className="flex gap-4"
                               >
                                 <CustomImage
-                                  src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item?.images?.image}`}
+                                  src={processImageUrl(item?.images?.image)}
                                   alt={item?.product_name}
                                   className="w-16 h-16 rounded object-cover border border-gray-100"
                                 />

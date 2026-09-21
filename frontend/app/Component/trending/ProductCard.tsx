@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useWishlistStore } from "@/store/useWishlistStore";
 import { useCartStore } from "@/store/useCartStore";
 import Image from "next/image";
+import { processImageUrl } from "@/lib/utils";
 
 const ProductCard = ({
   product,
@@ -60,7 +61,7 @@ const ProductCard = ({
           >
             <div className="relative w-full h-full">
               <Image
-                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${currentImage ? currentImage : image}`}
+                src={processImageUrl(currentImage ? currentImage : image)}
                 alt={product.name}
                 fill
                 className="object-cover transition-opacity duration-300"

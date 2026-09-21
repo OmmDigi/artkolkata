@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { processImageUrl } from "@/lib/utils";
 
 const promoSectionList = [
   {
@@ -36,7 +37,7 @@ export default function PromoSection() {
             <span>
               <Image
                 className={item.imageWidth}
-                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item.image}`}
+                src={processImageUrl(item.image)}
                 alt="Car Image"
                 height={512}
                 width={512}

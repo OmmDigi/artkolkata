@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, PlayCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 const getYoutubeId = (url: string) => {
   if (!url) return null;
@@ -62,7 +63,7 @@ const renderEditorJsBlocks = (blocks: any[]) => {
         return (
           <CustomImage
             key={block.id || index}
-            src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${block.data.file?.url}`}
+            src={processImageUrl(block.data.file?.url)}
             alt={block.data.caption || "Image"}
             className="w-full h-auto rounded-lg my-4"
           />
@@ -165,7 +166,7 @@ export default function SingleBlogPage() {
           <div className="flex items-center text-gray-500 text-sm mt-8">
             {blog.author?.image && (
               <CustomImage
-                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blog.author.image}`}
+                src={processImageUrl(blog.author.image)}
                 alt={blog.author.name}
                 className="w-10 h-10 rounded-full object-cover mr-3 border border-gray-200"
               />
@@ -231,7 +232,7 @@ export default function SingleBlogPage() {
                     )
                   ) : (
                     <CustomImage
-                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${item.image}`}
+                      src={processImageUrl(item.image)}
                       alt={item.alt_tag || "Blog Media"}
                       className="w-full h-full object-contain"
                     />
@@ -316,7 +317,7 @@ export default function SingleBlogPage() {
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6 bg-gray-50 p-8 rounded-2xl">
             {blog.author.image && (
               <CustomImage
-                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${blog.author.image}`}
+                src={processImageUrl(blog.author.image)}
                 alt={blog.author.name}
                 className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md flex-shrink-0"
               />

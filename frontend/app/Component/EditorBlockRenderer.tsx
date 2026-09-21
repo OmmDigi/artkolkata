@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { JSX } from 'react';
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 export type IBlock = {
   id?: string;
@@ -127,8 +128,7 @@ export const EditorBlockRenderer: React.FC<EditorBlockRendererProps> = ({ blocks
             const imgUrl = block.data.file?.url;
             if (!imgUrl) return null;
             
-            const isExternal = imgUrl.startsWith('http');
-            const finalUrl = isExternal ? imgUrl : `${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${imgUrl}`;
+            const finalUrl = processImageUrl(imgUrl);
 
             return (
               <figure key={key} className={`my-8 flex flex-col items-center ${block.data.withBackground ? 'bg-gray-100 p-4' : ''}`}>

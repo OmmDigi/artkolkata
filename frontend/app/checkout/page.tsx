@@ -24,6 +24,7 @@ import { setPendingOrder } from "@/lib/pendingOrder";
 import { useIsLoggedIn } from "@/hooks/useUserStore";
 import { useIsHydrated } from "@/hooks/useIsHydrated";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 const CheckoutPage = () => {
   const { data: siteInfo } = useSiteInfo();
@@ -344,7 +345,9 @@ const CheckoutPage = () => {
   const gstBusinessNameInput = gstDetails.businessName.trim();
 
   const gstNumberError =
-    showGstDetails && gstNumberInput.length > 0 && !GSTIN_PATTERN.test(gstNumberInput)
+    showGstDetails &&
+    gstNumberInput.length > 0 &&
+    !GSTIN_PATTERN.test(gstNumberInput)
       ? "Enter a valid 15 character GSTIN, for example 29ABCDE1234F1Z5"
       : null;
 
@@ -356,6 +359,9 @@ const CheckoutPage = () => {
 
   const pincode = shippingDetails.pincode.trim();
   const isPincodeReady = /^\d{6}$/.test(pincode);
+
+  const phone = shippingDetails.phone.trim();
+  const isPhoneReady = /^\d{10}$/.test(phone);
   const hasItems = cart.length > 0;
 
   const applyCoupon = async () => {
@@ -380,6 +386,11 @@ const CheckoutPage = () => {
 
     if (!isPincodeReady) {
       toast.error("Enter a 6 digit pincode to continue");
+      return;
+    }
+
+    if (!isPhoneReady) {
+      toast.error("Enter a 10 digit phone number to continue");
       return;
     }
 
@@ -510,6 +521,15 @@ const CheckoutPage = () => {
     >,
   ) => {
     const { name, value } = e.target;
+
+    // The phone number is dialled, so anything that is not a digit is dropped
+    // as it is typed and the field stops at the 10 digits a number here has.
+    if (name === "phone") {
+      const digitsOnly = value.replace(/\D/g, "").slice(0, 10);
+      setShippingDetails((prev) => ({ ...prev, phone: digitsOnly }));
+      return;
+    }
+
     setShippingDetails((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -674,7 +694,18 @@ const CheckoutPage = () => {
                                 ? "Email Address"
                                 : "Phone Number"
                           }
+                          type={name === "phone" ? "tel" : "text"}
+                          inputMode={name === "phone" ? "numeric" : undefined}
+                          pattern={name === "phone" ? "\\d{10}" : undefined}
+                          maxLength={name === "phone" ? 10 : undefined}
                         />
+                        {name === "phone" &&
+                          phone.length > 0 &&
+                          !isPhoneReady && (
+                            <p className="mt-1 text-xs text-red-500">
+                              Phone number must be 10 digits
+                            </p>
+                          )}
                       </div>
                     ))}
 
@@ -802,30 +833,30 @@ const CheckoutPage = () => {
                     return true;
                   })
                   .map((method) => (
-                  <label
-                    key={method}
-                    className={`flex flex-1 items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                      paymentMethod === method
-                        ? "border-gray-900 bg-gray-50 text-gray-900"
-                        : "border-gray-200 text-gray-500 hover:border-gray-300"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      value={method}
-                      checked={paymentMethod === method}
-                      onChange={(e) =>
-                        setPaymentMethod(e.target.value as "ONLINE" | "COD")
-                      }
-                      className="hidden"
-                    />
-                    <span className="font-semibold text-lg flex items-center gap-2">
-                      {method === "ONLINE" && "💳 Pay Online"}
-                      {method === "COD" && "💵 Cash on Delivery"}
-                    </span>
-                  </label>
-                ))}
+                    <label
+                      key={method}
+                      className={`flex flex-1 items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                        paymentMethod === method
+                          ? "border-gray-900 bg-gray-50 text-gray-900"
+                          : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="payment"
+                        value={method}
+                        checked={paymentMethod === method}
+                        onChange={(e) =>
+                          setPaymentMethod(e.target.value as "ONLINE" | "COD")
+                        }
+                        className="hidden"
+                      />
+                      <span className="font-semibold text-lg flex items-center gap-2">
+                        {method === "ONLINE" && "💳 Pay Online"}
+                        {method === "COD" && "💵 Cash on Delivery"}
+                      </span>
+                    </label>
+                  ))}
               </div>
             </div>
           </div>
@@ -855,10 +886,10 @@ const CheckoutPage = () => {
                             className="flex-shrink-0"
                           >
                             <CustomImage
-                              src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${
+                              src={processImageUrl(
                                 item?.product?.images?.[0]?.image ||
-                                item?.product?.image1
-                              }`}
+                                  item?.product?.image1,
+                              )}
                               alt={
                                 item?.product?.images?.[0]?.alt_tag ||
                                 item?.product?.name
@@ -900,10 +931,13 @@ const CheckoutPage = () => {
                                   −
                                 </button>
                                 <div className="w-6 flex items-center justify-center">
-                                  {updatingItemId === `${item.id}-${item.variantId}` ? (
+                                  {updatingItemId ===
+                                  `${item.id}-${item.variantId}` ? (
                                     <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"></div>
                                   ) : (
-                                    <span className="text-sm">{item.quantity}</span>
+                                    <span className="text-sm">
+                                      {item.quantity}
+                                    </span>
                                   )}
                                 </div>
                                 <button

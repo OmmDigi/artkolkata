@@ -40,7 +40,7 @@ export default function NewDesign() {
     refetch,
   } = useQuery({
     queryKey: ["all-products", activeCategory],
-    queryFn: () => getRequest(`/api/v1/products?category=${activeCategory}`),
+    queryFn: () => getRequest(`/api/v1/products?category=${activeCategory}&variants=true`),
   });
 
   const filteredProducts = (products as any)?.data;

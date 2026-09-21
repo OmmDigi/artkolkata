@@ -29,6 +29,7 @@ import { CollapsibleDescription } from "@/app/Component/CollapsibleDescription";
 import EditorJsDescription from "@/app/Component/EditorJsDescription";
 import ProductReviewSummary from "@/app/Component/ProductReviewSummary";
 import CustomImage from "@/Component1/CustomImage";
+import { processImageUrl } from "@/lib/utils";
 
 const ProductPage = () => {
   const [mainImage, setMainImage] = useState<any>(null);
@@ -171,7 +172,7 @@ const ProductPage = () => {
     }
   }, [product]);
 
-  // 🔥 Match Variant based on selected options
+  //  Match Variant based on selected options
   useEffect(() => {
     if ((product as any)?.data?.variants) {
       const match = (product as any)?.data?.variants.find((v: any) =>
@@ -197,7 +198,7 @@ const ProductPage = () => {
     queryKey: ["Most Popular Products"],
     queryFn: () =>
       getRequest<{ data: ApiProduct[] }>(
-        `/api/v1/products?tag=${encodeURI("Best Seller")}&limit=-1`,
+        `/api/v1/products?tag=${encodeURI("Best Seller")}&variants=true&limit=-1`,
       ),
   });
 
@@ -458,7 +459,7 @@ const ProductPage = () => {
                         }`}
                       >
                         <CustomImage
-                          src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(img)}`}
+                          src={processImageUrl(getThumbnail(img))}
                           className="w-full h-full object-contain bg-white"
                           alt=""
                         />
@@ -499,7 +500,7 @@ const ProductPage = () => {
                   {mainImage && (
                     <>
                       <CustomImage
-                        src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(mainImage)}`}
+                        src={processImageUrl(getThumbnail(mainImage))}
                         className="w-full h-full object-contain"
                         alt="Product"
                       />
@@ -597,7 +598,7 @@ const ProductPage = () => {
                               onClick={() => openModal(img)}
                             >
                               <CustomImage
-                                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${getThumbnail(img)}`}
+                                src={processImageUrl(getThumbnail(img))}
                                 className="w-full h-full object-contain bg-gray-100"
                                 alt={`Product ${idx}`}
                               />
@@ -1085,8 +1086,8 @@ const ProductPage = () => {
               <div className="flex overflow-x-auto gap-4 py-4 scrollbar-hide my-4 border-y border-gray-200">
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <CustomImage
-                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-cod.png`}
+                    <img
+                      src="/icons/icon-cod.png"
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Pay on Delivery"
                     />
@@ -1098,8 +1099,8 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <CustomImage
-                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-free-shipping.png`}
+                    <img
+                      src="/icons/icon-free-shipping.png"
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Free Delivery"
                     />
@@ -1111,8 +1112,8 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <CustomImage
-                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-secure-payment.png`}
+                    <img
+                      src="/icons/icon-secure-payment.png"
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Secure transaction"
                     />
@@ -1124,8 +1125,8 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <CustomImage
-                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-top-brand._CB562506657_.png`}
+                    <img
+                      src="/icons/icon-top-brand._CB562506657_.png"
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="Top Brand"
                     />
@@ -1137,8 +1138,8 @@ const ProductPage = () => {
 
                 <div className="flex flex-shrink-0 items-start text-center w-[90px] flex-col gap-2">
                   <div className="h-[35px] flex items-center justify-center w-full">
-                    <CustomImage
-                      src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}/icons/icon-warranty._CB485935626_.png`}
+                    <img
+                      src="/icons/icon-warranty._CB485935626_.png"
                       className="h-[35px] w-[35px] object-contain mx-auto"
                       alt="1 Year Warranty"
                     />
@@ -1260,7 +1261,7 @@ const ProductPage = () => {
               </div>
             ) : (
               <CustomImage
-                src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${zoomMedia.image}`}
+                src={processImageUrl(zoomMedia.image)}
                 className="w-full object-contain max-h-[85vh]"
                 alt="Zoomed product"
               />

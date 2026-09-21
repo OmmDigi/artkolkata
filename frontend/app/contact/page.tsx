@@ -16,6 +16,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
+import { processImageUrl } from "@/lib/utils";
 
 export default function page() {
   const { data: siteInfo } = useSiteInfo();
@@ -41,7 +42,7 @@ export default function page() {
     <main className="*:font-spartan bg-gray-50 text-black">
       <section className="w-full relative bg-gray-100  overflow-hidden">
         {/* <Image
-          src={`${process.env.NEXT_PUBLIC_UPLOAD_API_BASE_URL}${"bg-breadcrumb_1920x.jpg"}`}
+          src={processImageUrl("bg-breadcrumb_1920x.jpg")}
           alt="Banner image"
           className="size-full"
           height={1920}
