@@ -29,7 +29,7 @@ export default function SettingsPage() {
           <TabsTrigger value="ribbon">Ribbon Section</TabsTrigger>
           <TabsTrigger value="banners">Banners</TabsTrigger>
           <TabsTrigger value="shipping">Shipping Charge</TabsTrigger>
-          {/* <TabsTrigger value="policies">Policies</TabsTrigger> */}
+          <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general">

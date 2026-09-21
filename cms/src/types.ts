@@ -230,6 +230,8 @@ export interface IOrderList {
   payment_method: string | null;
   order_status: string;
   order_date: string;
+  // clock time the order was placed, in IST
+  order_time: string;
   // True when an invoice of either kind exists — uploaded from the CMS or
   // generated here — in which case invoice_url is set. The payment slip the app
   // renders is always available.
@@ -312,6 +314,9 @@ export interface OrderInfo {
   // the status it holds is untouched so restoring puts it straight back.
   is_draft: boolean;
   drafted_at: string | null;
+  // when the customer placed the order, in IST
+  order_date: string;
+  order_time: string;
   order_number: string;
   subtotal: string;
   discount: string;

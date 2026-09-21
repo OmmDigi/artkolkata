@@ -32,7 +32,7 @@ import type { IError, IResponse, OrderResponse } from "@/types";
 import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
-import { MoveLeft, Undo2 } from "lucide-react";
+import { Calendar, MoveLeft, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -131,6 +131,14 @@ export default function SingleOrderPage() {
             <MoveLeft className="mt-1" />
             <span>Single Order {data?.data.orderInfo.order_number}</span>
           </Link>
+
+          {orderInfo?.order_date ? (
+            <p className="text-sm text-gray-600 flex items-center gap-1.5">
+              <Calendar size={14} className="text-gray-500" />
+              Placed on {orderInfo.order_date}
+              {orderInfo.order_time ? ` at ${orderInfo.order_time}` : ""}
+            </p>
+          ) : null}
 
           {orderInfo?.is_draft ? (
             <p className="rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-sm px-3.5 py-2.5">

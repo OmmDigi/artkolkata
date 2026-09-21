@@ -644,7 +644,10 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
          o.payment_status,
          o.payment_method,
          o.order_status,
-         TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
+         TO_CHAR(o.created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') AS order_date,
+         -- the clock time the order was placed, read in IST like every other
+         -- time the CMS shows, so a late-night order is not dated a day off
+         TO_CHAR(o.created_at AT TIME ZONE 'Asia/Kolkata', 'HH12:MI AM') AS order_time,
          (o.created_at >= NOW() - INTERVAL '7 days') AS is_returnable,
          -- True for an invoice of either kind: one an admin uploaded from the
          -- CMS, or one the CMS generated. The payment slip is neither, and
@@ -696,6 +699,10 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         -- window while it is true; see setOrderDraft.
         COALESCE(is_draft, false) AS is_draft,
         TO_CHAR(drafted_at, 'DD Mon YYYY') AS drafted_at,
+        -- when the customer placed it, split so the CMS can show the date and
+        -- the clock time. Both read in IST, like every other time on screen.
+        TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') AS order_date,
+        TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'HH12:MI AM') AS order_time,
         order_number,
         subtotal,
         discount,

@@ -112,6 +112,11 @@ export default function OrderListingPage() {
                     <div className="flex items-center gap-1.5 text-gray-600">
                       <Calendar size={13} className="text-gray-500" />
                       {order.order_date}
+                      {order.order_time ? (
+                        <span className="text-gray-500">
+                          at {order.order_time}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-3.5 pt-1">
                       <Link
