@@ -137,7 +137,7 @@ const ProductPage = () => {
     getItemQty,
   } = useCartStore();
 
-  const { wishlist, toggleWishlist } = useWishlistStore();
+  const { toggleWishlist, isInWishlist } = useWishlistStore();
 
   const {
     isLoading: isLoadingSingleProduct,
@@ -274,7 +274,7 @@ const ProductPage = () => {
   const variantId = selectedVariant?.id || null;
   const itemAlreadyInCart = isInCart(fullProduct?.id, variantId);
   const cartQuantity = getItemQty(fullProduct?.id, variantId);
-  const inWishlist = wishlist.some((w: any) => w?.id === fullProduct?.id);
+  const inWishlist = isInWishlist(fullProduct?.id);
 
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.stopPropagation();

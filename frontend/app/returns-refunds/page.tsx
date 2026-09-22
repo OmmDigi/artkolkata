@@ -7,12 +7,12 @@ export const revalidate = 300;
 
 async function getPage(slug: string) {
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://192.168.0.184:8080";
+    const apiUrl = process.env.API_BASE_URL || "http://192.168.0.184:8080";
     const baseUrl = apiUrl.replace(/\/$/, "");
     const res = await fetch(
       `${baseUrl}/api/v1/pages/${slug}`,
       {
-        next: { revalidate: 300 },
+        next: { revalidate: 30 },
       }
     );
     if (!res.ok) return null;
@@ -66,7 +66,7 @@ export default async function ReturnAndRefundPolicy() {
         </div>
       ) : (
         <div className="mt-8 prose prose-gray max-w-none">
-          <EditorJsDescription data={page.content_json} />
+          <EditorJsDescription data={page.content_json} headingToDropdown = {false} />
         </div>
       )}
     </main>

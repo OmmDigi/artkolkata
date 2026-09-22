@@ -43,6 +43,7 @@ export default function Navbar() {
 
   useEffect(() => {
     useCartStore.getState().hydrateCart();
+    useWishlistStore.getState().hydrateWishlist();
   }, []);
 
   const {

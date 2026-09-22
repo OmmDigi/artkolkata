@@ -187,6 +187,15 @@ function BlockList({
 
 /* ----------------------------- block rendering ----------------------------- */
 
+const HEADING_SIZES: Record<number, string> = {
+  1: "text-xl md:text-2xl",
+  2: "text-lg md:text-xl",
+  3: "text-base md:text-lg",
+  4: "text-base",
+  5: "text-sm",
+  6: "text-sm",
+};
+
 function Block({ block }: { block: EditorBlock }) {
   const type = String(block.type ?? "").toLowerCase();
   const data = block.data ?? {};
@@ -203,14 +212,17 @@ function Block({ block }: { block: EditorBlock }) {
       );
     }
 
-    // A header only reaches here when it is nested inside a section - the top
-    // level ones are consumed as section titles before this point.
+    // In accordion mode a header only reaches here when it is nested inside a
+    // section - the top level ones are consumed as section titles before this
+    // point. In flat mode every header is rendered here.
     case "header":
     case "heading": {
       const level = Math.min(Math.max(Number(data.level ?? 2), 1), 6);
       const Tag = `h${level}` as "h1";
       return (
-        <Tag className="mt-3 mb-2 font-semibold text-gray-900 first:mt-0">
+        <Tag
+          className={`mt-5 mb-2 font-semibold text-gray-900 first:mt-0 ${HEADING_SIZES[level]}`}
+        >
           <Inline html={data.text} />
         </Tag>
       );
@@ -438,13 +450,30 @@ function AccordionItem({
   );
 }
 
-export function EditorJsDescription({ data }: { data: unknown }) {
+export function EditorJsDescription({
+  data,
+  headingToDropdown = true,
+}: {
+  data: unknown;
+  /** Turn every top level heading into a collapsible section. When false the
+   *  document is rendered straight through, headings included. */
+  headingToDropdown?: boolean;
+}) {
   const [openSectionIndex, setOpenSectionIndex] = useState(0);
 
-  const sections = useMemo(() => {
-    const doc = toDocument(data);
-    return buildSections(doc?.blocks ?? []);
-  }, [data]);
+  const blocks = useMemo(() => toDocument(data)?.blocks ?? [], [data]);
+  const sections = useMemo(() => buildSections(blocks), [blocks]);
+
+  if (!headingToDropdown) {
+    if (blocks.length === 0) return null;
+    return (
+      <div className="text-sm text-gray-700 leading-relaxed [&_a]:text-blue-600 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold">
+        {blocks.map((block, index) => (
+          <Block key={block.id ?? index} block={block} />
+        ))}
+      </div>
+    );
+  }
 
   if (sections.length === 0) return null;
 

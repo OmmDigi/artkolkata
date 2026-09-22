@@ -1,22 +1,14 @@
 "use client";
 
 import ContactUsForm from "@/Component1/ContactUsForm";
-import PromoSection from "@/Component1/PromoSection";
 import {
-  Mail,
-  Phone,
-  MapPin,
-  Search,
   Facebook,
   Twitter,
   Instagram,
   Youtube,
-  Dribbble,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
-import { processImageUrl } from "@/lib/utils";
 
 export default function page() {
   const { data: siteInfo } = useSiteInfo();

@@ -12,8 +12,8 @@ export function parsePagination(req: Request, limit?: number) {
   const reqLimit = req.query.limit?.toString();
   let LIMIT = limit || parseInt(reqLimit || "10");
 
-  if (LIMIT > 50) {
-    LIMIT = 50;
+  if (LIMIT > 100) {
+    LIMIT = 100;
   }
 
   const page = parseInt((req.query.page as string) || "1");

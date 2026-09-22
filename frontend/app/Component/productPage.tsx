@@ -55,7 +55,7 @@ const ProductsPage = () => {
     [],
   );
 
-  const { wishlist, toggleWishlist } = useWishlistStore();
+  const { toggleWishlist } = useWishlistStore();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -12,18 +12,26 @@ import { doValidate } from "../utils/doValidate";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { httpResponse } from "../utils/httpResponse";
 import { parsePagination } from "../utils/parsePagination";
-import { VAddToWishlist } from "../validator/wishlist.validator";
+import {
+  VAddToWishlist,
+  VMergeWishlist,
+} from "../validator/wishlist.validator";
 
 // a product pulled out of a private state should not keep showing up in the wishlist
 const PUBLIC_PRODUCT_STATUS = 1;
 
-export const getWishlist = asyncErrorHandler(
-  async (req: CustomRequest, res) => {
-    const { TO_STRING } = parsePagination(req);
-    const userId = req.token_info?.id;
-
-    const { rows } = await pool.query(
-      `
+/**
+ * The wishlist rows as the storefront reads them : public products only, newest
+ * first. `limitClause` is the pagination tail, empty for "everything", and
+ * `withVariants` attaches each product's variants the way the product cards
+ * expect them.
+ */
+const readWishlist = async (
+  userId: number | undefined,
+  { limitClause = "", withVariants = false } = {},
+) => {
+  const { rows } = await pool.query(
+    `
       SELECT
         p.id,
         p.sku_id,
@@ -66,20 +74,33 @@ export const getWishlist = asyncErrorHandler(
 
       ORDER BY w.created_at DESC, w.id DESC
 
-      ${TO_STRING}
+      ${limitClause}
       `,
-      [userId],
+    [userId],
+  );
+
+  if (withVariants) {
+    const variantsByProduct = await getProductsVariants(
+      rows.map((row) => row.id),
     );
 
-    if (req.query.variants === "true") {
-      const variantsByProduct = await getProductsVariants(
-        rows.map((row) => row.id),
-      );
+    rows.forEach((row) => {
+      row.variants = variantsByProduct[row.id] ?? [];
+    });
+  }
 
-      rows.forEach((row) => {
-        row.variants = variantsByProduct[row.id] ?? [];
-      });
-    }
+  return rows;
+};
+
+export const getWishlist = asyncErrorHandler(
+  async (req: CustomRequest, res) => {
+    const { TO_STRING } = parsePagination(req);
+    const userId = req.token_info?.id;
+
+    const rows = await readWishlist(userId, {
+      limitClause: TO_STRING,
+      withVariants: req.query.variants === "true",
+    });
 
     const { rows: countRows } = await pool.query(
       `SELECT COUNT(*) FROM wishlist w
@@ -153,6 +174,38 @@ export const removeFromWishlist = asyncErrorHandler(
     );
 
     httpResponse(res, 200, "Removed from wishlist");
+  },
+);
+
+/**
+ * The guest wishlist handed over at login. The two lists are unioned : a
+ * product the account already had stays, and one saved in this browser before
+ * signing in is added. Nothing is ever removed, and unknown product ids are
+ * skipped rather than failing the whole hand-over, because a wishlist saved
+ * months ago can name a product that no longer exists.
+ */
+export const mergeWishlist = asyncErrorHandler(
+  async (req: CustomRequest, res) => {
+    const value = doValidate(VMergeWishlist, req.body ?? {});
+    const userId = req.token_info?.id;
+
+    if (value.product_ids.length > 0) {
+      await pool.query(
+        `INSERT INTO wishlist (user_id, product_id)
+         SELECT $1, p.id
+         FROM products p
+         WHERE p.id = ANY($2::int[])
+         ON CONFLICT (user_id, product_id) DO NOTHING`,
+        [userId, value.product_ids],
+      );
+    }
+
+    httpResponse(
+      res,
+      200,
+      "Wishlist merged",
+      await readWishlist(userId, { withVariants: true }),
+    );
   },
 );
 

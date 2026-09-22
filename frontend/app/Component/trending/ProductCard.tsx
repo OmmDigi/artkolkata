@@ -21,11 +21,11 @@ const ProductCard = ({
   const router = useRouter();
   const [loadingIcon, setLoadingIcon] = useState(null);
   const [currentImage, setCurrentImage] = useState(image);
-  const { wishlist, toggleWishlist } = useWishlistStore();
+  const { toggleWishlist, isInWishlist } = useWishlistStore();
   const { addToCart, removeFromCart, isInCart } = useCartStore();
   const firstVariant = product?.variants?.[0] || null;
   const inCart = isInCart(product?.id, firstVariant?.id || null);
-  const inWishlist = wishlist.some((w) => w?.id === product?.id);
+  const inWishlist = isInWishlist(product?.id);
 
   const handleIconClick = (type: any) => {
     setLoadingIcon(type);

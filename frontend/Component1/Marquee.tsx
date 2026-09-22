@@ -1,12 +1,14 @@
 "use client";
 
 import { useSiteInfo } from "@/hooks/useSiteSettings";
+import Link from "next/link";
 
 const Marquee = () => {
   const { data: siteInfo } = useSiteInfo();
 
   const text =
     (siteInfo as any)?.ribbon_section?.text || "Festive sale 20% off";
+  const link = (siteInfo as any)?.ribbon_section?.link || "#";
 
   return (
     <nav className="w-full bg-black overflow-hidden">
@@ -53,7 +55,7 @@ const Marquee = () => {
       `}</style>
 
       <div className="marquee-container relative w-full overflow-hidden">
-        <div className="marquee-content">
+        <Link href={link} className="block marquee-content">
           {/* Original set */}
           {[...Array(5)].map((_, i) => (
             <div key={i} className="marquee-item">
@@ -66,7 +68,7 @@ const Marquee = () => {
               {text}
             </div>
           ))}
-        </div>
+        </Link>
       </div>
     </nav>
   );

@@ -5,6 +5,7 @@ import {
   getUserWishlist,
   getWishlist,
   getWishlistProductIds,
+  mergeWishlist,
   removeFromWishlist,
 } from "../controllers/wishlist.controller";
 import { isAuthenticated } from "../middleware/isAuthenticated";
@@ -26,6 +27,8 @@ wishlistRoutes
   .get("/", rateLimits.wishlist, isAuthenticated, getWishlist)
   .get("/ids", rateLimits.wishlist, isAuthenticated, getWishlistProductIds)
   .post("/", rateLimits.wishlist, isAuthenticated, addToWishlist)
+  // the guest wishlist handed over right after login
+  .post("/merge", rateLimits.wishlist, isAuthenticated, mergeWishlist)
   .delete("/", rateLimits.wishlist, isAuthenticated, clearWishlist)
   .delete(
     "/:product_id",

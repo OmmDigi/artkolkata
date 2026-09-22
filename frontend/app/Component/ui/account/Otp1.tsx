@@ -62,21 +62,8 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
           email: data.data.user?.email,
         });
 
-        // Run wishlist migration
-        const { fetchIds } = useWishlistStore.getState();
-        const saved = JSON.parse(localStorage.getItem("wishlist") || "[]");
-        for (const item of saved) {
-          if (item?.id) {
-            await postRequest({
-              url: "/api/v1/wishlist",
-              body: { product_id: Number(item.id) },
-            }).catch(() => {});
-          }
-        }
-        localStorage.removeItem("wishlist");
-        await fetchIds();
-
-        // same hand-over as the password login : the guest cart is merged in
+        // the guest wishlist and cart saved in this browser are handed over
+        await useWishlistStore.getState().mergeGuestWishlist();
         await useCartStore.getState().mergeGuestCart();
       }
 

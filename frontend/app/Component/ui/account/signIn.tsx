@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, FC, ChangeEvent, FormEvent } from "react";
 import { toast } from "react-toastify";
 import { useCartStore } from "../../../../store/useCartStore";
+import { useWishlistStore } from "../../../../store/useWishlistStore";
 import { useUserStore } from "../../../../store/useUserStore";
 
 interface SignInProps {
@@ -74,6 +75,7 @@ const SignIn: FC<SignInProps> = ({
         name: res.data.user?.name,
         email: res.data.user?.email,
       });
+      await useWishlistStore.getState().mergeGuestWishlist();
       await useCartStore.getState().mergeGuestCart();
       const redirectUrl = searchParams.get("redirect") || "/";
       router.push(redirectUrl);

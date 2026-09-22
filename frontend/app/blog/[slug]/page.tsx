@@ -1,13 +1,14 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, PlayCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
+import EditorJsDescription from "@/app/Component/EditorJsDescription";
 
 const getYoutubeId = (url: string) => {
   if (!url) return null;
@@ -17,63 +18,63 @@ const getYoutubeId = (url: string) => {
   return match && match[2].length === 11 ? match[2] : null;
 };
 
-const renderEditorJsBlocks = (blocks: any[]) => {
-  if (!blocks || !Array.isArray(blocks)) return null;
+// const renderEditorJsBlocks = (blocks: any[]) => {
+//   if (!blocks || !Array.isArray(blocks)) return null;
 
-  return blocks.map((block, index) => {
-    switch (block.type) {
-      case "header": {
-        const level = block.data.level || 2;
-        const HeaderTag = `h${level}` as
-          | "h1"
-          | "h2"
-          | "h3"
-          | "h4"
-          | "h5"
-          | "h6";
-        return (
-          <HeaderTag
-            key={block.id || index}
-            dangerouslySetInnerHTML={{ __html: block.data.text }}
-          />
-        );
-      }
-      case "paragraph":
-        return (
-          <p
-            key={block.id || index}
-            dangerouslySetInnerHTML={{ __html: block.data.text }}
-          />
-        );
-      case "list":
-        const ListTag = block.data.style === "ordered" ? "ol" : "ul";
-        return (
-          <ListTag key={block.id || index}>
-            {block.data.items.map((item: any, i: number) => (
-              <li
-                key={i}
-                dangerouslySetInnerHTML={{
-                  __html: typeof item === "string" ? item : item.content,
-                }}
-              />
-            ))}
-          </ListTag>
-        );
-      case "image":
-        return (
-          <CustomImage
-            key={block.id || index}
-            src={processImageUrl(block.data.file?.url)}
-            alt={block.data.caption || "Image"}
-            className="w-full h-auto rounded-lg my-4"
-          />
-        );
-      default:
-        console.warn("Unknown block type", block.type);
-        return null;
-    }
-  });
-};
+//   return blocks.map((block, index) => {
+//     switch (block.type) {
+//       case "header": {
+//         const level = block.data.level || 2;
+//         const HeaderTag = `h${level}` as
+//           | "h1"
+//           | "h2"
+//           | "h3"
+//           | "h4"
+//           | "h5"
+//           | "h6";
+//         return (
+//           <HeaderTag
+//             key={block.id || index}
+//             dangerouslySetInnerHTML={{ __html: block.data.text }}
+//           />
+//         );
+//       }
+//       case "paragraph":
+//         return (
+//           <p
+//             key={block.id || index}
+//             dangerouslySetInnerHTML={{ __html: block.data.text }}
+//           />
+//         );
+//       case "list":
+//         const ListTag = block.data.style === "ordered" ? "ol" : "ul";
+//         return (
+//           <ListTag key={block.id || index}>
+//             {block.data.items.map((item: any, i: number) => (
+//               <li
+//                 key={i}
+//                 dangerouslySetInnerHTML={{
+//                   __html: typeof item === "string" ? item : item.content,
+//                 }}
+//               />
+//             ))}
+//           </ListTag>
+//         );
+//       case "image":
+//         return (
+//           <CustomImage
+//             key={block.id || index}
+//             src={processImageUrl(block.data.file?.url)}
+//             alt={block.data.caption || "Image"}
+//             className="w-full h-auto rounded-lg my-4"
+//           />
+//         );
+//       default:
+//         console.warn("Unknown block type", block.type);
+//         return null;
+//     }
+//   });
+// };
 
 export default function SingleBlogPage() {
   const params = useParams();
@@ -297,10 +298,11 @@ export default function SingleBlogPage() {
 
       {/* Content */}
       <div className="max-w-3xl mx-auto px-5 mt-16 prose prose-lg prose-gray prose-a:text-[#02F8C5] hover:prose-a:opacity-80">
-        {blog.content_json?.blocks ? (
-          <div className="editorjs-content text-gray-700">
-            {renderEditorJsBlocks(blog.content_json.blocks)}
-          </div>
+        {blog.content_json ? (
+          // <div className="editorjs-content text-gray-700">
+          //   {renderEditorJsBlocks(blog.content_json.blocks)}
+          // </div>
+          <EditorJsDescription headingToDropdown = {false} data={blog.content_json} />
         ) : blog.content ? (
           <div dangerouslySetInnerHTML={{ __html: blog.content }} />
         ) : (

@@ -75,10 +75,10 @@ export function ProductCard({ product }: { product: Product }) {
   const [hoveredImage, setHoveredImage] = useState(false);
   const [loadingIcon, setLoadingIcon] = useState<"cart" | "wish" | null>(null);
 
-  const { wishlist, toggleWishlist } = useWishlistStore();
+  const { toggleWishlist, isInWishlist: isWishlisted } = useWishlistStore();
   const { addToCart, removeFromCart, isInCart } = useCartStore();
 
-  const isInWishlist = wishlist.some((item) => item.id === product.id);
+  const isInWishlist = isWishlisted(product.id);
   const firstVariant = (product as any).product_variants?.[0] || null;
   const inCart = isInCart(product.id, firstVariant?.id || null);
 
