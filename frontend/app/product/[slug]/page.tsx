@@ -190,7 +190,7 @@ const ProductPage = () => {
     queryKey: ["Related-Products", fullProduct?.category_slug],
     queryFn: () =>
       getRequest<{ data: ApiProduct[] }>(
-        `/api/v1/products?category=${fullProduct?.category_slug}`,
+        `/api/v1/products?category=${fullProduct?.category_slug}&limit=-1`,
       ),
     enabled: !!fullProduct?.category_slug,
   });

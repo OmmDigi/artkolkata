@@ -93,19 +93,26 @@ const parseSearchScope = (value: any): ProductSearchScope => {
  * typing — "clean" finds "Cleanser" — and tokens are AND'ed, so each extra
  * word narrows the result the way a search box is expected to behave.
  *
- * Stripping everything that is not a letter, digit or space is also what makes
- * the string safe to hand to to_tsquery: the tsquery operators (`&` `|` `!`
- * `:` `*` `(` `)`) cannot survive it, so a term like `a:* | b` becomes two
- * plain words instead of a query the shopper wrote themselves.
+ * The hyphen is kept because Postgres indexes "AK-195" as the lexemes `ak` and
+ * `-195` (the sign belongs to the number part), so dropping it would build
+ * `ak:* & 195:*` and miss the very product the shopper typed the code of.
+ *
+ * Stripping everything that is not a letter, digit, hyphen or space is also what
+ * makes the string safe to hand to to_tsquery: the tsquery operators (`&` `|`
+ * `!` `:` `*` `(` `)`) cannot survive it, so a term like `a:* | b` becomes two
+ * plain words instead of a query the shopper wrote themselves. `-` is not an
+ * operator, so letting it through changes nothing about that.
  *
  * Returns null when nothing searchable is left.
  */
 const toPrefixTsQuery = (value: any): string | null => {
   const tokens = (value ?? "")
     .toString()
-    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/[^\p{L}\p{N}\s-]+/gu, " ")
     .split(/\s+/)
-    .filter((token: string) => token !== "");
+    // a token has to carry a letter or a digit: a bare "-" is not a lexeme and
+    // would only add an empty leg to the tsquery
+    .filter((token: string) => /[\p{L}\p{N}]/u.test(token));
 
   if (tokens.length === 0) return null;
 

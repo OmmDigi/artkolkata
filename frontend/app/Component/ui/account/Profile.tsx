@@ -71,6 +71,7 @@ export default function Profile() {
 
   const handleOrderAgain = (order: any) => {
     order.ordered_products.forEach((item: any) => {
+      // console.log(item)
       addToCart(
         {
           id: item.product_id || item.id,

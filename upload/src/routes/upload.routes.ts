@@ -9,6 +9,6 @@ const router = Router();
 
 router.post("/single", upload.single("file"), uploadSingleFile);
 
-router.post("/multiple", upload.array("files", 2), uploadMultipleFile);
+router.post("/multiple", upload.array("files", 5), uploadMultipleFile);
 
 export default router;

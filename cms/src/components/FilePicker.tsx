@@ -20,7 +20,11 @@ interface IProps {
   /** set false to hide the "paste an asset url" box */
   allowUrl?: boolean;
   urlPlaceholder?: string;
+  /** let the file dialog take more than one file, the extras go to onUploadedMany */
+  multiple?: boolean;
   onUploaded?: (image: IUploadedFile | null) => void;
+  /** every file uploaded after the first one, only fires when multiple is on */
+  onUploadedMany?: (images: IUploadedFile[]) => void;
   onUploading?: (percent: number) => void;
   onUploadStart?: () => void;
   onRemoved?: () => void;
@@ -36,14 +40,15 @@ export default function FilePicker({
   folder,
   allowUrl = true,
   urlPlaceholder = "Or paste an asset url",
+  multiple = false,
   onUploaded,
+  onUploadedMany,
   onUploading,
   onUploadStart,
   onRemoved,
 }: IProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [file, setFile] = useState<File | null>(null);
   const [sourceLink, setSourceLink] = useState<string | undefined>(undefined);
   // kept apart from sourceLink so a half typed link never becomes the preview
   const [urlDraft, setUrlDraft] = useState(fileLink ?? "");
@@ -56,34 +61,61 @@ export default function FilePicker({
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.currentTarget.files) {
-      if (!confirm("Are you sure you want to upload ?")) return;
-      const currentFile = e.currentTarget.files[0];
-      setFile(file);
-      const localUrl = URL.createObjectURL(currentFile);
-      setSourceLink(localUrl);
+    const input = e.currentTarget;
+    const picked = Array.from(input.files ?? []);
+    if (picked.length === 0) return;
 
-      onUploadStart?.();
+    const selectedFiles = multiple ? picked : picked.slice(0, 1);
 
-      uploadFiles({
-        files: [currentFile],
-        folder: folder ?? "/media-items",
-        onError(error) {
-          toast.error(error.message);
-          onUploaded?.(null);
-        },
-        onUploading(percent) {
-          setUploadProgress(percent);
-          onUploading?.(percent);
-        },
-        onUploaded(result) {
-          setSourceLink(result[0].downloadUrl);
-          setUrlDraft(result[0].downloadUrl);
-          setUploadProgress(null);
-          onUploaded?.(result[0]);
-        },
-      });
+    if (
+      !confirm(
+        selectedFiles.length > 1
+          ? `Are you sure you want to upload ${selectedFiles.length} files ?`
+          : "Are you sure you want to upload ?",
+      )
+    ) {
+      // the same file must stay pickable after a cancel
+      input.value = "";
+      return;
     }
+
+    const localUrl = URL.createObjectURL(selectedFiles[0]);
+    setSourceLink(localUrl);
+
+    onUploadStart?.();
+
+    // all of them go up in one /upload/multiple call and come back as a list
+    uploadFiles({
+      files: selectedFiles,
+      folder: folder ?? "/media-items",
+      onError(error) {
+        toast.error(error.message);
+        setSourceLink(fileLink);
+        setUploadProgress(null);
+        onUploaded?.(null);
+      },
+      onUploading(percent) {
+        setUploadProgress(percent);
+        onUploading?.(percent);
+      },
+      onUploaded(result) {
+        setUploadProgress(null);
+        if (result.length === 0) {
+          setSourceLink(fileLink);
+          onUploaded?.(null);
+          return;
+        }
+
+        setSourceLink(result[0].downloadUrl);
+        setUrlDraft(result[0].downloadUrl);
+        onUploaded?.(result[0]);
+
+        // this picker holds one slot, the rest are handed to the parent
+        if (result.length > 1) onUploadedMany?.(result.slice(1));
+      },
+    });
+
+    input.value = "";
   };
 
   // a pasted link needs no upload, it only reports itself like a finished upload
@@ -109,6 +141,7 @@ export default function FilePicker({
         onChange={handleInputChange}
         ref={inputRef}
         type="file"
+        multiple={multiple}
         className="hidden"
         accept={accept ?? "*/*"}
       />
@@ -126,7 +159,7 @@ export default function FilePicker({
           <>
             <Plus />
             <p className="font-semibold text-sm text-gray-500">
-              {label ?? "Pick Image"}
+              {label ?? (multiple ? "Pick Images" : "Pick Image")}
             </p>
           </>
         ) : (

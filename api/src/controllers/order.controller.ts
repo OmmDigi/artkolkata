@@ -645,8 +645,6 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
          o.payment_method,
          o.order_status,
          TO_CHAR(o.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') AS order_date,
-         -- the clock time the order was placed, read in IST like every other
-         -- time the CMS shows, so a late-night order is not dated a day off
          TO_CHAR(
             o.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata',
             'HH12:MI AM'

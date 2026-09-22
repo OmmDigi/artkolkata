@@ -10,7 +10,7 @@ export const ORDERS_PERMISSION_ID: RoteIds = "1-5";
 // GST is baked into every product price, so this rate is only ever used to show
 // the customer how much of what they already pay is tax. It is deliberately a
 // constant : the CMS has no GST setting anymore.
-export const GST_PERCENTAGE = 5;
+export const GST_PERCENTAGE = parseInt(process.env.GST_PERCENTAGE ?? "5");
 
 // Delivery is no longer a constant. It comes from the shipping_charge_rules
 // slabs the CMS edits — see calculateShippingCharge. An empty table means free.

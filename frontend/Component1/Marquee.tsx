@@ -32,10 +32,16 @@ const Marquee = () => {
         }
 
         .marquee-content {
-          animation: marquee 4s linear infinite;
+          animation: marquee 15s linear infinite;
           will-change: transform;
           display: flex;
           gap: 80px;
+        }
+
+        @media screen and (max-width: 768px) {
+          .marquee-content {
+            animation: marquee 4s linear infinite;
+          }
         }
 
         .marquee-container:hover .marquee-content {

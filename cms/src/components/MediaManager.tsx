@@ -1,12 +1,36 @@
-import type { ImageTypes } from "@/types";
+import type { ImageTypes, IUploadedFile } from "@/types";
 import { cn } from "@/lib/utils";
-import { Film, ImagePlus, Plus } from "lucide-react";
-import { useState } from "react";
+import { ClipboardPaste, Copy, Film, ImagePlus, Plus } from "lucide-react";
+import { useRef, useState, useSyncExternalStore } from "react";
+import { toast } from "react-toastify";
 import FilePicker from "./FilePicker";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
 const YOUTUBE_ID = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/;
+
+/**
+ * Media copied from one manager, shared by every MediaManager on the page so a
+ * variant media block can be pasted into another variant without re uploading.
+ */
+let mediaClipboard: ImageTypes[] = [];
+const clipboardListeners = new Set<() => void>();
+
+const subscribeToClipboard = (listener: () => void) => {
+  clipboardListeners.add(listener);
+  return () => {
+    clipboardListeners.delete(listener);
+  };
+};
+
+const setMediaClipboard = (items: ImageTypes[]) => {
+  mediaClipboard = items;
+  clipboardListeners.forEach((listener) => listener());
+};
+
+export function useMediaClipboard() {
+  return useSyncExternalStore(subscribeToClipboard, () => mediaClipboard);
+}
 
 export function getVideoPreview(url: string) {
   const youtubeId = url.match(YOUTUBE_ID)?.[1];
@@ -52,17 +76,74 @@ export default function MediaManager({
   onUploaded,
 }: IProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const clipboard = useMediaClipboard();
+
+  // a multi file upload reports the first file and the rest one after another,
+  // so every change is built on this ref instead of the prop of that render
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  const commit = (next: ImageTypes[]) => {
+    itemsRef.current = next;
+    onChange(next);
+  };
+
+  /** media worth copying, an empty slot the user never filled is skipped */
+  const filledItems = items.filter((item) => item.image.trim() !== "");
+
+  const copyItems = () => {
+    setMediaClipboard(filledItems.map((item) => ({ ...item })));
+    toast.success(
+      `Copied ${filledItems.length} media item${filledItems.length > 1 ? "s" : ""}`,
+    );
+  };
+
+  const pasteItems = () => {
+    const existing = new Set(filledItems.map((item) => item.image));
+    const pasted = clipboard
+      .filter((item) => existing.has(item.image) === false)
+      .map((item) => ({ ...item }));
+
+    if (pasted.length === 0) {
+      toast.info("This media is already added here");
+      return;
+    }
+
+    commit([...filledItems, ...pasted]);
+    toast.success(
+      `Pasted ${pasted.length} media item${pasted.length > 1 ? "s" : ""}`,
+    );
+  };
 
   const updateItem = (index: number, patch: Partial<ImageTypes>) => {
-    onChange(
-      items.map((item, cIndex) =>
+    commit(
+      itemsRef.current.map((item, cIndex) =>
         cIndex === index ? { ...item, ...patch } : item,
       ),
     );
   };
 
   const removeItem = (index: number) => {
-    onChange(items.filter((_, cIndex) => cIndex !== index));
+    commit(itemsRef.current.filter((_, cIndex) => cIndex !== index));
+  };
+
+  /** extra files picked in one go, they land right after the slot used to pick them */
+  const insertUploadedAfter = (index: number, uploaded: IUploadedFile[]) => {
+    if (uploaded.length === 0) return;
+
+    const next = [...itemsRef.current];
+    next.splice(
+      index + 1,
+      0,
+      ...uploaded.map((file) => ({
+        image: file.downloadUrl,
+        alt_tag: null,
+        type: "image" as const,
+      })),
+    );
+
+    commit(next);
+    toast.success(`Uploaded ${uploaded.length + 1} images`);
   };
 
   const handleDragOver = (
@@ -72,11 +153,11 @@ export default function MediaManager({
     e.preventDefault();
     if (dragIndex === null || dragIndex === hoverIndex) return;
 
-    const updated = [...items];
+    const updated = [...itemsRef.current];
     const [moved] = updated.splice(dragIndex, 1);
     updated.splice(hoverIndex, 0, moved);
     setDragIndex(hoverIndex);
-    onChange(updated);
+    commit(updated);
   };
 
   return (
@@ -87,7 +168,7 @@ export default function MediaManager({
           <Button
             type="button"
             onClick={() =>
-              onChange([...items, { image: "", alt_tag: null, type: "image" }])
+              commit([...items, { image: "", alt_tag: null, type: "image" }])
             }
           >
             <ImagePlus />
@@ -97,7 +178,7 @@ export default function MediaManager({
             type="button"
             variant="outline"
             onClick={() =>
-              onChange([...items, { image: "", alt_tag: null, type: "video" }])
+              commit([...items, { image: "", alt_tag: null, type: "video" }])
             }
           >
             <Film />
@@ -106,9 +187,40 @@ export default function MediaManager({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={filledItems.length === 0}
+          onClick={copyItems}
+          title="Copy this media so it can be pasted into another variant"
+        >
+          <Copy />
+          Copy Media
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={clipboard.length === 0}
+          onClick={pasteItems}
+          title="Paste the copied media here"
+        >
+          <ClipboardPaste />
+          Paste Media
+          {clipboard.length > 0 ? ` (${clipboard.length})` : ""}
+        </Button>
+      </div>
+
       <p className="text-xs text-gray-500">
-        Drag any item to change its position, images and videos are shown in
-        this same order on the website.
+        {/* Drag any item to change its position, images and videos are shown in
+        this same order on the website. One image slot can take several files
+        at once, they are uploaded together and added here. Use Copy Media,
+        then Paste Media on another variant to reuse the same images without
+        uploading them again. */ }
+        Drag any item to change its position, images and videos are shown in this same order on the website. One image slot can take several files
+        at onc (Max 5)
       </p>
 
       <div className={gridClassName}>
@@ -168,11 +280,15 @@ export default function MediaManager({
                   fileLink={item.image === "" ? undefined : item.image}
                   accept="image/*"
                   folder={folder}
+                  multiple
                   onUploadStart={onUploadStart}
                   onUploaded={(image) => {
                     updateItem(index, { image: image?.downloadUrl ?? "" });
                     onUploaded?.();
                   }}
+                  onUploadedMany={(images) =>
+                    insertUploadedAfter(index, images)
+                  }
                   onRemoved={() => updateItem(index, { image: "" })}
                 />
               )}

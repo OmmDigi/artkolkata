@@ -14,6 +14,7 @@ import LanguageSelector from "@/app/Component/LanguageSelector";
 import { useSiteInfo } from "@/hooks/useSiteSettings";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
+import { toast } from "react-toastify";
 
 interface ApiCategory {
   id?: string | number;
@@ -24,7 +25,7 @@ interface ApiCategory {
   sub_categories?: any[];
 }
 export default function Navbar() {
-  const pathname = usePathname();
+  // const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -67,7 +68,7 @@ export default function Navbar() {
   const [pinError, setPinError] = useState("");
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const lastScrollY = useRef(0);
+  // const lastScrollY = useRef(0);
 
   const [placeholderText, setPlaceholderText] = useState("Search products...");
   const [ribbonText, setRibbonText] = useState("");
@@ -247,6 +248,15 @@ export default function Navbar() {
   const logout = useUserStore((state) => state.logout);
   const [mounted, setMounted] = useState(false);
 
+  const onSearchButtonClick = () => {
+    if(searchQuery == "") {
+      toast.warning("Type something in search bar")
+      return;
+    }
+    router.push(`/product?search=${searchQuery}`);
+    setSearchQuery("")
+  }
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -417,10 +427,15 @@ export default function Navbar() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="flex-1 px-4 py-2 outline-none text-sm text-black"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        onSearchButtonClick()
+                      }
+                    }}
                   />
 
                   {/* Search Button */}
-                  <button className="px-4 py-2 bg-orange-500 hover:bg-orange-600 transition text-white border-l border-gray-300 rounded-r-md">
+                  <button onClick={onSearchButtonClick} className="px-4 py-2 bg-orange-500 hover:bg-orange-600 transition text-white border-l border-gray-300 rounded-r-md">
                     <Search size={18} />
                   </button>
                 </div>
