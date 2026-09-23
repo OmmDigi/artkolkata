@@ -133,7 +133,7 @@ const getOrderEmailData = async (orderId: number) => {
       courierName: order.courier_name,
       deliveredDate: order.delivered_date,
       returnWindowDays: RETURN_WINDOW_DAYS,
-      orderLink: `${process.env.FRONTEND_HOST_URL}/myaccount/orders`,
+      orderLink: `${process.env.FRONTEND_HOST_URL}/account?tab=orders`,
     },
   };
 };

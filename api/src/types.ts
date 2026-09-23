@@ -15,7 +15,8 @@ export interface SaveUserInfo extends SignupType {
   is_verified: boolean;
   is_active: boolean;
   action : "Add" | "Update",
-  role : "User" | "Employee"
+  role : "User" | "Employee",
+  is_guest : boolean;
 }
 
 export interface IError extends Error {

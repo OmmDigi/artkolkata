@@ -7,7 +7,9 @@ import {
   deleteOrderInvoice,
   doCancel,
   doReturn,
+  exportOrderList,
   downloadInvoice,
+  downloadBulkInvoices,
   emailOrderInvoice,
   downloadPackingSlip,
   downloadPaymentSlip,
@@ -50,6 +52,21 @@ orderRoutes
   .post("/guest/cancel", rateLimits.orderMutate, cancelGuestOrder)
   .post("/price-breakdown", rateLimits.priceBreakdown, getPriceBreakdown)
   .get("/", rateLimits.adminRead, isAuthorizedV2(["1-5"]), getOrderList)
+  // Declared before "/:orderid" so the literal path wins over the parameter.
+  // Many invoices as one pdf. Declared before the "/:orderid" routes for the
+  // same reason as the export.
+  .post(
+    "/invoices/bulk",
+    rateLimits.bulkInvoice,
+    isAuthorizedV2(["1-5"]),
+    downloadBulkInvoices,
+  )
+  .get(
+    "/export",
+    rateLimits.orderExport,
+    isAuthorizedV2(["1-5"]),
+    exportOrderList,
+  )
   .get("/track", rateLimits.orderTrack, trackOrder)
   .post("/return", rateLimits.orderMutate, isAuthenticated, doReturn)
   .post("/cancel", rateLimits.orderMutate, isAuthenticated, doCancel)

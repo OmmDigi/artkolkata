@@ -7,6 +7,12 @@ import {
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "./ui/button";
+import SelectInput from "./SelectInput";
+import {
+  PAGE_SIZE_OPTIONS,
+  setPageSize,
+  usePageSize,
+} from "@/hooks/usePageSize";
 
 interface IProps {
   totalPage: number | undefined;
@@ -15,7 +21,14 @@ interface IProps {
   onPageClick?: (page: number) => void;
   loading?: boolean;
   totalItems?: number;
+  // Off for lists whose page size the API fixes itself, like the media gallery.
+  showPageSize?: boolean;
 }
+
+const PAGE_SIZE_SELECT_OPTIONS = PAGE_SIZE_OPTIONS.map((size) => ({
+  text: size.toString(),
+  value: size.toString(),
+}));
 
 const MAX_PAGE = 5;
 export function PaginationComp({
@@ -24,8 +37,10 @@ export function PaginationComp({
   onPageChange,
   onPageClick,
   loading = false,
-  totalItems = 10,
+  totalItems,
+  showPageSize = true,
 }: IProps) {
+  const pageSize = usePageSize();
   const [array, setArray] = useState<number[]>([]);
   const currentClickedNavBtn = useRef<"next" | "prev" | "none">("none");
 
@@ -59,14 +74,15 @@ export function PaginationComp({
   };
 
   const nextButtonDisibility =
-    totalItems < 10
+    // a short page means it was the last one
+    (totalItems ?? pageSize) < pageSize
       ? true
       : totalPage === -1
       ? false
       : array[MAX_PAGE - 1] === undefined || array[MAX_PAGE - 1] >= totalPage;
 
-  return (
-    <Pagination>
+  const pagination = (
+    <Pagination className={showPageSize ? "w-auto mx-0" : undefined}>
       <PaginationContent>
         <PaginationItem>
           {loading && currentClickedNavBtn.current === "prev" ? (
@@ -121,5 +137,27 @@ export function PaginationComp({
         </PaginationItem>
       </PaginationContent>
     </Pagination>
+  );
+
+  if (!showPageSize) return pagination;
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-3">
+      {pagination}
+      <div className="flex items-center gap-2 text-sm shrink-0">
+        <span className="whitespace-nowrap">Rows per page</span>
+        <SelectInput
+          className="w-20"
+          options={PAGE_SIZE_SELECT_OPTIONS}
+          value={pageSize.toString()}
+          onValueChange={(value) => {
+            setPageSize(parseInt(value));
+            // the old page number points at different rows now
+            onPageChange?.(1);
+            onPageClick?.(1);
+          }}
+        />
+      </div>
+    </div>
   );
 }

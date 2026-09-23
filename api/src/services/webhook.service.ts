@@ -7,6 +7,7 @@ import {
 import { doTransition } from "../utils/doTransition";
 import { manageStock } from "../utils/manageStock";
 import { notifyOrderStatus } from "../utils/orderEmails";
+import { eventTimestamp } from "./orderTracking.service";
 import { getShippingPartner, isShippingEnabled } from "./shipping";
 import { CACHE_TAGS, invalidateCache } from "./cache.service";
 
@@ -44,8 +45,20 @@ export const processDelhiveryStatus = async (props: IProps) => {
 
   try {
     await pool.query(
-      "INSERT INTO webhook_data (waybill, payload) VALUES ($1, $2)",
-      [props.Shipment.AWB, props]
+      `
+       INSERT INTO webhook_data (waybill, source, order_status, event_at, payload)
+       VALUES ($1, 'courier', $2, $3, $4)
+      `,
+      [
+        props.Shipment.AWB,
+        // Mapped once, here. NULL for a scan nothing maps : the row is still
+        // worth keeping, it just has no step on the tracking page.
+        SHIPMENT_MAPING[
+          `${props.Shipment.Status.StatusType}_${props.Shipment.Status.Status}`
+        ] ?? null,
+        eventTimestamp(props.Shipment.Status.StatusDateTime),
+        props,
+      ]
     );
   } catch (error) {
     console.error("Unable to insert webhook data in the database : ", error);
@@ -172,12 +185,28 @@ export const processShiprocketStatus = async (payload: any) => {
   }
 
   try {
-    await pool.query("DELETE FROM webhook_data WHERE waybill = $1", [awb]);
+    // Courier rows only : the scans written from this order's own status
+    // changes are not Shiprocket's to replace — see
+    // services/orderTracking.service.
+    await pool.query(
+      "DELETE FROM webhook_data WHERE waybill = $1 AND source = 'courier'",
+      [awb],
+    );
 
     for (const event of events) {
       await pool.query(
-        "INSERT INTO webhook_data (waybill, payload) VALUES ($1, $2)",
-        [awb, event],
+        `
+         INSERT INTO webhook_data (waybill, source, order_status, event_at, payload)
+         VALUES ($1, 'courier', $2, $3, $4)
+        `,
+        [
+          awb,
+          SHIPMENT_MAPING[
+            `${event.Shipment.Status.StatusType}_${event.Shipment.Status.Status}`
+          ] ?? null,
+          eventTimestamp(event.Shipment.Status.StatusDateTime),
+          event,
+        ],
       );
     }
   } catch (error) {

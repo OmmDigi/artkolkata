@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useInquiry } from "@/hooks/useInquiry";
+import { usePageSize } from "@/hooks/usePageSize";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { Eye, Mail, Phone } from "lucide-react";
 import { useState } from "react";
@@ -23,10 +24,12 @@ export default function InquiryListPage() {
   const [currentClickIndex, setCurrentClickIndex] = useState(-1);
 
   const currentPage = parseInt(searchParams.get("page") || "1");
+  const pageSize = usePageSize();
 
   const { inquiryData, inquiryError, isInquiryFetching } = useInquiry({
     page: currentPage,
-    depandencyArray: [currentPage],
+    limit: pageSize,
+    depandencyArray: [currentPage, pageSize],
   });
 
   return (
@@ -120,6 +123,7 @@ export default function InquiryListPage() {
             <PaginationComp
               totalPage={-1}
               page={currentPage}
+              totalItems={inquiryData.length}
               onPageChange={(page) => {
                 setSearchParams((prev) => {
                   prev.set("page", page.toString());

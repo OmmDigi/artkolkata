@@ -3,9 +3,12 @@ import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 
-const getSubCategoryList = async (page: number, search?: string) => {
+const getSubCategoryList = async (page: number, search?: string, limit?: number) => {
   const urlSearchParams = new URLSearchParams();
   urlSearchParams.set("page", page.toString());
+  if (limit) {
+    urlSearchParams.set("limit", limit.toString());
+  }
   if (search) {
     urlSearchParams.set("search", search);
   }
@@ -17,6 +20,7 @@ const getSubCategoryList = async (page: number, search?: string) => {
 interface IProps {
   page?: number;
   search?: string;
+  limit?: number;
 }
 
 export const useSubCategory = (props?: IProps) => {
@@ -24,8 +28,8 @@ export const useSubCategory = (props?: IProps) => {
     IResponse<ISubCategory[]>,
     AxiosError<IError>
   >({
-    queryKey: ["get-sub-category-list", props?.page ?? 1, props?.search ?? ""],
-    queryFn: () => getSubCategoryList(props?.page ?? 1, props?.search),
+    queryKey: ["get-sub-category-list", props?.page ?? 1, props?.search ?? "", props?.limit],
+    queryFn: () => getSubCategoryList(props?.page ?? 1, props?.search, props?.limit),
   });
 
   return {

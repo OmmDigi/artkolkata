@@ -159,7 +159,7 @@ const replaceBlogMedia = async (
 };
 
 export const getBlogList = asyncErrorHandler(async (req: CustomRequest, res) => {
-  const { TO_STRING } = parsePagination(req);
+  const { TO_STRING, LIMIT } = parsePagination(req);
 
   let filter = "WHERE 1=1";
   const values: any[] = [];
@@ -195,8 +195,8 @@ export const getBlogList = asyncErrorHandler(async (req: CustomRequest, res) => 
   );
 
   const total = parseInt(countRows[0].count);
-  const limit = 10;
-  const totalPage = Math.ceil(total / limit);
+  // LIMIT is "" when the caller asked for every row, which is one page
+  const totalPage = typeof LIMIT === "number" ? Math.ceil(total / LIMIT) : 1;
 
   httpResponse(res, 200, "Blog list", rows, [], totalPage);
 });

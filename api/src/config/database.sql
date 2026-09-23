@@ -336,6 +336,81 @@ CREATE TABLE IF NOT EXISTS webhook_data (
 CREATE INDEX IF NOT EXISTS idx_webhook_data_waybill ON webhook_data(waybill);
 ALTER TABLE webhook_data ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
+-- A scan does not always come from a courier.
+--
+-- Bigship pushes no tracking webhook at all, and an order shipped by hand
+-- (SHIPPING_PARTNER=none) has no waybill to key a scan off in the first place.
+-- Those orders still move — an admin moves them in the CMS — and the tracking
+-- page has to show that movement, so every status change writes its own scan
+-- here (see services/orderTracking.service.ts).
+--
+--   order_id : set on admin scans, which may have no waybill to match on.
+--              Courier scans leave it null and still match by waybill.
+--   source   : 'courier' for anything a partner reported, 'admin' for a scan
+--              written from an order status change. The courier pull replaces
+--              its own rows wholesale and must not take the admin ones with
+--              them, which is the only reason the two are told apart.
+ALTER TABLE webhook_data ADD COLUMN IF NOT EXISTS order_id INTEGER;
+ALTER TABLE webhook_data ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'courier';
+CREATE INDEX IF NOT EXISTS idx_webhook_data_order_id ON webhook_data(order_id);
+
+-- The two things the tracking page actually reads.
+--
+-- A scan used to be translated into an order status on every single read, by
+-- the query digging two courier fields out of the json and a lookup table
+-- turning the pair into a status. That translation now happens once, here,
+-- when the row is written — a courier scan through SHIPMENT_MAPING, an admin
+-- change straight from the status it set. Reading is then one column.
+--
+--   order_status : the status this event put the order in, NULL for a scan
+--                  nothing maps (a courier-specific code). NULL rows are kept
+--                  as a record and skipped by the tracking page.
+--   event_at     : when the event happened, UTC, as the courier reported it —
+--                  not when we stored it. The tracking page is a list in time
+--                  order and this is the column it sorts by.
+ALTER TABLE webhook_data ADD COLUMN IF NOT EXISTS order_status VARCHAR(30);
+ALTER TABLE webhook_data ADD COLUMN IF NOT EXISTS event_at TIMESTAMP;
+
+-- Backfill : every row already in the table was written before those two
+-- columns existed, and the tracking page reads nothing else.
+UPDATE webhook_data
+SET event_at = (payload->'Shipment'->'Status'->>'StatusDateTime')::timestamp
+WHERE event_at IS NULL
+  AND payload->'Shipment'->'Status'->>'StatusDateTime' ~ '^\d{4}-\d{2}-\d{2}';
+
+-- Anything whose timestamp could not be read falls back to when we stored it,
+-- which is the closest thing to the truth the row has left.
+UPDATE webhook_data SET event_at = created_at WHERE event_at IS NULL;
+
+-- Mirrors SHIPMENT_MAPING in src/constant.ts. Both have to say the same thing,
+-- and this one only ever runs over rows written before the column existed.
+UPDATE webhook_data wd
+SET order_status = m.status
+FROM (VALUES
+  ('UD_Manifested',   'CONFIRMED'),
+  ('UD_Not Picked',   'CONFIRMED'),
+  ('UD_In Transit',   'SHIPPED'),
+  ('UD_Pending',      'SHIPPED'),
+  ('UD_Dispatched',   'OUT FOR DELIVERY'),
+  ('DL_Delivered',    'DELIVERED'),
+  ('RT_In Transit',   'CANCELLED'),
+  ('RT_Pending',      'CANCELLED'),
+  ('RT_Dispatched',   'CANCELLED'),
+  ('DL_RTO',          'CANCELLED'),
+  ('PP_Open',         'RETURN INITIATED'),
+  ('PP_Scheduled',    'RETURN INITIATED'),
+  ('PP_Dispatched',   'RETURN INITIATED'),
+  ('PU_In Transit',   'RETURN INITIATED'),
+  ('PU_Pending',      'RETURN INITIATED'),
+  ('PU_Dispatched',   'RETURN INITIATED'),
+  ('DL_DTO',          'RETURNED'),
+  ('CN_Canceled',     'CANCELLED'),
+  ('CN_Closed',       'RETURNED')
+) AS m(key, status)
+WHERE wd.order_status IS NULL
+  AND (wd.payload->'Shipment'->'Status'->>'StatusType') || '_' ||
+      (wd.payload->'Shipment'->'Status'->>'Status') = m.key;
+
 
 CREATE TABLE IF NOT EXISTS recipient (
   id SERIAL PRIMARY KEY,

@@ -1,4 +1,6 @@
+import BulkInvoiceBar from "@/components/BulkInvoiceBar";
 import OrderDocumentActions from "@/components/OrderDocumentActions";
+import { Checkbox } from "@/components/ui/checkbox";
 import OrderFilters from "@/components/OrderFilters";
 import { PaginationComp } from "@/components/PaginationComp";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
@@ -28,31 +30,74 @@ import {
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { type IResponse, type IOrderList, type IError } from "@/types";
 import { api } from "@/utils/api";
+import { usePageSize } from "@/hooks/usePageSize";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import type { AxiosError } from "axios";
 import { Calendar, Download, ExternalLink, Hash, Mail, User } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
-const getOrderList = async (page: number, filters: string) => {
-  return (await api.get(`/api/v1/orders?page=${page}&${filters}`)).data;
+const getOrderList = async (page: number, limit: number, filters: string) => {
+  return (
+    await api.get(`/api/v1/orders?page=${page}&limit=${limit}&${filters}`)
+  ).data;
 };
 
 export default function OrderListingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
 
   const { isFetching, error, data, refetch } = useQuery<
     IResponse<IOrderList[]>,
     AxiosError<IError>
   >({
-    queryKey: ["orders-list", currentPage, searchParams.toString()],
-    queryFn: () => getOrderList(currentPage, searchParams.toString()),
+    queryKey: ["orders-list", currentPage, pageSize, searchParams.toString()],
+    queryFn: () =>
+      getOrderList(currentPage, pageSize, searchParams.toString()),
   });
+
+  // Ticked orders for the bulk invoice download: order_id → order_number, in
+  // the order they were ticked. Kept across pages, so a day's orders can be
+  // gathered from several pages into one pdf.
+  const [selected, setSelected] = useState<Map<number, string>>(new Map());
+
+  const toggleOrder = (order: IOrderList, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (checked) next.set(order.order_id, order.order_number);
+      else next.delete(order.order_id);
+      return next;
+    });
+  };
+
+  const pageOrders = data?.data ?? [];
+  const allOnPageSelected =
+    pageOrders.length > 0 &&
+    pageOrders.every((order) => selected.has(order.order_id));
+
+  const togglePage = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      pageOrders.forEach((order) => {
+        if (checked) next.set(order.order_id, order.order_number);
+        else next.delete(order.order_id);
+      });
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-2.5">
-      <OrderFilters />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <OrderFilters />
+      </div>
+      <BulkInvoiceBar
+        selected={selected}
+        onClear={() => setSelected(new Map())}
+        onDone={() => refetch()}
+      />
       <LoadingHandler
         error={error}
         loading={isFetching}
@@ -63,7 +108,15 @@ export default function OrderListingPage() {
             <TableHeader>
               <TableRow className="*:min-w-52 bg-green-600 hover:!bg-green-600 *:text-white">
                 <TableHead className="sticky top-0 left-0 z-20 min-w-64">
-                  ORDER DETAILS
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      className="border-white"
+                      title="Select every order on this page"
+                      checked={allOnPageSelected}
+                      onCheckedChange={(checked) => togglePage(checked === true)}
+                    />
+                    ORDER DETAILS
+                  </div>
                 </TableHead>
                 <TableHead>TOTAL AMOUNT</TableHead>
                 <TableHead>PAYMENT MODE</TableHead>
@@ -76,6 +129,13 @@ export default function OrderListingPage() {
                 <TableRow key={order.order_id}>
                   <TableCell>
                     <div className="flex items-center gap-1.5 font-medium">
+                      <Checkbox
+                        title="Select for bulk invoice download"
+                        checked={selected.has(order.order_id)}
+                        onCheckedChange={(checked) =>
+                          toggleOrder(order, checked === true)
+                        }
+                      />
                       <Hash size={13} className="text-gray-500" />
                       {order.order_number}
                     </div>

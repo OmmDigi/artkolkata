@@ -495,7 +495,7 @@ export const saveUserInfo = asyncErrorHandler(
     const encodedPassword = encrypt(value.password);
 
     if (value.action == "Update" && value.user_id) {
-      let filter = "WHERE id = $7 AND role != 'Admin'";
+      let filter = "WHERE id = $8 AND role != 'Admin'";
       // let filterNum = 8;
       const filterValues: any[] = [value.user_id];
 
@@ -513,7 +513,8 @@ export const saveUserInfo = asyncErrorHandler(
           email = $3, 
           password = $4, 
           is_verified = $5, 
-          is_active = $6
+          is_active = $6,
+          is_guest = $7
         ${filter}
       `,
         [
@@ -543,9 +544,9 @@ export const saveUserInfo = asyncErrorHandler(
     const { rowCount } = await pool.query(
       `
       INSERT INTO users 
-        (name, phone_no, email, password, is_verified, is_active, role) 
+        (name, phone_no, email, password, is_verified, is_active, role, is_guest) 
       VALUES 
-        ($1, $2, $3, $4, $5, $6, $7);
+        ($1, $2, $3, $4, $5, $6, $7, $8);
       `,
       [
         value.name,
@@ -555,6 +556,7 @@ export const saveUserInfo = asyncErrorHandler(
         value.is_verified,
         value.is_active,
         roleToStore,
+        value.is_guest
       ],
     );
 

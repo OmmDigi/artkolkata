@@ -15,20 +15,21 @@ import { CUSTOMER_TYPE_FILTER, FILTER_ALL } from "@/constant";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import type { IError, IResponse, IUsers } from "@/types";
 import { api } from "@/utils/api";
+import { usePageSize } from "@/hooks/usePageSize";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { ExternalLink, Plus, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-const getUserList = async (page: number, filters: string, role : "User" | "Employee") => {
+const getUserList = async (page: number, limit: number, filters: string, role : "User" | "Employee") => {
   let endPoint = "";
   if(role == "User") {
     endPoint = "users"
   } else {
     endPoint = "users/employee"
   }
-  return (await api.get(`/api/v1/${endPoint}?page=${page}&${filters}`)).data;
+  return (await api.get(`/api/v1/${endPoint}?page=${page}&limit=${limit}&${filters}`)).data;
 };
 
 interface IProps {
@@ -42,12 +43,13 @@ export default function UsersListPage({ role = "User", heading }: IProps) {
   const navigator = useNavigate();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
   const { isFetching, error, data } = useQuery<
     IResponse<IUsers[]>,
     AxiosError<IError>
   >({
-    queryKey: ["users-list", currentPage, queryParams, role],
-    queryFn: () => getUserList(currentPage, queryParams, role),
+    queryKey: ["users-list", currentPage, pageSize, queryParams, role],
+    queryFn: () => getUserList(currentPage, pageSize, queryParams, role),
   });
 
   useEffect(() => {

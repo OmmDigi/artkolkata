@@ -1,13 +1,13 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { Package, Download, Loader2, LogOut, MapPin, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Package, Download, Loader2, LogOut, User } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { getRequest, postRequest } from "@/lib/fetcher";
-import { toast } from "react-toastify";
 import { useUserStore } from "@/store/useUserStore";
 import { useCartStore } from "@/store/useCartStore";
 import AddressManager from "./AddressManager";
+import OrderTracking from "../order/OrderTracking";
 import Link from "next/link";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
@@ -27,20 +27,7 @@ export default function Profile() {
       queryFn: () => getRequest<any>("api/v1/users/orders"),
     });
 
-  const {
-    data: orderStatus,
-    isLoading: loadingOrderStatus,
-    refetch: mutateOrderStatus,
-  } = useQuery({
-    queryKey: ["orderStatus", selectedOrder?.order_number],
-    queryFn: () =>
-      getRequest<any>(
-        `api/v1/orders/track?order_number=${selectedOrder.order_number}`,
-      ),
-    enabled: !!selectedOrder?.order_number,
-  });
-
-  const { mutateAsync: cancle, isPending: cancleMutating } = useMutation({
+  const { mutateAsync: cancle } = useMutation({
     mutationFn: (data: any) =>
       postRequest({ url: "api/v1/orders/cancel", body: data }),
   });
@@ -54,15 +41,15 @@ export default function Profile() {
     }
   }, [searchParams]);
 
-  const cancleOrder = async (id: number) => {
-    const order_id = { order_id: id };
-    try {
-      const response: any = await cancle(order_id);
-      toast.success(response.message || "Order Cancelled");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Try Again");
-    }
-  };
+  // const cancleOrder = async (id: number) => {
+  //   const order_id = { order_id: id };
+  //   try {
+  //     const response: any = await cancle(order_id);
+  //     toast.success(response.message || "Order Cancelled");
+  //   } catch (err: any) {
+  //     toast.error(err?.response?.data?.message || "Try Again");
+  //   }
+  // };
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -71,7 +58,6 @@ export default function Profile() {
 
   const handleOrderAgain = (order: any) => {
     order.ordered_products.forEach((item: any) => {
-      // console.log(item)
       addToCart(
         {
           id: item.product_id || item.id,
@@ -184,21 +170,23 @@ export default function Profile() {
                             ${
                               order.order_status === "PENDING"
                                 ? "bg-yellow-100 text-yellow-800"
-                                : "bg-green-100 text-green-800"
+                                : order.order_status === "CANCELLED"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-green-100 text-green-800"
                             }`}
                             >
                               {order.order_status}
                             </div>
-                            {/* <button
+                            <button
                               onClick={() => {
                                 setSelectedOrder(order);
                                 setActiveTab("tracking");
-                                mutateOrderStatus();
+                                // mutateOrderStatus();
                               }}
-                              className="px-3 py-1 text-sm bg-[#02F8C5]   text-white transition"
+                              className="px-3 cursor-pointer py-1 text-sm bg-[#02F8C5] text-black transition"
                             >
                               Track Order
-                            </button> */}
+                            </button>
                           </div>
                         </div>
 
@@ -281,122 +269,12 @@ export default function Profile() {
 
             {/* Tracking Tab */}
             {activeTab === "tracking" && selectedOrder && (
-              <div className="bg-white border border-gray-200 rounded p-6">
-                <button
-                  onClick={() => setActiveTab("orders")}
-                  className="cursor-pointer flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 font-medium text-sm transition"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
-                  Back to Orders
-                </button>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Track Your Order
-                </h2>
-
-                {/* Order Summary */}
-                <div className="bg-gray-50 border border-gray-200 rounded p-4 md:p-6 mb-8">
-                  <div className="md:flex justify-between items-center mb-2">
-                    <h3 className="font-semibold text-gray-900">
-                      Order ID: {selectedOrder?.order_number}
-                    </h3>
-                    <span className="text-sm text-gray-600">
-                      Tracking ID: {selectedOrder?.tracking_id}
-                    </span>
-                  </div>
-                  <div className="mb-4">
-                    <p className="text-sm text-gray-600">
-                      {selectedOrder?.ordered_products?.[0]?.product_name}
-                    </p>
-                  </div>
-                  {/* <div className="flex flex-wrap gap-3">
-                    <button
-                      onClick={() => cancleOrder(selectedOrder?.order_number)}
-                      disabled={
-                        !selectedOrder?.is_cancelable ||
-                        cancleMutating ||
-                        (selectedOrder?.order_status !== "PENDING" &&
-                          selectedOrder?.order_status !== "ORDER CONFIRMED")
-                      }
-                      className={`cursor-pointer px-4 py-2 text-sm text-white transition flex items-center gap-2
-                                 ${
-                                   !selectedOrder?.is_cancelable ||
-                                   cancleMutating ||
-                                   (selectedOrder?.order_status !== "PENDING" &&
-                                     selectedOrder?.order_status !==
-                                       "ORDER CONFIRMED")
-                                     ? "bg-gray-300 cursor-not-allowed"
-                                     : "bg-[#02F8C5]  "
-                                 }
-                         `}
-                    >
-                      {cancleMutating && (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      )}
-                      {cancleMutating ? "Cancelling..." : "Cancel Order"}
-                    </button>
-                  </div> */}
-                </div>
-
-                {/* Tracking Steps */}
-                <div className="relative pl-2 md:pl-4">
-                  {orderStatus?.data?.map((step: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className="flex gap-6 mb-8 last:mb-0 relative"
-                    >
-                      <div className="flex flex-col items-center z-10">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                            step.completed
-                              ? "bg-[#02F8C5] text-black"
-                              : "bg-gray-200 text-gray-500"
-                          }`}
-                        >
-                          {step.completed ? "✓" : idx + 1}
-                        </div>
-                      </div>
-                      {idx < orderStatus?.data?.length - 1 && (
-                        <div
-                          className={`absolute left-4 top-8 bottom-[-2rem] w-0.5 ${
-                            step.completed ? "bg-[#02F8C5]" : "bg-gray-200"
-                          }`}
-                          style={{ transform: "translateX(-50%)" }}
-                        />
-                      )}
-                      <div className="flex-1 pb-4">
-                        <h4
-                          className={`font-semibold ${
-                            step.completed ? "text-gray-900" : "text-gray-400"
-                          }`}
-                        >
-                          {step.status}
-                        </h4>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {step.date}
-                        </p>
-                        {step.location && (
-                          <p className="text-sm text-gray-500">
-                            {step.location}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <OrderTracking
+                orderNumber={selectedOrder?.order_number}
+                trackingId={selectedOrder?.tracking_id}
+                subtitle={selectedOrder?.ordered_products?.[0]?.product_name}
+                onBack={() => setActiveTab("orders")}
+              />
             )}
 
             {/* Account Settings Tab */}

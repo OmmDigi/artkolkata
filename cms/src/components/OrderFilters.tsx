@@ -10,8 +10,10 @@ import {
   ORDER_VIEW_DRAFT,
   ORDER_VIEW_FILTER,
   ORDER_VIEW_LIVE,
+  PAYMENT_MODE_FILTER,
   PAYMENT_STATUS_FILTER,
 } from "@/constant";
+import ExportOrdersButton from "./ExportOrdersButton";
 
 export default function OrderFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -127,6 +129,14 @@ export default function OrderFilters() {
 
       <SelectInput
         className="w-40 shrink-0"
+        onValueChange={(value) => applyFilter("pmode", value)}
+        label="Payment Mode"
+        options={PAYMENT_MODE_FILTER}
+        value={searchParams.get("pmode") ?? FILTER_ALL}
+      />
+
+      <SelectInput
+        className="w-40 shrink-0"
         onValueChange={(value) => applyFilter("ostatus", value)}
         label="Order Status"
         options={ORDER_STATUS_FILTER}
@@ -140,6 +150,8 @@ export default function OrderFilters() {
         options={CUSTOMER_TYPE_FILTER}
         value={searchParams.get("customer_type") ?? FILTER_ALL}
       />
+
+      <ExportOrdersButton />
 
       <Button
         className="shrink-0"

@@ -14,13 +14,14 @@ import { useDoMutation } from "@/hooks/useDoMutation";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import type { IError, IResponse } from "@/types";
 import { api } from "@/utils/api";
+import { usePageSize } from "@/hooks/usePageSize";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { Loader, Pencil, Plus, Trash } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
-const getDiscountList = async (page: number) => {
-  return (await api.get(`/api/v1/discount?page=${page}`)).data;
+const getDiscountList = async (page: number, limit: number) => {
+  return (await api.get(`/api/v1/discount?page=${page}&limit=${limit}`)).data;
 };
 
 export default function DiscountPage() {
@@ -52,13 +53,14 @@ function CouponsTab() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
 
   const { data, isFetching, error, refetch } = useQuery<
     IResponse<any[]>,
     AxiosError<IError>
   >({
-    queryKey: ["get-discount-list", currentPage],
-    queryFn: () => getDiscountList(currentPage),
+    queryKey: ["get-discount-list", currentPage, pageSize],
+    queryFn: () => getDiscountList(currentPage, pageSize),
   });
 
   return (

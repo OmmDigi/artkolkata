@@ -141,6 +141,7 @@ export default function MediaGallery({
             totalPage={data?.totalPage}
             page={page}
             onPageChange={setPage}
+            showPageSize={false}
           />
         </LoadingHandler>
       </div>

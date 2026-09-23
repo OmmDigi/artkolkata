@@ -5,6 +5,8 @@ import {
   ORDER_CANCELLED,
   ORDER_CONFIRMED,
   ORDER_DELIVERED,
+  ORDER_FLOW_RANK,
+  ORDER_PACKED,
   ORDER_PENDING,
   ORDER_RETURNED,
   ORDER_RETURN_INITIATED,
@@ -12,6 +14,7 @@ import {
   REPLACE_INITIATED,
   REPLACED,
   SHIPMENT_MAPING,
+  TRACK_STEP_LABEL,
 } from "../constant";
 import { v4 as uuidv4 } from "uuid";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
@@ -33,10 +36,16 @@ import {
   CACHE_TAGS,
   invalidateCache,
 } from "../services/cache.service";
+import {
+  eventTimestamp,
+  recordStatusScan,
+} from "../services/orderTracking.service";
 import { manageStock } from "../utils/manageStock";
 import { notifyStaffNewOrder } from "../utils/notifyStaffNewOrder";
 import { notifyOrderReceived, notifyOrderStatus } from "../utils/orderEmails";
 import { parsePagination } from "../utils/parsePagination";
+import { buildOrderListFilter } from "../utils/buildOrderListFilter";
+import { streamOrderExport } from "../services/orderExport.service";
 import {
   VCancelOrder,
   VCreateOrder,
@@ -47,6 +56,7 @@ import {
   VUpdateOrderStatus,
   VUpdateShipmentBoxes,
   VUploadOrderInvoice,
+  VBulkInvoice,
 } from "../validator/order.validator";
 import {
   aggregateShipmentDimensions,
@@ -74,13 +84,15 @@ import logger from "../utils/logger";
 import { withOrderDocumentUrls } from "../utils/orderDocumentUrls";
 import { getOrderDocumentData } from "../services/documents/orderDocumentData";
 import {
+  generateInvoiceForOrder,
+  loadOrderInvoice,
+} from "../services/documents/invoice.service";
+import { buildBulkInvoicePdf } from "../services/documents/bulkInvoice.service";
+import {
   generatePaymentSlip,
   renderUnstoredPaymentSlip,
 } from "../services/documents/generatePaymentSlip";
-import {
-  renderInvoicePdf,
-  renderPackingSlipPdf,
-} from "../services/documents/renderOrderDocument";
+import { renderPackingSlipPdf } from "../services/documents/renderOrderDocument";
 import {
   deleteOrderDocument,
   fetchOrderDocument,
@@ -579,52 +591,7 @@ export const getPriceBreakdown = asyncErrorHandler(async (req, res) => {
 
 export const getOrderList = asyncErrorHandler(async (req, res) => {
   const { TO_STRING } = parsePagination(req);
-
-  let filter = "WHERE 1=1";
-  let placeholder = 1;
-  const filterValues: any[] = [];
-
-  if (req.query.orderid) {
-    filter += ` AND o.order_number = $${placeholder++}`;
-    filterValues.push(req.query.orderid);
-  }
-
-  if (req.query.from && req.query.to) {
-    filter += ` AND o.created_at BETWEEN $${placeholder++} AND $${placeholder++}`;
-    filterValues.push(req.query.from);
-    filterValues.push(req.query.to);
-  }
-
-  if (req.query.pstatus) {
-    filter += ` AND o.payment_status = $${placeholder++}`;
-    filterValues.push(req.query.pstatus);
-  }
-
-  if (req.query.ostatus) {
-    filter += ` AND o.order_status = $${placeholder++}`;
-    filterValues.push(req.query.ostatus);
-  }
-
-  /**
-   * Drafts are parked orders — a test, a duplicate, a phone order keyed in
-   * wrong — and they are off every screen but the one that asks for them.
-   * ?draft=true is that screen: it shows drafts and nothing else, so the two
-   * views never overlap and a total taken from either one is honest.
-   */
-  if (req.query.draft === "true") {
-    filter += ` AND o.is_draft = true`;
-  } else {
-    filter += ` AND COALESCE(o.is_draft, false) = false`;
-  }
-
-  // "Show me only the orders nobody was logged in for." Read off the order, not
-  // the customer, so a guest who has since made an account does not quietly
-  // drop out of the list.
-  if (req.query.customer_type === "guest") {
-    filter += ` AND o.is_guest_order = true`;
-  } else if (req.query.customer_type === "registered") {
-    filter += ` AND COALESCE(o.is_guest_order, false) = false`;
-  }
+  const { filter, filterValues } = buildOrderListFilter(req.query);
 
   const { rows } = await pool.query(
     `
@@ -678,6 +645,10 @@ export const getOrderList = asyncErrorHandler(async (req, res) => {
   );
 
   httpResponse(res, 200, "Order list", withOrderDocumentUrls(rows));
+});
+
+export const exportOrderList = asyncErrorHandler(async (req, res) => {
+  await streamOrderExport(req, res);
 });
 
 export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
@@ -1006,6 +977,19 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         "UPDATE order_items SET status = $1 WHERE order_id = $2",
         [value.status, value.order_id],
       );
+
+      // The tracking page is built out of scans, and a partner that pushes no
+      // webhook — Bigship, or a shop shipping for itself — never produces one.
+      // The status change writes its own, in the same transaction, so the
+      // customer sees the step the moment the admin saves it.
+      //
+      // Whole-order changes only : one item moving is not the order moving,
+      // for the same reason the email below is not sent for one.
+      await recordStatusScan({
+        orderId: value.order_id,
+        status: value.status,
+        client,
+      });
     }
   });
 
@@ -1292,6 +1276,18 @@ export const doReturn = asyncErrorHandler(async (req: CustomRequest, res) => {
       "UPDATE order_items SET status = $1 WHERE order_id = $2",
       [ORDER_RETURN_INITIATED, dbOrderId],
     );
+
+    // The order row carries the Return/Replace difference, so the scan does
+    // too : the customer is told which of the two is under way.
+    await recordStatusScan({
+      orderId: dbOrderId,
+      status: orderStatus,
+      instructions:
+        value.type === "Return"
+          ? "Return requested by the customer"
+          : "Replacement requested by the customer",
+      client,
+    });
   });
 
   // Tell the courier to come and collect. The partner reads the order itself
@@ -1410,6 +1406,13 @@ export const bookReplacementShipment = asyncErrorHandler(async (req, res) => {
       "UPDATE order_items SET status = $1 WHERE order_id = $2",
       [REPLACED, orderId],
     );
+
+    await recordStatusScan({
+      orderId,
+      status: REPLACED,
+      instructions: "Replacement parcel booked",
+      client,
+    });
   });
 
   httpResponse(res, 200, "Replacement shipment booked", {
@@ -1466,6 +1469,14 @@ const cancelCustomerOrder = async (orderNumber: string, userId: number) => {
       "UPDATE order_items SET status = $1 WHERE order_id = $2",
       [ORDER_CANCELLED, dbOrderId],
     );
+
+    // see updateOrderStatus : the tracking page only knows what the scans say
+    await recordStatusScan({
+      orderId: dbOrderId,
+      status: ORDER_CANCELLED,
+      instructions: "Order cancelled by the customer",
+      client,
+    });
   });
 
   // Cancel with the shipping partner if the shipment was already created. The
@@ -1582,82 +1593,6 @@ export const deleteOrderInvoice = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Uploaded invoice removed");
 });
 
-interface IOrderInvoiceFile {
-  content: Buffer;
-  filename: string;
-  contentType: string;
-}
-
-/**
- * The order's invoice as bytes, plus the order details an invoice is described
- * by. `file` is null when the order has no invoice of either kind.
- *
- * An invoice an admin uploaded by hand wins over a generated one: the admin
- * uploaded it knowing a generated one was a click away, so it is the one they
- * mean the customer to have. An order with neither has no invoice at all; what
- * it has is a payment slip, served by downloadPaymentSlip.
- *
- * Shared by the download route and the email-it-to-the-customer route so the
- * two can never disagree about which document is *the* invoice.
- */
-const loadOrderInvoice = async (orderId: number | string) => {
-  const order = await pool.query(
-    `SELECT
-       o.order_number,
-       o.invoice_number,
-       o.invoice_document,
-       o.invoice_pdf_url,
-       o.total_amount,
-       TO_CHAR(o.created_at, 'DD Mon YYYY') AS order_date,
-       COALESCE(o.shipping_address, '{}'::jsonb) AS shipping_details,
-       u.name AS account_name,
-       u.email AS account_email
-     FROM orders o
-     LEFT JOIN users u ON u.id = o.user_id
-     WHERE o.order_id = $1`,
-    [orderId],
-  );
-
-  if (order.rowCount == 0)
-    throw new ErrorHandler(404, "Order information not found!");
-
-  const row = order.rows[0];
-  const { order_number, invoice_number, invoice_document, invoice_pdf_url } =
-    row;
-
-  let file: IOrderInvoiceFile | null = null;
-
-  if (invoice_document) {
-    const [header, base64] = (invoice_document as string).split(",");
-    const mime = header.match(/^data:([^;]+);base64$/)?.[1];
-
-    if (!base64 || !mime) {
-      throw new ErrorHandler(
-        500,
-        "The uploaded invoice for this order is unreadable",
-      );
-    }
-
-    const extension = mime === "application/pdf" ? "pdf" : "jpg";
-
-    file = {
-      content: Buffer.from(base64, "base64"),
-      filename: `invoice-${order_number}.${extension}`,
-      contentType: mime,
-    };
-  } else if (invoice_pdf_url) {
-    // the file itself is private on the upload server, so it is read with the
-    // api's token and streamed on rather than linked to
-    file = {
-      content: await fetchOrderDocument(invoice_pdf_url),
-      filename: `invoice-${invoice_number ?? order_number}.pdf`,
-      contentType: "application/pdf",
-    };
-  }
-
-  return { order: row, file };
-};
-
 // Serves the order's invoice, whatever the order status is.
 export const downloadInvoice = asyncErrorHandler(async (req, res) => {
   const orderid = req.params.orderid;
@@ -1764,66 +1699,38 @@ const readOrderId = (req: { params: Record<string, any> }) => {
 export const generateOrderInvoice = asyncErrorHandler(async (req, res) => {
   const orderId = readOrderId(req);
 
-  let invoiceNumber = "";
-  let supersededUrl: string | null = null;
-  let storedUrl = "";
-
-  await doTransition(async (client) => {
-    // FOR UPDATE, so two admins pressing the button at the same moment cannot
-    // draw two invoice numbers for one order.
-    const existing = await client.query(
-      `SELECT invoice_number, invoice_generated_at, invoice_pdf_url
-       FROM orders WHERE order_id = $1 FOR UPDATE`,
-      [orderId],
-    );
-
-    if (existing.rowCount === 0)
-      throw new ErrorHandler(404, "Order information not found!");
-
-    const row = existing.rows[0];
-    supersededUrl = row.invoice_pdf_url ?? null;
-
-    // The number and the date are allotted once and then kept. A customer
-    // holding INV-100023 dated the 4th must not be sent a corrected document
-    // that calls itself something else, or claims to have been issued later.
-    if (row.invoice_number) {
-      invoiceNumber = row.invoice_number;
-    } else {
-      const allotted = await client.query(
-        "SELECT 'INV-' || nextval('invoice_number_seq') AS invoice_number",
-      );
-      invoiceNumber = allotted.rows[0].invoice_number;
-    }
-
-    const invoiceDate = row.invoice_generated_at
-      ? new Date(row.invoice_generated_at)
-      : new Date();
-
-    const data = await getOrderDocumentData(orderId, client);
-    const pdf = await renderInvoicePdf(data, invoiceNumber, invoiceDate);
-
-    storedUrl = await uploadOrderDocument(pdf, `invoice-${invoiceNumber}.pdf`);
-
-    await client.query(
-      `UPDATE orders
-       SET invoice_number = $1,
-           invoice_pdf_url = $2,
-           invoice_generated_at = COALESCE(invoice_generated_at, $3),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE order_id = $4`,
-      [invoiceNumber, storedUrl, invoiceDate, orderId],
-    );
-  });
-
-  // Only once the new path is committed, and never in a way that can fail the
-  // request — see deleteOrderDocument.
-  if (supersededUrl && supersededUrl !== storedUrl)
-    await deleteOrderDocument(supersededUrl);
+  const { invoiceNumber } = await generateInvoiceForOrder(orderId);
 
   httpResponse(res, 200, "Invoice generated", {
     invoice_number: invoiceNumber,
     invoice_url: `${process.env.API_BASE_URL}/api/v1/orders/invoice/${orderId}`,
   });
+});
+
+/**
+ * The selected orders' invoices merged into one pdf, one after another in the
+ * order they were picked. Orders without an invoice get one generated. An
+ * order that fails is left out rather than failing the lot, and is named in
+ * X-Invoices-Failed so the CMS can tell the admin which ones to look at.
+ */
+export const downloadBulkInvoices = asyncErrorHandler(async (req, res) => {
+  const value = doValidate<{ order_ids: number[] }>(VBulkInvoice, req.body ?? {});
+
+  const { pdf, included, failed } = await buildBulkInvoicePdf(value.order_ids);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="invoices-${included.length}-orders-${Date.now()}.pdf"`,
+  );
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Invoices-Included", String(included.length));
+  res.setHeader(
+    "X-Invoices-Failed",
+    encodeURIComponent(JSON.stringify(failed)),
+  );
+
+  res.end(Buffer.from(pdf));
 });
 
 export const generateOrderPackingSlip = asyncErrorHandler(async (req, res) => {
@@ -2001,12 +1908,16 @@ export const generateOrderPaymentSlip = asyncErrorHandler(async (req, res) => {
 interface ITrack {
   order_number: string;
   order_id: number;
+  order_status: string;
   created_at: string;
+  /** When the order last moved. Only used by an order that has no events. */
+  status_changed_at: string;
+  /** Everything that happened to this order, oldest first. */
   tracks: {
     status: string;
-    status_type: string;
     time: string;
-    location: string;
+    location: string | null;
+    instructions: string | null;
   }[];
 }
 // ============================================================
@@ -2030,12 +1941,30 @@ async function pullShipmentScans(waybill: string) {
   const events = partner.normalizeTrackingHistory(result.trackingData, waybill);
   if (events.length === 0) return [];
 
-  await pool.query("DELETE FROM webhook_data WHERE waybill = $1", [waybill]);
+  // Courier rows only. The admin scans for this order were written by a status
+  // change, not by the partner, and the partner re-sending its history is no
+  // reason to lose them — see services/orderTracking.service.
+  await pool.query(
+    "DELETE FROM webhook_data WHERE waybill = $1 AND source = 'courier'",
+    [waybill],
+  );
 
   for (const event of events) {
     await pool.query(
-      "INSERT INTO webhook_data (waybill, payload) VALUES ($1, $2)",
-      [waybill, event],
+      `
+       INSERT INTO webhook_data (waybill, source, order_status, event_at, payload)
+       VALUES ($1, 'courier', $2, $3, $4)
+      `,
+      [
+        waybill,
+        // Translated once, on the way in — see the webhook service. NULL for a
+        // scan nothing maps : stored, but not a step on the tracking page.
+        SHIPMENT_MAPING[
+          `${event.Shipment.Status.StatusType}_${event.Shipment.Status.Status}`
+        ] ?? null,
+        eventTimestamp(event.Shipment.Status.StatusDateTime),
+        event,
+      ],
     );
   }
 
@@ -2109,6 +2038,24 @@ async function syncShipmentTracking(orderNumber: string) {
         return;
       }
 
+      // Never walk an order backwards on a pull.
+      //
+      // The scans are stored either way — the tracking page should show
+      // everything the courier said — but the order's own status is not moved
+      // down the flow. An admin who has already marked the parcel DELIVERED in
+      // the CMS knows something the courier's last scan does not, and the next
+      // customer opening the tracking page must not undo it.
+      const currentRank = ORDER_FLOW_RANK[orderLookup.rows[0].order_status];
+      const nextRank = ORDER_FLOW_RANK[STATUS];
+
+      if (
+        currentRank !== undefined &&
+        nextRank !== undefined &&
+        nextRank < currentRank
+      ) {
+        return;
+      }
+
       movedOrderId = orderId;
 
       await manageStock({ order_status: STATUS, orderid: orderId, client });
@@ -2151,6 +2098,20 @@ async function syncShipmentTracking(orderNumber: string) {
   }
 }
 
+/**
+ * The customer's tracking page.
+ *
+ * webhook_data is an append-only log of everything that happened to the order
+ * — courier scans and status changes made here, in the order they happened —
+ * so the page is that log read back, not a fixed checklist with events fitted
+ * into it. An order that is delivered, returned and shipped again shows all of
+ * it, in sequence, because nothing is ever inserted anywhere: each event is
+ * simply the next line.
+ *
+ * The steps that have not happened yet are appended at the end, unticked, and
+ * only while the order is still on the forward journey. A cancelled or
+ * returned order has nothing coming, so nothing is promised.
+ */
 export const trackOrder = asyncErrorHandler(async (req, res) => {
   // track order
   const value = doValidate<{ order_number: string }>(
@@ -2165,29 +2126,39 @@ export const trackOrder = asyncErrorHandler(async (req, res) => {
      SELECT
         o.order_number,
         o.order_id,
+        o.order_status,
         TO_CHAR(o.created_at AT TIME ZONE 'Asia/Kolkata', 'DD FMMonth YYYY HH12:MIam') AS created_at,
+        TO_CHAR(
+          COALESCE(o.delivered_at, o.updated_at, o.created_at) AT TIME ZONE 'Asia/Kolkata',
+          'DD FMMonth YYYY HH12:MIam'
+        ) AS status_changed_at,
         COALESCE(
           JSON_AGG(
             JSON_BUILD_OBJECT(
-              'status', wd.payload->'Shipment'->'Status'->>'Status',
-              'status_type', wd.payload->'Shipment'->'Status'->>'StatusType',
-              'instructions', wd.payload->'Shipment'->'Status'->>'Instructions',
+              'status', wd.order_status,
               'time',
                 TO_CHAR(
-                  ((wd.payload->'Shipment'->'Status'->>'StatusDateTime')::timestamp AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata',
+                  (wd.event_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata',
                   'DD FMMonth YYYY HH12:MIam'
                 ),
-              'location', wd.payload->'Shipment'->'Status'->>'StatusLocation'
+              'location', wd.payload->'Shipment'->'Status'->>'StatusLocation',
+              'instructions', wd.payload->'Shipment'->'Status'->>'Instructions'
             )
-          ) FILTER (WHERE wd.id IS NOT NULL), '[]'::json
+            ORDER BY wd.event_at, wd.id
+          ) FILTER (WHERE wd.order_status IS NOT NULL), '[]'::json
         ) AS tracks
       FROM orders o
 
       LEFT JOIN order_returns r 
         ON r.order_id = o.order_id
 
+      -- Two ways an event belongs to this order. A courier scan is matched on
+      -- the waybill it was reported against, forward or reverse leg. An event
+      -- written from a status change is matched on the order id, because an
+      -- order the shop ships itself has no waybill to match on at all.
       LEFT JOIN webhook_data AS wd 
-        ON wd.waybill = o.waybill
+        ON wd.order_id = o.order_id
+        OR wd.waybill = o.waybill
         OR wd.waybill = r.waybill
         OR wd.waybill = r.replacement_waybill
 
@@ -2203,111 +2174,71 @@ export const trackOrder = asyncErrorHandler(async (req, res) => {
   if (rowCount == 0)
     throw new ErrorHandler(400, "Unable to find the order track info");
 
-  const modifiedTracks: {
-    status: string;
-    time: string;
-    location: string;
-    completed: true;
-  }[] = [];
+  const order = rows[0];
 
-  let trackToReturn: {
-    key: string;
-    status: string;
-    date: string | null;
-    completed: boolean;
-    location: string | null;
-  }[] = [
-    {
-      key: "PENDING",
-      status: "ORDER PLACED",
-      date: rows[0].created_at,
-      completed: true,
-      location: null,
-    },
-    {
-      key: "CONFIRMED",
-      status: "ORDER CONFIRMED",
-      date: null,
-      completed: false,
-      location: null,
-    },
-    {
-      key: "SHIPPED",
-      status: "SHIPPED",
-      date: null,
-      completed: false,
-      location: null,
-    },
-    {
-      key: "OUT FOR DELIVERY",
-      status: "OUT FOR DELIVERY",
-      date: null,
-      completed: false,
-      location: null,
-    },
-    {
-      key: "DELIVERED",
-      status: "DELIVERED",
-      date: null,
-      completed: false,
-      location: null,
-    },
-  ];
+  const step = (
+    status: string,
+    date: string | null,
+    completed: boolean,
+    location: string | null = null,
+  ) => ({
+    key: status,
+    status: TRACK_STEP_LABEL[status] ?? status,
+    date,
+    completed,
+    location,
+  });
 
-  const map = new Map<string, boolean>();
-  for (let i = 0; i < rows[0].tracks.length; i++) {
-    const track = rows[0].tracks[i];
+  // The order being placed is the one step no event ever reports : it is the
+  // order's own creation, and it is always first.
+  const trackToReturn = [step(ORDER_PENDING, order.created_at, true)];
 
-    const key = `${track.status_type}_${track.status}`;
+  // An order with no events at all — placed before any of this existed, or
+  // moved by something that does not write one. Its own status is then the
+  // only record of where it got to, and updated_at the only record of when.
+  const events =
+    order.tracks.length > 0
+      ? order.tracks
+      : order.order_status === ORDER_PENDING
+        ? []
+        : [
+            {
+              status: order.order_status,
+              time: order.status_changed_at,
+              location: null,
+              instructions: null,
+            },
+          ];
 
-    if (!map.has(key)) {
-      const shipmentValue = SHIPMENT_MAPING[key];
-      modifiedTracks.push({
-        location: track.location,
-        status: shipmentValue,
-        time: track.time,
-        completed: true,
-      });
-      map.set(key, true);
-    }
+  for (const event of events) {
+    const previous = trackToReturn[trackToReturn.length - 1];
+
+    // Only a repeat of the step the order is already on is dropped. A parcel
+    // reports "In Transit" from every hub it passes through and that is one
+    // step, but the same status seen again after the order has moved on is a
+    // second journey and belongs on the page.
+    if (previous.key === event.status) continue;
+
+    trackToReturn.push(
+      step(event.status, event.time, true, event.location ?? null),
+    );
   }
 
-  modifiedTracks.forEach((pItem) => {
-    const i = trackToReturn.findIndex((item) => item.key == pItem.status);
-    if (i !== -1) {
-      // need to update that index
-      trackToReturn[i].completed = true;
-      trackToReturn[i].date = pItem.time;
-      trackToReturn[i].location = pItem.location;
-    } else {
-      const indexIsNotTrue = trackToReturn.findIndex(
-        (item) => item.completed == false,
-      );
+  // What is still to come, unticked. Only from a status that is actually on
+  // the forward journey : a cancelled, returned or replaced order is not
+  // waiting for anything, and showing it a greyed-out "DELIVERED" would be
+  // promising a delivery that is never going to happen.
+  const reached = ORDER_FLOW_RANK[trackToReturn[trackToReturn.length - 1].key];
 
-      if (indexIsNotTrue !== -1) {
-        const newArray = [
-          ...trackToReturn.slice(0, indexIsNotTrue),
-          {
-            key: pItem.status,
-            status: pItem.status,
-            date: pItem.time,
-            completed: true,
-            location: pItem.location,
-          },
-          ...trackToReturn.slice(indexIsNotTrue, trackToReturn.length),
-        ];
-        trackToReturn = newArray;
-      } else {
-        trackToReturn.push({
-          status: pItem.status,
-          completed: pItem.completed,
-          date: pItem.time,
-          location: pItem.location,
-          key: pItem.status,
-        });
-      }
+  if (reached !== undefined) {
+    for (const [status, rank] of Object.entries(ORDER_FLOW_RANK)) {
+      // PACKED is a warehouse state, not something the customer is waiting
+      // for. It shows up if it actually happened, but it is never promised.
+      if (rank <= reached || status === ORDER_PACKED) continue;
+
+      trackToReturn.push(step(status, null, false));
     }
-  });
+  }
 
   httpResponse(res, 200, "Order track list", trackToReturn);
 });

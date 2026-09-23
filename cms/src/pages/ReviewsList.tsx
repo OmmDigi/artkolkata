@@ -23,18 +23,23 @@ import LoadingHandler from "@/middleware/LoadingHandler";
 import type { IError, IResponse, IReviews } from "@/types";
 import SelectInput from "@/components/SelectInput";
 import { api } from "@/utils/api";
+import { usePageSize } from "@/hooks/usePageSize";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
 import { Calendar, CircleCheck, CircleX, Eye, Loader } from "lucide-react";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-export const getReviewList = async (searchParams: URLSearchParams) => {
-  if (!searchParams.has("page")) {
-    searchParams.set("page", "1");
+export const getReviewList = async (
+  searchParams: URLSearchParams,
+  limit: number,
+) => {
+  const params = new URLSearchParams(searchParams);
+  if (!params.has("page")) {
+    params.set("page", "1");
   }
-  return (await api.get(`/api/v1/products/reviews?${searchParams.toString()}`))
-    .data;
+  params.set("limit", limit.toString());
+  return (await api.get(`/api/v1/products/reviews?${params.toString()}`)).data;
 };
 
 export default function ReviewsList() {
@@ -44,6 +49,7 @@ export default function ReviewsList() {
   const [currentClickIndex, setCurrentClickIndex] = useState(-1);
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
   const currentRating = searchParams.get("stars") ?? REVIEW_RATING_ALL;
 
   const whichReviewStatusUpdating = useRef(-1);
@@ -52,8 +58,8 @@ export default function ReviewsList() {
     IResponse<IReviews[]>,
     AxiosError<IError>
   >({
-    queryKey: ["review-list", searchParams.toString()],
-    queryFn: () => getReviewList(searchParams),
+    queryKey: ["review-list", searchParams.toString(), pageSize],
+    queryFn: () => getReviewList(searchParams, pageSize),
   });
 
   //   const { isProductFetching, } = useProduct()

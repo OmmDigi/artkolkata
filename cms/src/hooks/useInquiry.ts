@@ -5,13 +5,17 @@ import type { AxiosError } from "axios";
 
 interface IProps {
   page?: number;
+  limit?: number;
   enabledFetching?: boolean;
   depandencyArray?: any[];
 }
 
-const getInquiryList = async (page: number, inquirieId?: number) => {
+const getInquiryList = async (page: number, inquirieId?: number, limit?: number) => {
   const urlSearchParams = new URLSearchParams();
   urlSearchParams.set("page", page.toString());
+  if (limit) {
+    urlSearchParams.set("limit", limit.toString());
+  }
   if (inquirieId) {
     urlSearchParams.set("inquiry_id", inquirieId.toString());
   }
@@ -24,7 +28,7 @@ export const useInquiry = (props?: IProps) => {
     AxiosError<IError>
   >({
     queryKey: ["get-inquiry-list", props?.depandencyArray ?? []],
-    queryFn: () => getInquiryList(props?.page ?? 1),
+    queryFn: () => getInquiryList(props?.page ?? 1, undefined, props?.limit),
     enabled: props?.enabledFetching ?? true,
   });
 

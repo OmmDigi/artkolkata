@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { ORDER_STATUSES } from "../constant";
+import { MAX_BULK_INVOICES, ORDER_STATUSES } from "../constant";
 
 export const VShippingAddress = Joi.object({
   fullName: Joi.string().required(),
@@ -219,4 +219,17 @@ export const VCancelOrder = Joi.object({
 
 export const VTrackOrder = Joi.object({
   order_number: Joi.string().required(),
+});
+
+export const VBulkInvoice = Joi.object({
+  order_ids: Joi.array()
+    .items(Joi.number().integer().positive())
+    .min(1)
+    .max(MAX_BULK_INVOICES)
+    .unique()
+    .required()
+    .messages({
+      "array.min": "Select at least one order",
+      "array.max": `At most ${MAX_BULK_INVOICES} invoices can be downloaded at once`,
+    }),
 });

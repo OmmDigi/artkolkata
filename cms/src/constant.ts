@@ -273,3 +273,13 @@ export const ORDER_VIEW_FILTER = [
 ];
 export const PAYMENT_STATUS_FILTER = [ALL_OPTION, ...PAYMENT_STATUS];
 export const CUSTOMER_TYPE_FILTER = [ALL_OPTION, ...CUSTOMER_TYPE];
+
+export const PAYMENT_MODE_FILTER = [
+  ALL_OPTION,
+  { text: "COD", value: PAYMENT_METHOD_COD },
+  { text: "Online", value: PAYMENT_METHOD_ONLINE },
+];
+
+// Mirrors MAX_BULK_INVOICES on the api: the most invoices merged into one pdf
+// per request. A bigger selection is downloaded in parts of this size.
+export const MAX_BULK_INVOICES = 100;

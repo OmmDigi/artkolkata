@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { useDoMutation } from "@/hooks/useDoMutation";
 import { useSubCategory } from "@/hooks/useSubCategory";
+import { usePageSize } from "@/hooks/usePageSize";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { Loader, Pencil, Plus, Trash } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -25,6 +26,7 @@ export default function SubCategoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
   const currentSearch = searchParams.get("search") ?? "";
 
   // the input stays instant, only the debounced value hits the api
@@ -51,7 +53,11 @@ export default function SubCategoryPage() {
   const { isLoading, mutate } = useDoMutation();
 
   const { subCategoryData, isSubCategoryFetching, subCategoryError, refetchSubCategory } =
-    useSubCategory({ page: currentPage, search: currentSearch });
+    useSubCategory({
+      page: currentPage,
+      search: currentSearch,
+      limit: pageSize,
+    });
 
   return (
     <>

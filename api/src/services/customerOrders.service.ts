@@ -87,6 +87,8 @@ const buildCustomerOrderQuery = (whereClause: string) => `
               ),
               oi.variant_info->>'product_slug'
             ),
+          'variant_id', oi.variant_info->>'id',
+          'product_id', oi.variant_info->>'product_id',
           'quantity', oi.quantity,
           'sku', oi.variant_info->>'sku',
           'price', oi.variant_info->'price',

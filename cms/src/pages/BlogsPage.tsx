@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useBlog } from "@/hooks/useBlog";
+import { usePageSize } from "@/hooks/usePageSize";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { Loader, Pencil, Plus, Trash } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -16,11 +17,13 @@ import { Link, useSearchParams } from "react-router-dom";
 export default function BlogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
 
   const { isBlogFetching, blogData, blogError, totalPage, isMutating, mutateBlog, refetchBlog } =
     useBlog({
       page: currentPage,
-      depandencyArray: [currentPage],
+      limit: pageSize,
+      depandencyArray: [currentPage, pageSize],
     });
 
   return (

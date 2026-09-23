@@ -5,9 +5,10 @@ import type { AxiosError } from "axios";
 import { useCallback } from "react";
 import { useDoMutation } from "./useDoMutation";
 
-const getBlogList = async (page: number, status?: string) => {
+const getBlogList = async (page: number, status?: string, limit?: number) => {
   const params = new URLSearchParams();
   params.set("page", page.toString());
+  if (limit) params.set("limit", limit.toString());
   if (status) params.set("status", status);
   return (await api.get(`/api/v1/blogs?${params.toString()}`)).data;
 };
@@ -15,6 +16,7 @@ const getBlogList = async (page: number, status?: string) => {
 interface IProps {
   page?: number;
   status?: string;
+  limit?: number;
   enabledFetching?: boolean;
   depandencyArray?: any[];
 }
@@ -33,7 +35,7 @@ export const useBlog = (props?: IProps) => {
     AxiosError<IError>
   >({
     queryKey: ["get-blog-list", props?.depandencyArray ?? []],
-    queryFn: () => getBlogList(props?.page ?? 1, props?.status),
+    queryFn: () => getBlogList(props?.page ?? 1, props?.status, props?.limit),
     enabled: props?.enabledFetching ?? true,
   });
 

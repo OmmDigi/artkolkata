@@ -12,19 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   ORDER_CONFIRMED,
-  ORDER_PACKED,
   ORDER_PENDING,
-  // ORDER_CANCELLED,
-  // ORDER_DELIVERED,
-  ORDER_RETURN_INITIATED,
   ORDER_RETURNED,
-  ORDER_SHIPPED,
-  REPLACE_INITIATED,
-  // ORDER_SHIPPED,
   ORDER_STATUS,
-  OUT_FOR_DELIVERY,
-  // OUT_FOR_DELIVERY,
   PAYMENT_STATUS,
+  REPLACE_INITIATED,
 } from "@/constant";
 import { useDoMutation } from "@/hooks/useDoMutation";
 import LoadingHandler from "@/middleware/LoadingHandler";
@@ -58,10 +50,10 @@ export default function SingleOrderPage() {
   // Set by whichever partner booked the parcel.
   const booked = !!data?.data.orderInfo.partner_order_id;
 
-  // Is there a courier integration behind this at all? Defaults to true so an
-  // API build that does not send shippingInfo yet keeps the old, stricter
-  // dropdown rather than quietly unlocking statuses on a live courier shop.
-  const shippingEnabled = data?.data.shippingInfo?.enabled ?? true;
+  // Which courier is live right now, for the line under the status dropdown.
+  // Whether one exists no longer decides what the admin may set — see the
+  // dropdown itself.
+  const shippingInfo = data?.data.shippingInfo;
 
   const { isLoading, mutate } = useDoMutation();
 
@@ -269,64 +261,6 @@ export default function SingleOrderPage() {
                             <Badge>Quantity: {item.quantity}</Badge>
                           ) : null}
                         </div>
-
-                        {/* {item.status === ORDER_PENDING ? (
-                          <Button
-                            type="button"
-                            className="bg-green-700 hover:bg-green-900"
-                            onClick={() => {
-                              if (
-                                !confirm(
-                                  "Are you sure you want to confirm the order ?"
-                                )
-                              )
-                                return;
-                              mutate({
-                                apiPath: `/api/v1/orders`,
-                                method: "patch",
-                                formData: {
-                                  status: ORDER_CONFIRMED,
-                                  order_item_id: item.order_item_id,
-                                },
-                              });
-                            }}
-                          >
-                            Confirm Order
-                          </Button>
-                        ) : (
-                          <span className="inline-block font-semibold">
-                            Status : {item.status}
-                          </span>
-                        )} */}
-
-                        {/* <SelectInput
-                          onValueChange={(value) => {
-                            if (
-                              !confirm(
-                                "Are you sure you want to change the order item status ?"
-                              )
-                            )
-                              return;
-                            mutate({
-                              apiPath: `/api/v1/orders`,
-                              method: "patch",
-                              formData: {
-                                status: value,
-                                order_item_id: item.order_item_id,
-                              },
-                            });
-                          }}
-                          options={ORDER_STATUS}
-                          defaultValue={item.status}
-                          disabledValues={[
-                            ORDER_PACKED,
-                            ORDER_SHIPPED,
-                            ORDER_DELIVERED,
-                            ORDER_CANCELLED,
-                            ORDER_RETURNED,
-                            ORDER_RETURN_INITIATED,
-                          ]}
-                        /> */}
                       </div>
                     </li>
                   ))}
@@ -587,32 +521,6 @@ export default function SingleOrderPage() {
                 </div>
               </Section>
               <Section>
-                {/* {data?.data.orderInfo.order_status === ORDER_PENDING ? (
-                  <Button
-                    type="button"
-                    className="bg-green-700 hover:bg-green-900"
-                    onClick={() => {
-                      if (
-                        !confirm("Are you sure you want to confirm the order ?")
-                      )
-                        return;
-                      mutate({
-                        apiPath: `/api/v1/orders`,
-                        method: "patch",
-                        formData: {
-                          status: ORDER_CONFIRMED,
-                          order_id: params.id,
-                        },
-                      });
-                    }}
-                  >
-                    Confirm Order
-                  </Button>
-                ) : (
-                  <span className="inline-block font-semibold">
-                    Status : {data?.data.orderInfo.order_status}
-                  </span>
-                )} */}
                 <SelectInput
                   onValueChange={(value) => {
                     if (
@@ -638,25 +546,9 @@ export default function SingleOrderPage() {
                     });
                   }}
                   label="Order Status"
-                  options={ORDER_STATUS.filter(item => item.value !== "")}
+                  options={ORDER_STATUS}
                   value={orderStatus}
                   disabledValues={[
-                    // Courier-driven, but only while there is a courier. With a
-                    // partner these arrive from tracking scans and an admin
-                    // setting them by hand would just be overwritten by the next
-                    // webhook. With SHIPPING_PARTNER=none no scan is ever coming,
-                    // so leaving them locked strands every order on CONFIRMED and
-                    // the customer never gets the shipped and out-for-delivery
-                    // emails, which the API sends off the status change itself.
-                    ...(shippingEnabled
-                      ? [
-                          ORDER_PACKED,
-                          ORDER_SHIPPED,
-                          OUT_FOR_DELIVERY,
-                          ORDER_RETURN_INITIATED,
-                          ORDER_RETURNED,
-                        ]
-                      : []),
                     // Booking is one-way. Once the shipment exists the order
                     // cannot go back to pending or be confirmed again, but it
                     // must still be cancellable — cancelling is exactly what
@@ -669,6 +561,30 @@ export default function SingleOrderPage() {
                     ...(booked ? [ORDER_PENDING, ORDER_CONFIRMED] : []),
                   ]}
                 />
+
+                {/* Every other status is the admin's to set, whichever partner
+                    is live.
+                    
+                    They used to be locked whenever any partner was configured,
+                    on the reasoning that tracking scans would set them and a
+                    hand-set status would only be overwritten by the next
+                    webhook. That was only ever true of a partner that pushes
+                    one. Bigship pushes nothing at all, so its orders could not
+                    be moved past CONFIRMED by anyone — and the shipped and
+                    out-for-delivery emails, which the API sends off the status
+                    change, never went out either.
+
+                    Nothing is overwritten now in any case: a courier scan can
+                    no longer walk an order backwards (see the tracking sync in
+                    the API), and a status set here writes the customer's
+                    tracking step itself. */}
+                {shippingInfo ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {shippingInfo.enabled
+                      ? `${shippingInfo.partner_label} is live. Tracking scans move this on their own — set it by hand when a scan has not arrived.`
+                      : `${shippingInfo.partner_label}. Nothing reports back, so every status here is set by hand.`}
+                  </p>
+                ) : null}
 
                 {/* Parking is deliberately not one of the status options: the
                     order keeps the status it has, so restoring it needs no

@@ -12,6 +12,7 @@ import {
 import { useCategory } from "@/hooks/useCategory";
 import { useDoMutation } from "@/hooks/useDoMutation";
 import { useProduct } from "@/hooks/useProduct";
+import { usePageSize } from "@/hooks/usePageSize";
 import { queryClient } from "@/main";
 import LoadingHandler from "@/middleware/LoadingHandler";
 import { Copy, Loader, Pencil, Plus, Trash } from "lucide-react";
@@ -26,6 +27,7 @@ export default function ProductsPage() {
   const clickedActionButton = useRef<number>(-1);
 
   const currentPage = parseInt(searchParams.get("page") ?? "1");
+  const pageSize = usePageSize();
   const currentCategory = searchParams.get("category")?.toString();
   const currentStatus = searchParams.get("status")?.toString();
   const currentSearch = searchParams.get("search") ?? "";
@@ -62,10 +64,16 @@ export default function ProductsPage() {
     filter: {
       categoryId: currentCategory,
       status: currentStatus ?? "1",
-      limit : 20,
+      limit: pageSize,
       search: currentSearch,
     },
-    depandencyArray: [currentPage, currentCategory, currentStatus, currentSearch],
+    depandencyArray: [
+      currentPage,
+      pageSize,
+      currentCategory,
+      currentStatus,
+      currentSearch,
+    ],
   });
 
   const { categoryData, isCategoryFetching } = useCategory({limit : -1});

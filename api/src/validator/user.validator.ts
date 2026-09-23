@@ -29,7 +29,8 @@ export const VSaveUserInfo = VSignUp.concat(
     is_verified: Joi.bool().required(),
     is_active: Joi.bool().required(),
     action : Joi.string().valid("Add", "Update").default("Update"),
-    role : Joi.string().valid("User", "Employee").default("User")
+    role : Joi.string().valid("User", "Employee").default("User"),
+    is_guest : Joi.bool().required()
   }),
 );
 

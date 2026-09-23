@@ -130,6 +130,44 @@ export const SHIPMENT_MAPING : Record<string, string> = {
   CN_Closed: ORDER_RETURNED,
 };
 
+/**
+ * Who wrote a webhook_data row: a courier, or an order status change here.
+ * Mirrors webhook_data.source — see config/database.sql.
+ */
+export type TrackingScanSource = "courier" | "admin";
+
+/**
+ * What a status is called on the customer's tracking page.
+ *
+ * Only the two that read badly as a bare status are here. Everything else is
+ * shown exactly as it is stored, so a status added to ORDER_STATUSES turns up
+ * on the tracking page without anything else having to be edited.
+ */
+export const TRACK_STEP_LABEL: Record<string, string> = {
+  [ORDER_PENDING]: "ORDER PLACED",
+  [ORDER_CONFIRMED]: "ORDER CONFIRMED",
+};
+
+/**
+ * How far along the forward journey a status is.
+ *
+ * Only the forward leg is ranked — cancelled, returned and replaced are not
+ * further along anything, they are somewhere else, and they are already
+ * protected from courier scans by COURIER_PROTECTED_STATUSES.
+ *
+ * Two places need it: the tracking pull, which refuses to walk an order
+ * backwards on a stale scan, and the tracking page, which works out which
+ * steps are still to come from wherever the order has got to.
+ */
+export const ORDER_FLOW_RANK: Record<string, number> = {
+  [ORDER_PENDING]: 0,
+  [ORDER_CONFIRMED]: 1,
+  [ORDER_PACKED]: 2,
+  [ORDER_SHIPPED]: 3,
+  [OUT_FOR_DELIVERY]: 4,
+  [ORDER_DELIVERED]: 5,
+};
+
 // export const SHIPMENT_MAPING : Record<string, string> = {
 //   UD_Manifested: ORDER_CONFIRMED,
 //   "UD_Not Picked": ORDER_CONFIRMED,
@@ -214,3 +252,10 @@ export const NON_REVENUE_ORDER_STATUSES = [ORDER_CANCELLED, ORDER_RETURNED];
 /** how many rows /analytics/top-products returns when the caller says nothing */
 export const TOP_PRODUCTS_DEFAULT_LIMIT = 10;
 export const TOP_PRODUCTS_MAX_LIMIT = 50;
+
+/**
+ * Most invoices one bulk download merges into a single pdf. The merged file is
+ * built in memory, so this is what bounds it; the CMS splits a bigger
+ * selection into parts of this size.
+ */
+export const MAX_BULK_INVOICES = 100;

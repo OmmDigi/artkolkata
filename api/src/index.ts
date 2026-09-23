@@ -115,6 +115,13 @@ if (process.env.NODE_ENV === "production") {
         }
       },
       credentials: true,
+      // lets the CMS read the file name of a download, and the outcome of a
+      // bulk invoice download
+      exposedHeaders: [
+        "Content-Disposition",
+        "X-Invoices-Included",
+        "X-Invoices-Failed",
+      ],
     }),
   );
 } else {
@@ -124,6 +131,13 @@ if (process.env.NODE_ENV === "production") {
         callback(null, true); // allow every origin
       },
       credentials: true,
+      // lets the CMS read the file name of a download, and the outcome of a
+      // bulk invoice download
+      exposedHeaders: [
+        "Content-Disposition",
+        "X-Invoices-Included",
+        "X-Invoices-Failed",
+      ],
     }),
   );
 }

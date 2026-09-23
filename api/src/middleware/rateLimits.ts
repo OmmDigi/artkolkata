@@ -225,6 +225,28 @@ export const rateLimits = {
     message: "Too many document downloads. Please wait a moment and try again.",
   }),
 
+  /**
+   * Excel export of the order list. Streams the whole filtered table through
+   * one pool connection, so it is counted in a handful per ten minutes.
+   */
+  orderExport: rateLimit({
+    name: "order-export",
+    limit: 10,
+    windowSeconds: 600,
+    message: "Too many exports. Please wait a few minutes and try again.",
+  }),
+
+  /**
+   * Many invoices merged into one pdf. Up to a hundred documents fetched or
+   * rendered per request, so it is counted like the export.
+   */
+  bulkInvoice: rateLimit({
+    name: "bulk-invoice",
+    limit: 10,
+    windowSeconds: 600,
+    message: "Too many bulk invoice downloads. Please wait a few minutes and try again.",
+  }),
+
   /** gateway handoff pages and the verify callbacks */
   payment: rateLimit({
     name: "payment",
