@@ -769,28 +769,17 @@ const ProductPage = () => {
                 })()}
 
                 <div className="relative inline-block ">
-                  <div
-                    className="flex items-center gap-1 cursor-pointer group"
-                    onClick={() => {
-                      router.push(window.location.pathname + "#reviews");
-                      setTimeout(() => {
-                        document
-                          .getElementById("reviews")
-                          ?.scrollIntoView({ behavior: "smooth" });
-                      }, 100);
-                    }}
-                  >
+                  <div className="flex items-center gap-1 cursor-pointer group">
                     <span className="text-sm font-medium text-gray-700">
                       {parseFloat(fullProduct?.rating ?? "0.0").toFixed(1)}
                     </span>
-                    <div
-                      onMouseEnter={() => setShowRatingPopover(true)}
-                      onMouseLeave={() => setShowRatingPopover(false)}
-                      className="flex text-amber-500 gap-2 py-3 "
-                    >
+                    <div className="flex text-amber-500 gap-1 py-3 ">
                       <div className="flex text-amber-500">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Star
+                            onClick={() =>
+                              setShowRatingPopover(!showRatingPopover)
+                            }
                             key={star}
                             size={16}
                             className={
@@ -807,18 +796,31 @@ const ProductPage = () => {
                         ))}
                       </div>
                       <ChevronDown
-                        size={14}
-                        className="text-gray-600 group-hover:text-black"
+                        onMouseEnter={() => setShowRatingPopover(true)}
+                        onMouseLeave={() => setShowRatingPopover(false)}
+                        size={22}
+                        onClick={() => setShowRatingPopover(!showRatingPopover)}
+                        className="text-gray-600  hover:text-red-500"
                       />
-                      <span className="text-sm text-blue-600 hover:text-red-500 hover:underline">
-                        {fullProduct?.total_ratings || allReviews.length}
+                      <span
+                        onClick={() => {
+                          router.push(window.location.pathname + "#reviews");
+                          setTimeout(() => {
+                            document
+                              .getElementById("reviews")
+                              ?.scrollIntoView({ behavior: "smooth" });
+                          }, 100);
+                        }}
+                        className="text-sm text-blue-600 hover:text-red-500 hover:underline"
+                      >
+                        ( {fullProduct?.total_ratings || allReviews.length})
                       </span>
                     </div>
                   </div>
 
                   {showRatingPopover && (
                     <div
-                      className="absolute top-full left-0 z-50 bg-white p-5 border border-gray-300 rounded shadow-2xl w-[320px] mt-0"
+                      className="absolute top-full left-0 z-50 bg-white p-5 border border-gray-300 rounded shadow-2xl w-[320px] mt-[-10]"
                       onMouseEnter={() => setShowRatingPopover(true)}
                       onMouseLeave={() => setShowRatingPopover(false)}
                     >
