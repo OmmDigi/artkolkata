@@ -82,6 +82,7 @@ export type ShipmentSkipReason =
   | "no_shipping_address"
   | "no_shipment_boxes"
   | "ewaybill_required"
+  | "invoice_number_required"
   | "payment_not_completed"
   | "not_supported"
   | "no_return_record"

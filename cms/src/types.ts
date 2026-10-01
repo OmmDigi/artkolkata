@@ -342,6 +342,8 @@ export interface OrderInfo {
   ewaybill_number: string | null;
   has_ewaybill_document: boolean;
   has_invoice_document: boolean;
+  // the number printed on the uploaded invoice; Bigship is booked with it
+  uploaded_invoice_number: string | null;
   // the two documents generated from the CMS. The uploaded invoice above still
   // wins over a generated one when both exist.
   has_generated_invoice: boolean;

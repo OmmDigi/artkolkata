@@ -73,6 +73,8 @@ export interface BigshipOrderItem {
 
 export interface BigshipCreateOrderParams {
   orderNumber: string;
+  // The number on the uploaded invoice — sent as OrderInvoiceNo.
+  invoiceNumber: string;
   orderDate: string; // UTC datetime
   customerName: string;
   customerEmail?: string;
@@ -558,7 +560,7 @@ class BigshipClient {
         ),
         MasterOrderDate: toBigshipDateTime(params.orderDate),
         MasterOrderPaymentMode: isCod ? PAYMENT_MODE_COD : PAYMENT_MODE_PREPAID,
-        OrderInvoiceNo: params.orderNumber,
+        OrderInvoiceNo: params.invoiceNumber,
         MasterOrderInvoiceAmount: invoiceAmount,
         MasterOrderCollectableAmount: isCod ? String(invoiceAmount) : "",
         MasterOrderShippingName: this.clean(params.customerName, 100) || "Customer",

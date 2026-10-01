@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -21,10 +21,19 @@ interface IProps {
 export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) {
   const [invoice, setInvoice] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+  const savedNumber = orderInfo.uploaded_invoice_number ?? "";
+  const [invoiceNumber, setInvoiceNumber] = useState(savedNumber);
+
+  // follow the saved number when the order is refetched
+  useEffect(() => setInvoiceNumber(savedNumber), [savedNumber]);
 
   const { isLoading, mutate } = useDoMutation();
 
   const uploaded = orderInfo.has_invoice_document;
+  const trimmedNumber = invoiceNumber.trim();
+  // with no new file, the button only saves a changed number
+  const numberChanged = trimmedNumber !== savedNumber;
+  const canSubmit = !!trimmedNumber && (!!invoice || (uploaded && numberChanged));
 
   const readFile = (file: File) => {
     if (file.size > MAX_INVOICE_BYTES) {
@@ -49,7 +58,12 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
   };
 
   const upload = () => {
-    if (!invoice) {
+    if (!trimmedNumber) {
+      toast.error("Enter the invoice number");
+      return;
+    }
+
+    if (!invoice && !uploaded) {
       toast.error("Choose an invoice file first");
       return;
     }
@@ -57,7 +71,10 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
     mutate({
       apiPath: `/api/v1/orders/${orderId}/invoice`,
       method: "put",
-      formData: { invoice_document: invoice },
+      formData: {
+        invoice_number: trimmedNumber,
+        ...(invoice ? { invoice_document: invoice } : {}),
+      },
       onSuccess: () => {
         setInvoice(null);
         setFileName("");
@@ -69,7 +86,7 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
   const remove = () => {
     if (
       !confirm(
-        "Remove the uploaded invoice? The customer is left with the generated payment slip only.",
+        "Remove the uploaded invoice and its invoice number? The customer is left with the generated payment slip only.",
       )
     )
       return;
@@ -122,6 +139,23 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
       ) : null}
 
       <div className="grid gap-3">
+        <Label className="font-semibold" htmlFor="uploaded-invoice-number">
+          Invoice Number
+        </Label>
+        <Input
+          id="uploaded-invoice-number"
+          placeholder="Number printed on the invoice"
+          maxLength={50}
+          value={invoiceNumber}
+          onChange={(e) => setInvoiceNumber(e.target.value)}
+        />
+        <span className="text-sm text-gray-500">
+          Sent to Bigship as the invoice number. Required before the order can
+          be confirmed.
+        </span>
+      </div>
+
+      <div className="grid gap-3">
         <Label className="font-semibold">
           {uploaded ? "Replace Invoice (PDF or JPEG)" : "Upload Invoice (PDF or JPEG)"}
         </Label>
@@ -142,10 +176,14 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
       <Button
         type="button"
         className="bg-green-700 hover:bg-green-900"
-        disabled={isLoading || !invoice}
+        disabled={isLoading || !canSubmit}
         onClick={upload}
       >
-        {isLoading ? "Uploading.." : "Upload Invoice"}
+        {isLoading
+          ? "Saving.."
+          : invoice || !uploaded
+            ? "Upload Invoice"
+            : "Save Invoice Number"}
       </Button>
     </Section>
   );

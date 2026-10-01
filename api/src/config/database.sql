@@ -1366,3 +1366,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_is_draft ON orders(is_draft) WHERE is_draf
 -- Shape: { "gst_number": "29ABCDE1234F1Z5", "business_name": "Acme Pvt Ltd" }
 -- ============================================================
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_details JSONB;
+
+-- ============================================================
+-- UPLOADED INVOICE NUMBER
+--
+-- The number printed on the invoice an admin uploads by hand. It is what
+-- Bigship is booked with as OrderInvoiceNo, so a Bigship order cannot be
+-- confirmed without it. Kept apart from invoice_number, which is the INV-
+-- number the CMS allots to the invoice it generates itself.
+-- ============================================================
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS uploaded_invoice_number VARCHAR(50);

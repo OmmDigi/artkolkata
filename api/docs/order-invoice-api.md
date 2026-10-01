@@ -341,19 +341,21 @@ Both require permission **`1-5`**.
 
 ```json
 {
+  "invoice_number": "AK/2026/0042",
   "invoice_document": "data:application/pdf;base64,JVBERi0xLjQK..."
 }
 ```
 
-- Base64 **data URI** only. PDF or JPEG. Max 8 MB (the CMS enforces this before sending).
+- `invoice_number` **required**. Up to 50 chars of letters, digits, `/ - _ .`. Stored in `orders.uploaded_invoice_number` and sent to Bigship as `OrderInvoiceNo`. A Bigship order cannot be confirmed without it.
+- `invoice_document` optional. Base64 **data URI** only. PDF or JPEG. Max 8 MB (the CMS enforces this before sending). Omit it to change only the number — `400` if no invoice is on file yet.
 - Overwrites any invoice already on file.
 - After success, that order's `invoice_avilable` flips to `true` and `invoice_url` starts coming back non-null.
 
-**Response 200** — `"Invoice uploaded"`. `404` if the order does not exist.
+**Response 200** — `"Invoice uploaded"` (or `"Invoice number updated"` when no file was sent). `404` if the order does not exist.
 
 ### `DELETE /orders/:orderid/invoice`
 
-Clears the upload. `invoice_avilable` goes back to `false` and `invoice_url` back to `null`. The payment slip is unaffected.
+Clears the upload and its invoice number. `invoice_avilable` goes back to `false` and `invoice_url` back to `null`. The payment slip is unaffected.
 
 **Response 200** — `"Uploaded invoice removed"`. `404` if the order does not exist.
 
@@ -361,7 +363,7 @@ Clears the upload. `invoice_avilable` goes back to `false` and `invoice_url` bac
 
 ## 6. Single order detail — `GET /orders/:orderid`
 
-Permission **`1-5`**. `orderInfo.has_invoice_document` (`boolean`) tells the CMS whether an upload exists, without shipping the multi-MB data URI down. Use it to decide between the Upload and Replace/Remove UI.
+Permission **`1-5`**. `orderInfo.has_invoice_document` (`boolean`) tells the CMS whether an upload exists, without shipping the multi-MB data URI down; `orderInfo.uploaded_invoice_number` (`string | null`) is the number saved with it. Use it to decide between the Upload and Replace/Remove UI.
 
 `orderInfo` also carries the state of the two generated documents:
 

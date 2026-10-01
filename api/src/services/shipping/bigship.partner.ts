@@ -88,6 +88,7 @@ export class BigshipPartner implements IShippingPartner {
         o.ewaybill_number,
         o.ewaybill_document,
         o.invoice_document,
+        o.uploaded_invoice_number,
         o.subtotal,
         o.discount,
         o.shipping_charge,
@@ -171,6 +172,12 @@ export class BigshipPartner implements IShippingPartner {
       return { created: false, skipped: "ewaybill_required" };
     }
 
+    // Bigship is booked with the number on the uploaded invoice. Without one
+    // there is nothing honest to send as OrderInvoiceNo.
+    if (!order.uploaded_invoice_number) {
+      return { created: false, skipped: "invoice_number_required" };
+    }
+
     // An invoice uploaded from the CMS is the real one, so it goes to the
     // courier as-is; the app only draws its own when nothing was uploaded.
     const invoiceDocument: string =
@@ -202,6 +209,7 @@ export class BigshipPartner implements IShippingPartner {
 
     const result = await BigshipClient.createOrder({
       orderNumber: order.order_number,
+      invoiceNumber: order.uploaded_invoice_number,
       orderDate: new Date(order.created_at).toISOString(),
       customerName: address.name,
       customerEmail: address.email,

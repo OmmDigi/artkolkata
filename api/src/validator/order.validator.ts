@@ -173,11 +173,26 @@ export const VUpdateShipmentBoxes = Joi.object({
 // The invoice an admin uploads against an order. Restricted to PDF and JPEG
 // because the same file is what a B2B shipment is booked with, and those are
 // the only two formats Bigship accepts there.
+//
+// The number is always required — it is what Bigship is booked with. The file
+// is optional so the number can be corrected without uploading it again.
 export const VUploadOrderInvoice = Joi.object({
+  invoice_number: Joi.string()
+    .trim()
+    .max(50)
+    .pattern(/^[A-Za-z0-9\/\-_.]+$/)
+    .required()
+    .messages({
+      "any.required": "Invoice number is required",
+      "string.empty": "Invoice number is required",
+      "string.max": "Invoice number must be 50 characters or fewer",
+      "string.pattern.base":
+        "Invoice number may only contain letters, digits, / - _ and .",
+    }),
   invoice_document: Joi.string()
     .pattern(/^data:(application\/pdf|image\/jpeg);base64,/)
     .max(8 * 1024 * 1024)
-    .required()
+    .optional()
     .messages({
       "string.pattern.base": "Invoice must be a PDF or JPEG file",
       "string.max": "Invoice file is too large",

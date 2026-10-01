@@ -704,6 +704,7 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         -- to know whether one is already on file
         (ewaybill_document IS NOT NULL AND ewaybill_document <> '') AS has_ewaybill_document,
         (invoice_document IS NOT NULL AND invoice_document <> '') AS has_invoice_document,
+        uploaded_invoice_number,
         -- the two documents the CMS generates. Only their presence and the
         -- invoice number are sent; the files themselves live on the upload
         -- server and are streamed by their own routes.
@@ -901,6 +902,7 @@ const assertReadyToConfirm = async (orderId: number) => {
       o.shipment_boxes,
       o.ewaybill_number,
       o.ewaybill_document,
+      o.uploaded_invoice_number,
       COALESCE(SUM(oi.price * oi.quantity), 0) AS invoice_amount
      FROM orders o
      JOIN order_items oi ON oi.order_id = o.order_id
@@ -930,6 +932,15 @@ const assertReadyToConfirm = async (orderId: number) => {
   // Shiprocket consolidates the boxes into one declared package, so there is
   // nothing further to check for it.
   if (partner.name !== "bigship") return;
+
+  // Bigship is booked with the number on the uploaded invoice, never one the
+  // app makes up.
+  if (!order.uploaded_invoice_number) {
+    throw new ErrorHandler(
+      400,
+      "Upload the invoice with its invoice number before confirming this order.",
+    );
+  }
 
   const invoiceAmount = parseFloat(order.invoice_amount);
 
@@ -1090,6 +1101,8 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         "Order status updated, but no shipment was booked: the order has no box dimensions.",
       ewaybill_required:
         "Order status updated, but no shipment was booked: this shipment needs an ewaybill number and document.",
+      invoice_number_required:
+        "Order status updated, but no shipment was booked: upload the invoice with its invoice number first.",
       order_not_found:
         "Order status updated, but the order could not be read back to book a shipment.",
       not_supported:
@@ -1569,32 +1582,61 @@ export const cancelGuestOrder = asyncErrorHandler(async (req, res) => {
 
 // Attaches an invoice supplied by the admin to an order. Once one is on file
 // it is what the customer downloads, so the app stops generating its own.
+//
+// The invoice number travels with it and is what Bigship is booked with. Sent
+// without a file, only the number changes — but only against an invoice that
+// is already on file, since a number with no document behind it means nothing.
 export const uploadOrderInvoice = asyncErrorHandler(async (req, res) => {
   const orderId = parseInt(String(req.params.orderid ?? ""), 10);
   if (!orderId) throw new ErrorHandler(400, "Invalid order id");
 
-  const value = doValidate<{ invoice_document: string }>(
+  const value = doValidate<{ invoice_number: string; invoice_document?: string }>(
     VUploadOrderInvoice,
     req.body ?? {},
   );
 
-  const { rowCount } = await pool.query(
-    "UPDATE orders SET invoice_document = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2",
-    [value.invoice_document, orderId],
+  const { rows, rowCount } = await pool.query(
+    `SELECT (invoice_document IS NOT NULL AND invoice_document <> '') AS has_invoice_document
+     FROM orders WHERE order_id = $1`,
+    [orderId],
   );
 
   if (rowCount === 0) throw new ErrorHandler(404, "Order information not found!");
 
-  httpResponse(res, 200, "Invoice uploaded");
+  if (!value.invoice_document && !rows[0].has_invoice_document) {
+    throw new ErrorHandler(400, "Choose an invoice file to upload with this number");
+  }
+
+  await pool.query(
+    `
+     UPDATE orders
+     SET uploaded_invoice_number = $1,
+         invoice_document        = COALESCE($2, invoice_document),
+         updated_at              = CURRENT_TIMESTAMP
+     WHERE order_id = $3
+    `,
+    [value.invoice_number, value.invoice_document ?? null, orderId],
+  );
+
+  httpResponse(
+    res,
+    200,
+    value.invoice_document ? "Invoice uploaded" : "Invoice number updated",
+  );
 });
 
-// Drops the uploaded invoice, which puts the generated one back in play.
+// Drops the uploaded invoice and its number, which puts the generated one back
+// in play.
 export const deleteOrderInvoice = asyncErrorHandler(async (req, res) => {
   const orderId = parseInt(String(req.params.orderid ?? ""), 10);
   if (!orderId) throw new ErrorHandler(400, "Invalid order id");
 
   const { rowCount } = await pool.query(
-    "UPDATE orders SET invoice_document = NULL, updated_at = CURRENT_TIMESTAMP WHERE order_id = $1",
+    `UPDATE orders
+     SET invoice_document = NULL,
+         uploaded_invoice_number = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $1`,
     [orderId],
   );
 
