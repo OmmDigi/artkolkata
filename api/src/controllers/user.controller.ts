@@ -524,6 +524,7 @@ export const saveUserInfo = asyncErrorHandler(
           encodedPassword,
           value.is_verified,
           value.is_active,
+          value.is_guest,
           ...filterValues,
         ],
       );

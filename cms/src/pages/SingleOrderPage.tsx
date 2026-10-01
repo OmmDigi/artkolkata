@@ -273,6 +273,7 @@ export default function SingleOrderPage() {
                     key={data.data.orderInfo.partner_order_id ?? "unbooked"}
                     orderId={params.id}
                     orderInfo={data.data.orderInfo}
+                    orderItems={data.data.orderItemsInfo}
                     onSaved={() => refetch()}
                   />
 

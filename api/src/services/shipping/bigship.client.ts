@@ -88,10 +88,10 @@ export interface BigshipCreateOrderParams {
   items: BigshipOrderItem[];
   // One entry books domestic_b2c, more than one books domestic_b2b.
   boxes: ShipmentBox[];
-  // B2B only, and mandatory there — the order invoice, as a PDF buffer or a
+  // Mandatory for both segments — the order invoice, as a PDF buffer or a
   // data URI. Uploaded as a file on place-order.
   invoiceDocument?: string | Buffer;
-  // B2B only, and mandatory once the invoice reaches EWAYBILL_THRESHOLD.
+  // Mandatory on either segment once the invoice reaches EWAYBILL_THRESHOLD.
   ewaybillNumber?: string;
   ewaybillDocument?: string | Buffer;
 }
@@ -99,9 +99,13 @@ export interface BigshipCreateOrderParams {
 /** invoice, label, manifest or ewaybill — what download-shipment-documents takes. */
 export type BigshipDocumentType = "invoice" | "label" | "manifest" | "ewaybill";
 
-// Bigship rejects a B2B shipment invoiced at or above this without an ewaybill
-// number and document.
+// Bigship rejects a shipment (B2C or B2B) invoiced at or above this without an
+// ewaybill number and document.
 export const EWAYBILL_THRESHOLD = 50000;
+
+// Longest MasterOrderShippingAddress / Address2 Bigship accepts (a 422 on B2B
+// above this; the doc gives no limit).
+const ADDRESS_LINE_MAX = 75;
 
 // Payment modes, from api/outbound/get-payment-mode.
 const PAYMENT_MODE_PREPAID = 1;
@@ -325,6 +329,21 @@ class BigshipClient {
     return (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
   }
 
+  // Bigship caps each shipping address line at ADDRESS_LINE_MAX (enforced on
+  // B2B, undocumented). Rather than cut the street off, both lines are joined
+  // and re-split on a word boundary so the overflow lands on line 2.
+  private splitAddress(line1?: string, line2?: string): [string, string] {
+    const full = this.clean([line1, line2].filter(Boolean).join(", "), 1000);
+    if (full.length <= ADDRESS_LINE_MAX) return [full, ""];
+
+    let cut = full.lastIndexOf(" ", ADDRESS_LINE_MAX);
+    if (cut <= 0) cut = ADDRESS_LINE_MAX;
+
+    const first = full.slice(0, cut).replace(/[,\s]+$/, "");
+    const rest = full.slice(cut).replace(/^[,\s]+/, "");
+    return [first, rest.slice(0, ADDRESS_LINE_MAX)];
+  }
+
   // productName is the one field the unified API still validates hard: it
   // accepts letters, spaces, dashes and underscores only, so digits, commas,
   // slashes, ampersands and the unicode dashes a catalogue picks up from a
@@ -468,21 +487,22 @@ class BigshipClient {
 
       const isB2B = boxes.length > 1;
 
-      if (isB2B && !params.invoiceDocument) {
+      // place-order validates invoiceType on every segment, so the invoice
+      // goes up for B2C too.
+      if (!params.invoiceDocument) {
         return {
           success: false,
-          error: "A B2B (multi-box) shipment needs an invoice document",
+          error: "A Bigship shipment needs an invoice document",
         };
       }
 
       if (
-        isB2B &&
         invoiceAmount >= EWAYBILL_THRESHOLD &&
         (!params.ewaybillNumber || !params.ewaybillDocument)
       ) {
         return {
           success: false,
-          error: `A B2B shipment invoiced at ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document`,
+          error: `A shipment invoiced at ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document`,
         };
       }
 
@@ -521,6 +541,11 @@ class BigshipClient {
         ...(isB2B ? {} : { products: index === 0 ? products : [] }),
       }));
 
+      const [shippingAddress, shippingAddress2] = this.splitAddress(
+        params.customerAddress,
+        params.customerAddress2,
+      );
+
       const createPayload: Record<string, any> = {
         segment_type: segmentType,
         MasterOrderPickUpLocation: this.numericLocationId(
@@ -539,8 +564,8 @@ class BigshipClient {
         MasterOrderShippingName: this.clean(params.customerName, 100) || "Customer",
         MasterOrderShippingEmail: isValidEmail ? email : "",
         MasterOrderShippingMobileNo: this.cleanPhone(params.customerPhone),
-        MasterOrderShippingAddress: this.clean(params.customerAddress, 200),
-        MasterOrderShippingAddress2: this.clean(params.customerAddress2, 200),
+        MasterOrderShippingAddress: shippingAddress,
+        MasterOrderShippingAddress2: shippingAddress2,
         MasterOrderShippingLandmark: this.clean(params.customerLandmark, 100),
         MasterOrderShippingZipCode: String(params.customerPincode ?? "").trim(),
         MasterOrderShippingCountry: params.customerCountry || "India",
@@ -629,7 +654,7 @@ class BigshipClient {
       form.append("courierId", String(cheapest.courierId));
       form.append("riskTypeId", String(riskTypeId));
 
-      if (isB2B && params.invoiceDocument) {
+      if (params.invoiceDocument) {
         form.append("invoiceType", "uploaded");
         form.append(
           "InvoiceData",
@@ -638,7 +663,7 @@ class BigshipClient {
         );
       }
 
-      if (isB2B && params.ewaybillNumber && params.ewaybillDocument) {
+      if (params.ewaybillNumber && params.ewaybillDocument) {
         form.append("EwaybillNo", params.ewaybillNumber.replace(/\D/g, ""));
         form.append(
           "EwayBillData",

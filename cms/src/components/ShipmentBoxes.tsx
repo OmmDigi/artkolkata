@@ -10,10 +10,10 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ORDER_PENDING } from "@/constant";
 import { useDoMutation } from "@/hooks/useDoMutation";
-import type { OrderInfo, ShipmentBox } from "@/types";
+import type { OrderInfo, OrderItemInfo, ShipmentBox } from "@/types";
 
-// Bigship refuses a multi-box shipment invoiced at or above this without an
-// ewaybill. Mirrors EWAYBILL_THRESHOLD on the API.
+// Bigship refuses a shipment (one box or many) invoiced at or above this
+// without an ewaybill. Mirrors EWAYBILL_THRESHOLD on the API.
 const EWAYBILL_THRESHOLD = 50000;
 
 const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
@@ -29,13 +29,30 @@ const emptyRow = (): ShipmentBox => ({
   height_cm: "",
 });
 
+type Segment = "b2b" | "b2c";
+
 interface IProps {
   orderId: string;
   orderInfo: OrderInfo;
+  orderItems: OrderItemInfo[];
   onSaved: () => void;
 }
 
-export default function ShipmentBoxes({ orderId, orderInfo, onSaved }: IProps) {
+// The segment the ordered products point to. Every item b2b, or every item
+// b2c, settles it; "both" products or a mix of the two leave it to the admin.
+const itemsSegment = (items: OrderItemInfo[]): Segment | null => {
+  const kinds = new Set(items.map((item) => item.product_for ?? "b2c"));
+  if (kinds.size === 1 && kinds.has("b2b")) return "b2b";
+  if (kinds.size === 1 && kinds.has("b2c")) return "b2c";
+  return null;
+};
+
+export default function ShipmentBoxes({
+  orderId,
+  orderInfo,
+  orderItems,
+  onSaved,
+}: IProps) {
   const [rows, setRows] = useState<ShipmentBox[]>(
     orderInfo.shipment_boxes?.length
       ? orderInfo.shipment_boxes
@@ -60,11 +77,16 @@ export default function ShipmentBoxes({ orderId, orderInfo, onSaved }: IProps) {
   const bookedId = orderInfo.partner_order_id;
   const locked = !!bookedId || orderInfo.order_status !== ORDER_PENDING;
 
+  const fixedSegment = itemsSegment(orderItems);
+  const [pickedSegment, setPickedSegment] = useState<Segment>("b2c");
+  const chosenSegment = fixedSegment ?? pickedSegment;
+
   // More than one box cannot go as a normal B2C parcel; Bigship books it as a
-  // B2B heavy shipment, which is where the ewaybill rules kick in.
+  // B2B heavy shipment. The ewaybill rule applies to both.
   const isMultiBox = rows.length > 1;
+  const segment: Segment = isMultiBox ? "b2b" : chosenSegment;
   const invoiceAmount = parseFloat(orderInfo.subtotal ?? "0");
-  const needsEwaybill = isMultiBox && invoiceAmount >= EWAYBILL_THRESHOLD;
+  const needsEwaybill = invoiceAmount >= EWAYBILL_THRESHOLD;
 
   const setField = (index: number, field: keyof ShipmentBox, value: string) => {
     setRows((current) =>
@@ -171,10 +193,36 @@ export default function ShipmentBoxes({ orderId, orderInfo, onSaved }: IProps) {
     <Section>
       <div className="flex items-center justify-between gap-3">
         <Label className="text-xl">Shipment Boxes</Label>
-        <Badge variant={isMultiBox ? "destructive" : "default"}>
-          {isMultiBox ? "B2B / Heavy" : "B2C"}
+        <Badge variant={segment === "b2b" ? "destructive" : "default"}>
+          {segment === "b2b" ? "B2B / Heavy" : "B2C"}
         </Badge>
       </div>
+
+      {fixedSegment ? null : (
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-gray-500">
+            This order has products sold as both B2B and B2C. Ship as:
+          </span>
+          {(["b2b", "b2c"] as Segment[]).map((option) => (
+            <Button
+              key={option}
+              type="button"
+              size="sm"
+              variant={pickedSegment === option ? "default" : "outline"}
+              disabled={locked}
+              onClick={() => setPickedSegment(option)}
+            >
+              {option.toUpperCase()}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {isMultiBox && chosenSegment === "b2c" ? (
+        <p className="text-sm text-amber-700">
+          B2C ships as a single box, so {rows.length} boxes go as B2B.
+        </p>
+      ) : null}
 
       <p className="text-sm text-gray-500">
         These are the boxes the order actually ships in. They replace the
@@ -268,8 +316,8 @@ export default function ShipmentBoxes({ orderId, orderInfo, onSaved }: IProps) {
       {needsEwaybill ? (
         <div className="space-y-3 border-t border-gray-200 pt-4">
           <p className="text-sm font-semibold text-amber-700">
-            This shipment is invoiced at ₹{invoiceAmount} across {rows.length}{" "}
-            boxes, so Bigship requires an ewaybill.
+            This shipment is invoiced at ₹{invoiceAmount}, so Bigship requires
+            an ewaybill.
           </p>
 
           <LabelInput

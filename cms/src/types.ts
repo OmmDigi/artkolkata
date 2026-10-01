@@ -434,6 +434,8 @@ export interface OrderItemInfo {
   sku: string | null;
   status: string;
   images?: ProductImage;
+  // b2b | b2c | both; null when the product has since been deleted
+  product_for?: string | null;
 }
 
 export interface ProductImage {

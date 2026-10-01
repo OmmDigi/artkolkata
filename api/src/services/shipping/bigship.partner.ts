@@ -154,9 +154,9 @@ export class BigshipPartner implements IShippingPartner {
     const boxes = parseShipmentBoxes(order.shipment_boxes);
     if (boxes.length === 0) return { created: false, skipped: "no_shipment_boxes" };
 
-    // More than one box means Bigship B2B, which is invoiced on a document
-    // rather than on the box amounts, and needs an ewaybill above the
-    // threshold. One box stays on the cheaper B2C route with none of that.
+    // More than one box means Bigship B2B; one box stays on the cheaper B2C
+    // route. Both segments need the invoice uploaded, and an ewaybill above
+    // the threshold.
     const isB2B = boxes.length > 1;
 
     const invoiceAmount = items.reduce(
@@ -165,46 +165,40 @@ export class BigshipPartner implements IShippingPartner {
     );
 
     if (
-      isB2B &&
       invoiceAmount >= EWAYBILL_THRESHOLD &&
       (!order.ewaybill_number || !order.ewaybill_document)
     ) {
       return { created: false, skipped: "ewaybill_required" };
     }
 
-    // B2B is invoiced on an attached document, and only B2B needs one. An
-    // invoice uploaded from the CMS is the real one, so it goes to the courier
-    // as-is; the app only draws its own when nothing was uploaded.
-    let invoiceDocument: string | undefined;
-
-    if (isB2B) {
-      invoiceDocument =
-        order.invoice_document ||
-        (await generateInvoiceDataUri({
-          orderNumber: order.order_number,
-          orderDate: order.created_at,
-          paymentMethod:
-            order.payment_method === ONLINE_PAYMENT
-              ? "Online Paid"
-              : "Cash on delivery",
-          customerName: address.name,
-          customerPhone: address.phone,
-          customerEmail: address.email,
-          addressLine1: address.address_line1,
-          city: address.city,
-          state: address.state,
-          pincode: address.pincode,
-          items: items.map((item) => ({
-            name: item.name,
-            quantity: item.units,
-            price: item.sellingPrice,
-          })),
-          subtotal: parseFloat(order.subtotal ?? 0),
-          discount: parseFloat(order.discount ?? 0),
-          shipping: parseFloat(order.shipping_charge ?? 0),
-          total: parseFloat(order.total_amount ?? 0),
-        }));
-    }
+    // An invoice uploaded from the CMS is the real one, so it goes to the
+    // courier as-is; the app only draws its own when nothing was uploaded.
+    const invoiceDocument: string =
+      order.invoice_document ||
+      (await generateInvoiceDataUri({
+        orderNumber: order.order_number,
+        orderDate: order.created_at,
+        paymentMethod:
+          order.payment_method === ONLINE_PAYMENT
+            ? "Online Paid"
+            : "Cash on delivery",
+        customerName: address.name,
+        customerPhone: address.phone,
+        customerEmail: address.email,
+        addressLine1: address.address_line1,
+        city: address.city,
+        state: address.state,
+        pincode: address.pincode,
+        items: items.map((item) => ({
+          name: item.name,
+          quantity: item.units,
+          price: item.sellingPrice,
+        })),
+        subtotal: parseFloat(order.subtotal ?? 0),
+        discount: parseFloat(order.discount ?? 0),
+        shipping: parseFloat(order.shipping_charge ?? 0),
+        total: parseFloat(order.total_amount ?? 0),
+      }));
 
     const result = await BigshipClient.createOrder({
       orderNumber: order.order_number,
@@ -213,6 +207,7 @@ export class BigshipPartner implements IShippingPartner {
       customerEmail: address.email,
       customerPhone: address.phone,
       customerAddress: address.address_line1,
+      customerAddress2: address.address_line2,
       customerCity: address.city,
       customerState: address.state,
       customerPincode: address.pincode,
@@ -221,9 +216,8 @@ export class BigshipPartner implements IShippingPartner {
       items,
       boxes,
       invoiceDocument,
-      // Only B2B carries an ewaybill; sending one on B2C is rejected.
-      ewaybillNumber: isB2B ? (order.ewaybill_number ?? undefined) : undefined,
-      ewaybillDocument: isB2B ? (order.ewaybill_document ?? undefined) : undefined,
+      ewaybillNumber: order.ewaybill_number ?? undefined,
+      ewaybillDocument: order.ewaybill_document ?? undefined,
     });
 
     if (!result.success || !result.bigshipOrderId) {

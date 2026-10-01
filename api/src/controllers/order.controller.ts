@@ -673,8 +673,11 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         TO_CHAR(drafted_at, 'DD Mon YYYY') AS drafted_at,
         -- when the customer placed it, split so the CMS can show the date and
         -- the clock time. Both read in IST, like every other time on screen.
-        TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') AS order_date,
-        TO_CHAR(created_at AT TIME ZONE 'Asia/Kolkata', 'HH12:MI AM') AS order_time,
+        TO_CHAR(created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') AS order_date,
+         TO_CHAR(
+            created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata',
+            'HH12:MI AM'
+        ) AS order_time,
         order_number,
         subtotal,
         discount,
@@ -772,11 +775,21 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
                 )
               )
          ELSE oi.product_info->'images'->0
-        END AS images
+        END AS images,
+
+        -- b2b / b2c / both, read live off the product: the CMS labels the
+        -- shipment segment from it
+        p.product_for
 
        FROM order_items oi
 
-       WHERE order_id = $1
+       LEFT JOIN products p
+       ON p.id = COALESCE(
+         (oi.variant_info->>'product_id')::int,
+         (oi.product_info->>'id')::int
+       )
+
+       WHERE oi.order_id = $1
       `,
       [orderid],
     );
@@ -918,9 +931,6 @@ const assertReadyToConfirm = async (orderId: number) => {
   // nothing further to check for it.
   if (partner.name !== "bigship") return;
 
-  // One box books as Bigship B2C, which carries no ewaybill at all.
-  if (boxes.length === 1) return;
-
   const invoiceAmount = parseFloat(order.invoice_amount);
 
   if (
@@ -929,7 +939,7 @@ const assertReadyToConfirm = async (orderId: number) => {
   ) {
     throw new ErrorHandler(
       400,
-      `A multi-box shipment invoiced at Rs. ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document before it can be confirmed.`,
+      `A shipment invoiced at Rs. ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document before it can be confirmed.`,
     );
   }
 };
@@ -1079,7 +1089,7 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
       no_shipment_boxes:
         "Order status updated, but no shipment was booked: the order has no box dimensions.",
       ewaybill_required:
-        "Order status updated, but no shipment was booked: this multi-box shipment needs an ewaybill number and document.",
+        "Order status updated, but no shipment was booked: this shipment needs an ewaybill number and document.",
       order_not_found:
         "Order status updated, but the order could not be read back to book a shipment.",
       not_supported:
