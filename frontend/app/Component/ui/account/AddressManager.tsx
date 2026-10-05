@@ -221,12 +221,12 @@ export default function AddressManager() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address *
+                  Email Address
                 </label>
                 <input
                   type="email"
                   name="email"
-                  required
+                  // required
                   value={formData.email}
                   onChange={handleInputChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-orange-500 text-sm text-black"

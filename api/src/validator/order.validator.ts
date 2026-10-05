@@ -3,8 +3,7 @@ import { MAX_BULK_INVOICES, ORDER_STATUSES } from "../constant";
 
 export const VShippingAddress = Joi.object({
   fullName: Joi.string().required(),
-  email: Joi.string().required(),
-  phone: Joi.string().required(),
+  email: Joi.string().optional().allow(""),
   address: Joi.string().required(),
   city: Joi.string().required(),
   state: Joi.string().required(),
@@ -122,7 +121,9 @@ export const VUpdateOrderStatus = Joi.object({
   // and REPLACE statuses by raw SQL, so they never hit this schema, and an
   // admin setting one by hand was rejected for a status the order was already
   // allowed to be in.
-  status: Joi.string().required().valid(...ORDER_STATUSES),
+  status: Joi.string()
+    .required()
+    .valid(...ORDER_STATUSES),
 });
 
 /**
