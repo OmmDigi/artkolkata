@@ -4,6 +4,7 @@ import { MAX_BULK_INVOICES, ORDER_STATUSES } from "../constant";
 export const VShippingAddress = Joi.object({
   fullName: Joi.string().required(),
   email: Joi.string().optional().allow(""),
+  phone : Joi.string().optional().allow(""),
   address: Joi.string().required(),
   city: Joi.string().required(),
   state: Joi.string().required(),

@@ -36,9 +36,9 @@ export default function HeroSection() {
 
   return (
     <section className="w-full -mt-20 relative overflow-hidden">
-      <div className="grid">
+      <div className="grid h-150 bg-gray-300">
         {banners.map((banner, idx) => {
-          const imageClass = `w-full h-[600px] md:h-auto object-cover  transition-transform pt-20 ${
+          const imageClass = `w-full h-150 md:h-auto object-cover  transition-transform pt-20 ${
             index === idx
               ? "scale-105 duration-[6000ms] ease-out"
               : "scale-100 duration-1000 ease-in"
