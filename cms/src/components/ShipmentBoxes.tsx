@@ -8,7 +8,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { ORDER_PENDING } from "@/constant";
+import { ORDER_CONFIRMED, ORDER_PACKED, ORDER_PENDING } from "@/constant";
 import { useDoMutation } from "@/hooks/useDoMutation";
 import type { OrderInfo, OrderItemInfo, ShipmentBox } from "@/types";
 
@@ -69,13 +69,16 @@ export default function ShipmentBoxes({
 
   const { isLoading, mutate } = useDoMutation();
 
-  // Confirming is what sends the boxes to the courier, so a pending order is
-  // the only place they can still be changed. Past that the goods are packed
-  // and on their way, and an edit here would only make the CMS disagree with
-  // what actually shipped.
+  // Shipping is what sends the boxes to the courier, so they can still be
+  // changed up to that point. Past that the goods are on their way, and an
+  // edit here would only make the CMS disagree with what actually shipped.
   // Set by whichever partner booked it — the order is with the courier.
   const bookedId = orderInfo.partner_order_id;
-  const locked = !!bookedId || orderInfo.order_status !== ORDER_PENDING;
+  const locked =
+    !!bookedId ||
+    ![ORDER_PENDING, ORDER_CONFIRMED, ORDER_PACKED].includes(
+      orderInfo.order_status,
+    );
 
   const fixedSegment = itemsSegment(orderItems);
   const [pickedSegment, setPickedSegment] = useState<Segment>("b2c");
@@ -226,8 +229,8 @@ export default function ShipmentBoxes({
 
       <p className="text-sm text-gray-500">
         These are the boxes the order actually ships in. They replace the
-        product dimensions when the order is confirmed, so they must be filled
-        in before confirming.
+        product dimensions when the order is marked shipped, so they must be
+        filled in before shipping.
         {isMultiBox
           ? " More than one box books as a Bigship B2B heavy shipment, which is priced on freight rates rather than normal parcel rates."
           : null}

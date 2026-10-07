@@ -49,7 +49,7 @@ export const verifyPaymentWebhook = asyncErrorHandler(async (req, res) => {
   );
 
   // A paid order is not booked with the courier here. The boxes it ships in
-  // are entered in the CMS by hand, so booking waits for an admin to confirm.
+  // are entered in the CMS by hand, so booking waits for an admin to mark it shipped.
 
   // Answer fast: every gateway re-sends anything not acknowledged in seconds.
   return res.sendStatus(200);

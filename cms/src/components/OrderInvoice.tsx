@@ -151,7 +151,7 @@ export default function OrderInvoice({ orderId, orderInfo, onChanged }: IProps) 
         />
         <span className="text-sm text-gray-500">
           Sent to Bigship as the invoice number. Required before the order can
-          be confirmed.
+          be shipped.
         </span>
       </div>
 

@@ -177,7 +177,7 @@ export interface IShippingPartner {
    * stores the ids it comes back with.
    *
    * Idempotent for the forward leg: an order already carrying a partner order
-   * id is left alone, so a failed confirm can be retried without booking the
+   * id is left alone, so a failed ship can be retried without booking the
    * same parcel twice. Never throws — a courier being down must not roll back
    * the order status that was already committed, so failures come back as
    * `created: false` with `error` or `skipped` set.

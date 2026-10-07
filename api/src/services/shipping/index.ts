@@ -73,7 +73,7 @@ export const initShippingPartner = (): IShippingPartner => {
  *
  * getShippingPartner() always returns something, so this is the question the
  * call sites that have to *word* themselves differently ask — the admin
- * confirming an order should not be told "no shipment was booked" by a shop
+ * shipping an order should not be told "no shipment was booked" by a shop
  * that never books shipments. The call sites that merely act, rather than
  * report, go straight through the partner and get a harmless no-op.
  */

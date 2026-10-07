@@ -11,9 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
+  OUT_FOR_DELIVERY,
   ORDER_CONFIRMED,
+  ORDER_DELIVERED,
+  ORDER_PACKED,
   ORDER_PENDING,
   ORDER_RETURNED,
+  ORDER_SHIPPED,
   ORDER_STATUS,
   PAYMENT_STATUS,
   REPLACE_INITIATED,
@@ -539,7 +543,7 @@ export default function SingleOrderPage() {
                       },
                       onSuccess() {
                         setOrderStatus(value);
-                        // Confirming books the shipment and locks the boxes,
+                        // Shipping books the shipment and locks the boxes,
                         // so pull the order back down rather than leaving the
                         // page showing what was true before the change.
                         refetch();
@@ -551,15 +555,29 @@ export default function SingleOrderPage() {
                   value={orderStatus}
                   disabledValues={[
                     // Booking is one-way. Once the shipment exists the order
-                    // cannot go back to pending or be confirmed again, but it
-                    // must still be cancellable — cancelling is exactly what
-                    // an admin needs to do when a booked order goes wrong, and
+                    // cannot go back to a step before shipping, but it must
+                    // still be cancellable — cancelling is exactly what an
+                    // admin needs to do when a booked order goes wrong, and
                     // the API cancels it with the courier too.
                     //
                     // Never fires without a partner: nothing writes
                     // partner_order_id, so a self-shipped order stays freely
                     // movable in both directions.
-                    ...(booked ? [ORDER_PENDING, ORDER_CONFIRMED] : []),
+                    ...(booked
+                      ? [ORDER_PENDING, ORDER_CONFIRMED, ORDER_PACKED]
+                      : []),
+                    // A delivered order cannot walk back down the forward
+                    // leg; the API refuses it too. Return, replace and cancel
+                    // stay open.
+                    ...(orderStatus === ORDER_DELIVERED
+                      ? [
+                          ORDER_PENDING,
+                          ORDER_CONFIRMED,
+                          ORDER_PACKED,
+                          ORDER_SHIPPED,
+                          OUT_FOR_DELIVERY,
+                        ]
+                      : []),
                   ]}
                 />
 

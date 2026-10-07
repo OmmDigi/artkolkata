@@ -10,6 +10,7 @@ import {
   ORDER_PENDING,
   ORDER_RETURNED,
   ORDER_RETURN_INITIATED,
+  ORDER_SHIPPED,
   RETURN_WINDOW_DAYS,
   REPLACE_INITIATED,
   REPLACED,
@@ -242,7 +243,7 @@ export const createOrder = asyncErrorHandler(
 
         // A partner that is down or not configured must not stop a customer
         // paying — only a positive "no courier goes there" blocks the order. The
-        // booking itself happens later, on confirm, where it can be retried.
+        // booking itself happens later, on ship, where it can be retried.
         if (!serviceability.success) {
           logger.error({
             message: "Serviceability check failed, allowing the order through",
@@ -817,10 +818,14 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Single Order Info", objToReturn);
 });
 
+// Boxes can still change until the order ships, because shipping is what hands
+// them to the courier.
+const BOX_EDITABLE_STATUSES = [ORDER_PENDING, ORDER_CONFIRMED, ORDER_PACKED];
+
 // Saves the boxes the order will actually ship in, plus the ewaybill details
-// a B2B shipment needs. Admin only, and only while the order is still pending:
-// confirming is what hands the boxes to the courier, so from that point on an
-// edit here would only make the CMS disagree with what is actually shipping.
+// a B2B shipment needs. Admin only, and only until the order ships: marking it
+// SHIPPED is what hands the boxes to the courier, so from that point on an edit
+// here would only make the CMS disagree with what is actually shipping.
 export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
   const orderId = parseInt(String(req.params.orderid ?? ""), 10);
   if (!orderId) throw new ErrorHandler(400, "Invalid order id");
@@ -852,7 +857,7 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
     );
   }
 
-  if (rows[0].order_status !== ORDER_PENDING) {
+  if (!BOX_EDITABLE_STATUSES.includes(rows[0].order_status)) {
     throw new ErrorHandler(
       400,
       `This order is already ${rows[0].order_status}, so its boxes can no longer be changed.`,
@@ -883,15 +888,15 @@ export const updateShipmentBoxes = asyncErrorHandler(async (req, res) => {
   httpResponse(res, 200, "Shipment boxes saved", { boxes: value.boxes.length });
 });
 
-// Confirming is the point where the order goes to the courier, so everything
+// Shipping is the point where the order goes to the courier, so everything
 // the shipping partner will demand is checked up front — a status change that
 // commits and then fails to book leaves the order looking fulfilled when it is
 // not. Box dimensions are needed by both partners; the ewaybill rules below
 // are Bigship's B2B ones and do not apply to a Shiprocket booking, which
 // declares a single package and reads no invoice document.
-const assertReadyToConfirm = async (orderId: number) => {
+const assertReadyToShip = async (orderId: number) => {
   // Boxes and ewaybills exist to satisfy a courier API. With no partner
-  // configured nothing is booked, so demanding them would block a confirm for
+  // configured nothing is booked, so demanding them would block a ship for
   // the benefit of a booking that is never going to happen.
   if (!isShippingEnabled()) return;
 
@@ -917,7 +922,7 @@ const assertReadyToConfirm = async (orderId: number) => {
   const order = rows[0];
   const partner = getShippingPartner();
 
-  // Already with the courier — re-confirming is a no-op, not a reason to block.
+  // Already with the courier — re-shipping is a no-op, not a reason to block.
   if (order.partner_order_id) return;
 
   const boxes = parseShipmentBoxes(order.shipment_boxes);
@@ -925,7 +930,7 @@ const assertReadyToConfirm = async (orderId: number) => {
   if (boxes.length === 0) {
     throw new ErrorHandler(
       400,
-      "Add the shipment box dimensions before confirming this order.",
+      "Add the shipment box dimensions before marking this order shipped.",
     );
   }
 
@@ -938,7 +943,7 @@ const assertReadyToConfirm = async (orderId: number) => {
   if (!order.uploaded_invoice_number) {
     throw new ErrorHandler(
       400,
-      "Upload the invoice with its invoice number before confirming this order.",
+      "Upload the invoice with its invoice number before marking this order shipped.",
     );
   }
 
@@ -950,7 +955,37 @@ const assertReadyToConfirm = async (orderId: number) => {
   ) {
     throw new ErrorHandler(
       400,
-      `A shipment invoiced at Rs. ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document before it can be confirmed.`,
+      `A shipment invoiced at Rs. ${EWAYBILL_THRESHOLD} or above needs an ewaybill number and document before it can be shipped.`,
+    );
+  }
+};
+
+// A delivered order has reached the customer, so it cannot be walked back to a
+// step before delivery. Return, replace and cancel are not on the forward leg
+// and stay open, which is how a delivered order legitimately moves on.
+const assertNotWalkingBackFromDelivered = async (value: {
+  order_id?: number;
+  order_item_id?: number;
+  status: string;
+}) => {
+  const targetRank = ORDER_FLOW_RANK[value.status];
+  if (targetRank === undefined) return;
+  if (targetRank >= ORDER_FLOW_RANK[ORDER_DELIVERED]) return;
+
+  const { rows } = value.order_item_id
+    ? await pool.query(
+        "SELECT status AS current FROM order_items WHERE order_item_id = $1",
+        [value.order_item_id],
+      )
+    : await pool.query(
+        "SELECT order_status AS current FROM orders WHERE order_id = $1",
+        [value.order_id],
+      );
+
+  if (rows[0]?.current === ORDER_DELIVERED) {
+    throw new ErrorHandler(
+      400,
+      `This order is already ${ORDER_DELIVERED}, so it cannot be moved back to ${value.status}.`,
     );
   }
 };
@@ -959,8 +994,10 @@ const assertReadyToConfirm = async (orderId: number) => {
 export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
   const value = doValidate(VUpdateOrderStatus, req.body ?? {});
 
-  if (value.status === ORDER_CONFIRMED && value.order_id) {
-    await assertReadyToConfirm(value.order_id);
+  await assertNotWalkingBackFromDelivered(value);
+
+  if (value.status === ORDER_SHIPPED && value.order_id) {
+    await assertReadyToShip(value.order_id);
   }
 
   await doTransition(async (client) => {
@@ -1074,15 +1111,15 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
     }
   }
 
-  // Confirming an order is the point of no return for fulfilment, so make sure
+  // Shipping an order is the point of no return for fulfilment, so make sure
   // a shipment exists with the active shipping partner. Booking runs after the
   // transaction commits, so a courier failure never rolls back the status —
-  // the order stays CONFIRMED and confirming it again retries the booking.
+  // the order stays SHIPPED and marking it shipped again retries the booking.
   //
   // With SHIPPING_PARTNER=none there is no booking to attempt, and no shipment
-  // fields to report: the confirm falls through to the plain response at the
+  // fields to report: the ship falls through to the plain response at the
   // bottom, exactly as any other status change does.
-  if (isShippingEnabled() && value.status === ORDER_CONFIRMED && value.order_id) {
+  if (isShippingEnabled() && value.status === ORDER_SHIPPED && value.order_id) {
     const partner = getShippingPartner();
     const shipment = await partner.createShippingOrder(value.order_id);
 
@@ -1116,7 +1153,7 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
         shipment.skipped
           ? (REASON_MESSAGE[shipment.skipped] ??
             `Order status updated, but no shipment was booked (${shipment.skipped}).`)
-          : `Order status updated, but the ${partner.label} shipment could not be booked. Confirm the order again to retry.`,
+          : `Order status updated, but the ${partner.label} shipment could not be booked. Mark the order shipped again to retry.`,
         { shipment_booked: false, reason: shipment.skipped ?? "booking_failed" },
       );
     }
