@@ -1,5 +1,6 @@
 import { CustomRequest } from "../types";
 import { rateLimit } from "./rateLimit";
+import { normalizeIndianPhone } from "../services/sms";
 
 /**
  * The limits themselves, in one place, so a route file reads as a list of
@@ -21,10 +22,16 @@ import { rateLimit } from "./rateLimit";
  *    account.
  */
 
-/** the email an auth request is aimed at, so guesses are counted per account */
-const emailScope = (req: CustomRequest) => {
-  const email = (req.body as Record<string, unknown> | undefined)?.email;
-  return typeof email === "string" && email ? email : null;
+/**
+ * the account an auth request is aimed at — email or phone number — so guesses
+ * are counted per account. A phone is normalised first, otherwise "+91 98…"
+ * and "98…" would each get their own budget against the same account.
+ */
+const accountScope = (req: CustomRequest) => {
+  const body = req.body as Record<string, unknown> | undefined;
+  const raw = body?.identifier ?? body?.email;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  return raw.includes("@") ? raw.trim() : (normalizeIndianPhone(raw) ?? raw.trim());
 };
 
 export const rateLimits = {
@@ -91,7 +98,7 @@ export const rateLimits = {
     limit: 10,
     windowSeconds: 900,
     identity: "ip",
-    scope: emailScope,
+    scope: accountScope,
     message: "Too many login attempts. Please try again in a few minutes.",
   }),
 
@@ -122,7 +129,7 @@ export const rateLimits = {
     limit: 5,
     windowSeconds: 900,
     identity: "ip",
-    scope: emailScope,
+    scope: accountScope,
     message:
       "Too many code requests. Please wait a few minutes before asking for another.",
   }),
@@ -146,7 +153,7 @@ export const rateLimits = {
     limit: 10,
     windowSeconds: 900,
     identity: "ip",
-    scope: emailScope,
+    scope: accountScope,
     message:
       "Too many incorrect codes. Please request a new one in a few minutes.",
   }),

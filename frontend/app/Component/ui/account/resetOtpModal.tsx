@@ -11,22 +11,18 @@ import React, {
 } from "react";
 
 import { toast } from "react-toastify";
+import { PendingOtp, describeOtpTarget } from "./Otp1";
+import PasswordInput from "./PasswordInput";
 
 interface ResetOtpModalProps {
   onClose: () => void;
-  email: string;
+  pending: PendingOtp;
 }
 
 interface FormState {
   otp: string[];
   password: string;
   retypePassword: string;
-}
-
-interface VerifyOtpPayload {
-  otp: string;
-  email: string;
-  newpassword?: string;
 }
 
 interface OtpResponse {
@@ -42,7 +38,7 @@ interface ErrorResponse {
   };
 }
 
-const ResetOtpModal: FC<ResetOtpModalProps> = ({ onClose, email }) => {
+const ResetOtpModal: FC<ResetOtpModalProps> = ({ onClose, pending }) => {
   const router = useRouter();
   const [form, setForm] = useState<FormState>({
     otp: ["", "", "", ""],
@@ -129,14 +125,14 @@ const ResetOtpModal: FC<ResetOtpModalProps> = ({ onClose, email }) => {
     setError("");
     verifyOtp({
       otp: otpValue,
-      email: email,
+      identifier: pending.target,
       password: form.password,
     } as any);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 shadow-lg w-[350px] relative">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl p-6 shadow-lg w-full max-w-[350px] relative">
         <button
           onClick={onClose}
           className="absolute top-3 right-3 text-gray-600 text-2xl"
@@ -146,7 +142,10 @@ const ResetOtpModal: FC<ResetOtpModalProps> = ({ onClose, email }) => {
           ×
         </button>
 
-        <h2 className="text-xl font-semibold text-center mb-4">Enter OTP</h2>
+        <h2 className="text-xl font-semibold text-center mb-2">Enter OTP</h2>
+        <p className="text-sm text-gray-600 text-center mb-4">
+          We sent a 4-digit OTP to {describeOtpTarget(pending)}
+        </p>
 
         {/* OTP FIELDS */}
         <div className="flex justify-center gap-2 mb-6">
@@ -170,20 +169,22 @@ const ResetOtpModal: FC<ResetOtpModalProps> = ({ onClose, email }) => {
         </div>
 
         {/* PASSWORD INPUTS */}
-        <input
-          type="password"
+        <PasswordInput
           name="password"
           placeholder="New Password"
-          className="w-full mb-3 px-3 py-2 ring-1 ring-gray-300 rounded-lg"
+          autoComplete="new-password"
+          wrapperClassName="mb-3"
+          className="w-full px-3 py-2 ring-1 ring-gray-300 rounded-lg"
           value={form.password}
           onChange={handleChange}
         />
 
-        <input
-          type="password"
+        <PasswordInput
           name="retypePassword"
           placeholder="Retype Password"
-          className="w-full mb-2 px-3 py-2 ring-1 ring-gray-300 rounded-lg"
+          autoComplete="new-password"
+          wrapperClassName="mb-2"
+          className="w-full px-3 py-2 ring-1 ring-gray-300 rounded-lg"
           value={form.retypePassword}
           onChange={handleChange}
         />

@@ -3,14 +3,25 @@ import { postRequest } from "@/lib/fetcher";
 import { useMutation } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { toast } from "react-toastify";
+import { PendingOtp } from "./Otp1";
+import PasswordInput from "./PasswordInput";
+import CountryCodeSelect, {
+  DEFAULT_COUNTRY,
+  toInternationalPhone,
+} from "./CountryCodeSelect";
 
-const Register = ({ onSignupSuccess }: any) => {
+interface RegisterProps {
+  onSignupSuccess?: (pending: PendingOtp) => void;
+}
+
+const Register = ({ onSignupSuccess }: RegisterProps) => {
   const [form, setForm] = useState({
     username: "",
     email: "",
     phone_no: "",
     password: "",
   });
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
 
   const {
     mutate: signupUser,
@@ -19,11 +30,12 @@ const Register = ({ onSignupSuccess }: any) => {
     error,
   } = useMutation({
     mutationFn: (formData: any) => {
+      // email is optional — left out entirely rather than sent blank
       const payload = {
         name: formData.username,
-        email: formData.email,
-        phone_no: formData.phone_no,
+        phone_no: toInternationalPhone(country, formData.phone_no),
         password: formData.password,
+        ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
       };
 
       return postRequest({
@@ -32,12 +44,15 @@ const Register = ({ onSignupSuccess }: any) => {
       });
     },
 
-    onSuccess: () => {
-      //  setRegisteredEmail(form.email);
-
-      toast.success("Account created successfully!");
+    onSuccess: (res: any) => {
+      toast.success("Account created! Enter the OTP sent to your phone.");
       if (onSignupSuccess) {
-        onSignupSuccess(form.email); // tell parent which email needs OTP
+        // tell parent where the OTP went, as the api normalised it
+        onSignupSuccess({
+          target:
+            res?.data?.otp_target ?? toInternationalPhone(country, form.phone_no),
+          channel: res?.data?.otp_channel ?? "phone",
+        });
       }
       setForm({
         username: "",
@@ -54,7 +69,11 @@ const Register = ({ onSignupSuccess }: any) => {
   });
 
   const handleChange = (e: any) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name } = e.target;
+    // the code comes from the picker, so the number box takes digits only
+    const value =
+      name === "phone_no" ? e.target.value.replace(/\D/g, "") : e.target.value;
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e: any) => {
@@ -63,7 +82,7 @@ const Register = ({ onSignupSuccess }: any) => {
   };
 
   return (
-    <div className="relative mx-auto w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-md px-8 py-10">
+    <div className="relative mx-auto w-full max-w-md bg-white py-2 sm:border sm:border-gray-200 sm:rounded-xl sm:shadow-md sm:px-8 sm:py-10">
       <h4 className="text-xl text-gray-800 font-semibold mb-3">
         Create Account
       </h4>
@@ -87,10 +106,35 @@ const Register = ({ onSignupSuccess }: any) => {
           />
         </div>
 
+        {/* Phone Number */}
+        <div className="mb-5">
+          <label className="block mb-1 text-sm font-medium">
+            Mobile Number *
+          </label>
+          <div className="flex w-full ring-1 ring-gray-300 rounded-lg">
+            <CountryCodeSelect value={country} onChange={setCountry} />
+            <input
+              type="tel"
+              name="phone_no"
+              value={form.phone_no}
+              onChange={handleChange}
+              className="flex-1 min-w-0 px-3 py-3 rounded-r-lg outline-none"
+              placeholder={`${country.length}-digit mobile number`}
+              inputMode="numeric"
+              autoComplete="tel-national"
+              maxLength={country.length}
+              required
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            We&apos;ll send an OTP to verify this number.
+          </p>
+        </div>
+
         {/* Email */}
         <div className="mb-5">
           <label className="block mb-1 text-sm font-medium">
-            Email address *
+            Email address <span className="text-gray-500">(optional)</span>
           </label>
           <input
             type="email"
@@ -99,36 +143,19 @@ const Register = ({ onSignupSuccess }: any) => {
             onChange={handleChange}
             className="w-full px-3 py-3 ring-1 ring-gray-300 rounded-lg"
             placeholder="name@example.com"
-            required
-          />
-        </div>
-
-        {/* Phone Number */}
-        <div className="mb-5">
-          <label className="block mb-1 text-sm font-medium">
-            Phone Number *
-          </label>
-          <input
-            type="tel"
-            name="phone_no"
-            value={form.phone_no}
-            onChange={handleChange}
-            className="w-full px-3 py-3 ring-1 ring-gray-300 rounded-lg"
-            placeholder="Enter phone number"
-            required
           />
         </div>
 
         {/* Password */}
         <div className="mb-5">
           <label className="block mb-1 text-sm font-medium">Password *</label>
-          <input
-            type="password"
+          <PasswordInput
             name="password"
             value={form.password}
             onChange={handleChange}
             className="w-full px-3 py-3 ring-1 ring-gray-300 rounded-lg"
             placeholder="••••••••"
+            autoComplete="new-password"
             required
           />
         </div>

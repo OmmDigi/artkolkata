@@ -48,6 +48,24 @@ function getCredentials() {
 }
 
 /**
+ * Reduces "+91 98765-43210", "098765 43210" and the like to the bare 10-digit
+ * Indian mobile number the gateway wants. null when the input is not one.
+ * Also the canonical form phone numbers are stored and looked up in.
+ */
+export function normalizeIndianPhone(raw: string | null | undefined): string | null {
+  const digits = (raw ?? "").replace(/\D/g, "");
+
+  const number =
+    digits.length === 12 && digits.startsWith("91")
+      ? digits.slice(2)
+      : digits.length === 11 && digits.startsWith("0")
+        ? digits.slice(1)
+        : digits;
+
+  return /^[6-9]\d{9}$/.test(number) ? number : null;
+}
+
+/**
  * The gateway wants bare 10-digit Indian numbers. Anything that is not one
  * after stripping +91 / 0 is rejected here, since the gateway would bill for it
  * and then fail it.
@@ -58,17 +76,10 @@ function normalizeNumbers(numbers: string | string[]): string[] {
   const invalid: string[] = [];
 
   for (const raw of list) {
-    const digits = raw.replace(/\D/g, "");
-    if (!digits) continue;
+    if (!raw.replace(/\D/g, "")) continue;
 
-    const number =
-      digits.length === 12 && digits.startsWith("91")
-        ? digits.slice(2)
-        : digits.length === 11 && digits.startsWith("0")
-          ? digits.slice(1)
-          : digits;
-
-    if (/^[6-9]\d{9}$/.test(number)) valid.add(number);
+    const number = normalizeIndianPhone(raw);
+    if (number) valid.add(number);
     else invalid.push(raw);
   }
 
@@ -160,4 +171,24 @@ export async function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
   }
 
   return { messages, sent: numbers.length };
+}
+
+/** DLT template registered for the account-verification OTP. */
+const OTP_TEMPLATE_ID = "1777179128081426250";
+
+/**
+ * Sends the account OTP by SMS. The wording is the registered DLT template
+ * word for word with only its two {#num#} slots filled — the gateway drops
+ * anything that does not match it exactly, so do not edit the text here.
+ */
+export async function sendOtpSms(
+  phone: string,
+  otp: string | number,
+  expiryMinutes: number,
+): Promise<SendSmsResult> {
+  return sendSms({
+    numbers: phone,
+    templateId: OTP_TEMPLATE_ID,
+    message: `Your OTP for mobile number verification is ${otp}. This OTP is valid for ${expiryMinutes} minutes. Please do not share this OTP with anyone. - Thank you, ART Kolkata.`,
+  });
 }

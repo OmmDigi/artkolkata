@@ -1376,3 +1376,35 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS gst_details JSONB;
 -- number the CMS allots to the invoice it generates itself.
 -- ============================================================
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS uploaded_invoice_number VARCHAR(50);
+
+-- ============================================================
+-- PHONE NUMBER SIGNUP
+--
+-- Customers sign up with a phone number, verified by an SMS otp, and email is
+-- optional. Rows without an email hold NULL, which UNIQUE(email) lets any
+-- number of rows share.
+--
+-- A registered account is now found by its phone at login, so no two of them
+-- may share one. Guest rows are left out: guest checkout makes one row per
+-- email, and the same person ordering under two addresses gives the same
+-- number to both. Google signups store '' and are left out too.
+--
+-- The key is the last 10 digits, so "+91 98765 43210" stored before numbers
+-- were normalised collides with "9876543210". It must stay identical to
+-- PHONE_KEY_SQL in services/users.service.ts.
+--
+-- This fails if two registered accounts already share a number. Find them with:
+--   SELECT right(regexp_replace(phone_no, '\D', '', 'g'), 10) AS phone,
+--          array_agg(id) AS user_ids
+--     FROM users
+--    WHERE COALESCE(is_guest, false) = false AND phone_no <> ''
+--    GROUP BY 1 HAVING COUNT(*) > 1;
+--
+-- The otps table keeps its email column but it now holds the email address or
+-- the 10-digit phone the code was sent to.
+-- ============================================================
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_registered_phone
+  ON users ((right(regexp_replace(phone_no, '\D', '', 'g'), 10)))
+  WHERE COALESCE(is_guest, false) = false AND phone_no <> '';

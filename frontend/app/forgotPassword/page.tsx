@@ -6,22 +6,41 @@ import { toast } from "react-toastify";
 import Link from "next/link";
 import { postRequest } from "@/lib/fetcher";
 import ResetOtpModal from "../Component/ui/account/resetOtpModal";
+import { PendingOtp, describeOtpTarget } from "../Component/ui/account/Otp1";
+import CountryCodeSelect, {
+  DEFAULT_COUNTRY,
+  looksLikePhone,
+  toInternationalPhone,
+} from "../Component/ui/account/CountryCodeSelect";
 
 const ForgotPassword = () => {
-  const [email, setEmail] = useState("");
-  const [showOtpModal, setShowOtpModal] = useState(false);
+  // an email address or a mobile number
+  const [identifier, setIdentifier] = useState("");
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+
+  // the code picker shows only while the box holds a number, not an email
+  const isPhone = looksLikePhone(identifier);
+  const identifierToSend = isPhone
+    ? toInternationalPhone(country, identifier)
+    : identifier.trim();
+  // where the api says the code went; the modal verifies against this
+  const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
 
   // MUTATION TO SEND OTP
   const { mutate: sendOtp, isPending } = useMutation({
-    mutationFn: (emailValue) =>
+    mutationFn: (value: string) =>
       postRequest({
         url: "/api/v1/users/send-otp",
-        body: { email: emailValue },
+        body: { identifier: value },
       }),
 
-    onSuccess: () => {
-      setShowOtpModal(true); // open OTP modal
-      toast.success("OTP sent successfully!");
+    onSuccess: (res: any) => {
+      const pending: PendingOtp = {
+        target: res?.data?.otp_target ?? identifierToSend,
+        channel: res?.data?.otp_channel ?? (isPhone ? "phone" : "email"),
+      };
+      setPendingOtp(pending); // open OTP modal
+      toast.success(`OTP sent to ${describeOtpTarget(pending)}`);
     },
 
     onError: (err: any) => {
@@ -33,45 +52,54 @@ const ForgotPassword = () => {
   const handleSubmit = (e: any) => {
     e.preventDefault();
 
-    if (!email) {
-      toast.error("Email is required!");
+    if (!identifier.trim()) {
+      toast.error("Email or mobile number is required!");
       return;
     }
 
-    sendOtp(email as any); //  API call
-
-    // Don't clear email yet — user may need it in modal
+    sendOtp(identifierToSend); //  API call
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start pt-16  p-10 bg-white text-gray-800">
-      <h1 className="text-3xl font-semibold mb-8 ">My Account</h1>
+    <div className="min-h-screen flex flex-col items-center justify-start px-4 py-8 sm:p-10 sm:pt-16 bg-white text-gray-800">
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-6 sm:mb-8">My Account</h1>
 
       {/* Card */}
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-md px-8 py-10">
+      <div className="w-full max-w-md bg-white py-2 sm:border sm:border-gray-200 sm:rounded-xl sm:shadow-md sm:px-8 sm:py-10">
         <h2 className="text-xl font-semibold text-center mb-2">
           Forgot your password?
         </h2>
 
         <p className="text-sm text-gray-600 text-center mb-8">
-          Enter your email address and we’ll send an OTP to reset your password.
+          Enter your email address or mobile number and we’ll send an OTP to
+          reset your password.
         </p>
 
         {/* FORM */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block mb-1 text-sm font-medium text-gray-800">
-              Email address *
+              Email or mobile number *
             </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@example.com"
-              className="w-full px-3 py-3 ring-1 ring-gray-300 rounded-lg shadow-sm
-              focus:ring-2 focus:ring-[#000000] outline-none"
-            />
+            <div
+              className="flex w-full ring-1 ring-gray-300 rounded-lg shadow-sm
+              focus-within:ring-2 focus-within:ring-[#000000]"
+            >
+              {isPhone && (
+                <CountryCodeSelect value={country} onChange={setCountry} />
+              )}
+              <input
+                type="text"
+                required
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="name@example.com or 10-digit mobile number"
+                autoComplete="username"
+                className={`flex-1 min-w-0 px-3 py-3 outline-none ${
+                  isPhone ? "rounded-r-lg" : "rounded-lg"
+                }`}
+              />
+            </div>
           </div>
 
           <button
@@ -93,11 +121,10 @@ const ForgotPassword = () => {
       {/* Back to login link */}
 
       {/* OTP MODAL */}
-      {showOtpModal && (
-        // <p>dfgdgfdgdfgdf</p>
+      {pendingOtp && (
         <ResetOtpModal
-          email={email} // pass email to modal
-          onClose={() => setShowOtpModal(false)}
+          pending={pendingOtp}
+          onClose={() => setPendingOtp(null)}
         />
       )}
     </div>

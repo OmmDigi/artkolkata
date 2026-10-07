@@ -7,21 +7,29 @@ import { toast } from "react-toastify";
 import { useCartStore } from "../../../../store/useCartStore";
 import { useWishlistStore } from "../../../../store/useWishlistStore";
 import { useUserStore } from "../../../../store/useUserStore";
+import { PendingOtp } from "./Otp1";
+import PasswordInput from "./PasswordInput";
+import CountryCodeSelect, {
+  DEFAULT_COUNTRY,
+  looksLikePhone,
+  toInternationalPhone,
+} from "./CountryCodeSelect";
 
 interface SignInProps {
   pendingOtpEmail?: string;
   isOtpVerified?: boolean;
   onRequireOtp?: () => void;
-  onOpenOtp: (email: string) => void;
+  onOpenOtp: (pending: PendingOtp) => void;
 }
 
 interface FormState {
-  email: string;
+  identifier: string;
   password: string;
 }
 
 interface LoginPayload {
-  email: string;
+  // an email address or a mobile number — the api works out which
+  identifier: string;
   password: string;
 }
 
@@ -30,7 +38,7 @@ interface LoginResponse {
     refreshToken: string;
     user: {
       name: string;
-      email: string;
+      email: string | null;
       [key: string]: any;
     };
   };
@@ -38,8 +46,13 @@ interface LoginResponse {
 
 interface ErrorResponse {
   response?: {
+    status?: number;
     data?: {
       message?: string;
+      data?: {
+        otp_target?: string;
+        otp_channel?: PendingOtp["channel"];
+      };
     };
   };
   statusCode?: number;
@@ -59,7 +72,14 @@ const SignIn: FC<SignInProps> = ({
   const searchParams = useSearchParams();
   const setUser = useUserStore((state) => state.setUser);
 
-  const [form, setForm] = useState<FormState>({ email: "", password: "" });
+  const [form, setForm] = useState<FormState>({ identifier: "", password: "" });
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+
+  // the code picker shows only while the box holds a number, not an email
+  const isPhone = looksLikePhone(form.identifier);
+  const identifierToSend = isPhone
+    ? toInternationalPhone(country, form.identifier)
+    : form.identifier.trim();
 
   // ----------- LOGIN MUTATION -----------
   const { mutate: loginUser, isPending } = useMutation({
@@ -73,7 +93,7 @@ const SignIn: FC<SignInProps> = ({
       setUser({
         token: res.data.refreshToken,
         name: res.data.user?.name,
-        email: res.data.user?.email,
+        email: res.data.user?.email ?? undefined,
       });
       await useWishlistStore.getState().mergeGuestWishlist();
       await useCartStore.getState().mergeGuestCart();
@@ -83,19 +103,27 @@ const SignIn: FC<SignInProps> = ({
     },
 
     onError: (err: ErrorResponse) => {
-      console.error("Login error:", err);
-      toast.error(err?.response?.data?.message || "Invalid credentials!");
-
       if (
         err?.statusCode === 301 ||
         err?.data?.statusCode === 301 ||
-        err?.status === 301
+        err?.status === 301 ||
+        err?.response?.status === 301
       ) {
-        toast.info("Please check your email for OTP!");
-        console.log("301 detected, opening OTP with email:", form.email);
-        onOpenOtp(form.email);
+        // account not verified yet — the api has sent a code, and says where
+        const sentTo = err?.response?.data?.data;
+        const pending: PendingOtp = {
+          target: sentTo?.otp_target ?? identifierToSend,
+          channel: sentTo?.otp_channel ?? (isPhone ? "phone" : "email"),
+        };
+        toast.info(
+          `Please verify your account. We sent an OTP to your ${pending.channel}.`,
+        );
+        onOpenOtp(pending);
         return;
       }
+
+      console.error("Login error:", err);
+      toast.error(err?.response?.data?.message || "Invalid credentials!");
     },
   });
 
@@ -106,7 +134,7 @@ const SignIn: FC<SignInProps> = ({
   const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     const payload: LoginPayload = {
-      email: form.email,
+      identifier: identifierToSend,
       password: form.password,
     };
     loginUser(payload as any);
@@ -114,7 +142,7 @@ const SignIn: FC<SignInProps> = ({
 
   return (
     <div className="flex justify-center text-gray-800 ">
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl shadow-md px-8 py-10">
+      <div className="w-full max-w-md bg-white py-2 sm:border sm:border-gray-200 sm:rounded-xl sm:shadow-md sm:px-8 sm:py-10">
         <h2 className="text-xl text-gray-800 font-semibold text-center mb-2">
           Welcome Back
         </h2>
@@ -123,21 +151,31 @@ const SignIn: FC<SignInProps> = ({
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email */}
+          {/* Email or phone */}
           <div>
             <label className="block mb-1 text-sm font-medium text-gray-800">
-              Email address *
+              Email or mobile number *
             </label>
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="name@example.com"
-              className="w-full px-3 py-3 ring-1 ring-gray-300 text-gray-800 rounded-lg shadow-sm
-              focus:ring-2 focus:ring-[#02F8C5] outline-none"
-              required
-            />
+            <div
+              className="flex w-full ring-1 ring-gray-300 rounded-lg shadow-sm
+              focus-within:ring-2 focus-within:ring-[#02F8C5]"
+            >
+              {isPhone && (
+                <CountryCodeSelect value={country} onChange={setCountry} />
+              )}
+              <input
+                type="text"
+                name="identifier"
+                value={form.identifier}
+                onChange={handleChange}
+                placeholder="name@example.com or 10-digit mobile number"
+                autoComplete="username"
+                className={`flex-1 min-w-0 px-3 py-3 text-gray-800 outline-none ${
+                  isPhone ? "rounded-r-lg" : "rounded-lg"
+                }`}
+                required
+              />
+            </div>
           </div>
 
           {/* Password */}
@@ -145,12 +183,12 @@ const SignIn: FC<SignInProps> = ({
             <label className="block mb-1 text-sm font-medium text-gray-800">
               Password *
             </label>
-            <input
-              type="password"
+            <PasswordInput
               name="password"
               value={form.password}
               onChange={handleChange}
               placeholder="••••••••"
+              autoComplete="current-password"
               className="w-full px-3 py-3 ring-1 ring-gray-300  text-gray-800 rounded-lg shadow-sm
               focus:ring-2 focus:ring-[#02F8C5] outline-none"
               required

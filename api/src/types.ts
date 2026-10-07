@@ -5,7 +5,7 @@ export type RoteIds = `1-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13
 
 export interface SignupType {
   name: string;
-  email: string;
+  email?: string | null;
   phone_no: string;
   password: string;
 }

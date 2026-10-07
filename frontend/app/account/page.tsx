@@ -3,7 +3,10 @@
 import React, { useState, useEffect } from "react";
 import SignIn from "../Component/ui/account/signIn";
 import Register from "../Component/ui/account/register";
-import Otp1 from "../Component/ui/account/Otp1";
+import Otp1, {
+  PendingOtp,
+  describeOtpTarget,
+} from "../Component/ui/account/Otp1";
 import Profile from "../Component/ui/account/Profile";
 import { useIsLoggedIn } from "@/store/useUserStore";
 
@@ -15,12 +18,14 @@ const Account = () => {
   useEffect(() => {
     setMounted(true);
   }, []);
-  const [pendingOtpEmail, setPendingOtpEmail] = useState("");
+  // where the verification code went — set by signup or by signing in to an
+  // unverified account
+  const [pendingOtp, setPendingOtp] = useState<PendingOtp | null>(null);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
 
-  const handleSignupSuccess = (email: any) => {
-    setPendingOtpEmail(email);
+  const handleSignupSuccess = (pending: PendingOtp) => {
+    setPendingOtp(pending);
     setIsOtpVerified(false);
 
     setShowOtp(true);
@@ -28,13 +33,13 @@ const Account = () => {
   };
 
   const handleRequireOtp = () => {
-    if (pendingOtpEmail && !isOtpVerified) setShowOtp(true);
+    if (pendingOtp && !isOtpVerified) setShowOtp(true);
   };
 
   const handleOtpVerified = () => {
     setIsOtpVerified(true);
     setShowOtp(false);
-    setPendingOtpEmail("");
+    setPendingOtp(null);
   };
 
   const handleCloseOtp = () => {
@@ -49,19 +54,19 @@ const Account = () => {
   }
 
   return (
-    <div className=" bg-white p-10">
-      <h1 className="text-3xl text-gray-800 font-semibold text-center">
+    <div className="bg-white px-4 py-8 sm:p-10">
+      <h1 className="text-2xl sm:text-3xl text-gray-800 font-semibold text-center">
         My Account
       </h1>
 
       {/* TAB HEADERS */}
-      <div className="flex justify-center mt-6 font-semibold ">
+      <div className="mx-auto mt-6 flex w-full max-w-md overflow-hidden rounded-lg font-semibold">
         <button
           onClick={() => setActiveTab(0)}
-          className={`px-10 py-3  shadow-md transition  ${
+          className={`flex-1 py-3 transition ${
             activeTab === 0
-              ? "bg-[#02F8C5] text-black  shadow-lg"
-              : "bg-white text-gray-700 hover:bg-gray-100"
+              ? "bg-[#02F8C5] text-black"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           Sign In
@@ -69,10 +74,10 @@ const Account = () => {
 
         <button
           onClick={() => setActiveTab(1)}
-          className={`px-10 py-3  shadow-md transition ${
+          className={`flex-1 py-3 transition ${
             activeTab === 1
-              ? "bg-[#02F8C5] text-black  shadow-lg"
-              : "bg-white text-gray-700 hover:bg-gray-100"
+              ? "bg-[#02F8C5] text-black"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
           }`}
         >
           Register
@@ -83,28 +88,25 @@ const Account = () => {
       <div className="mt-6">
         {activeTab === 0 && (
           <SignIn
-            pendingOtpEmail={pendingOtpEmail}
+            pendingOtpEmail={pendingOtp?.target}
             isOtpVerified={isOtpVerified}
             onRequireOtp={handleRequireOtp}
-            onOpenOtp={(email: any) => {
-              //  ADDED THIS
-              console.log("onOpenOtp called with email:", email);
-              setPendingOtpEmail(email); // store email for OTP
-              console.log("Setting showOtp to true");
+            onOpenOtp={(pending) => {
+              setPendingOtp(pending);
               setShowOtp(true); // show OTP modal
             }}
           />
         )}
 
         {activeTab === 1 && (
-          <Register onSignupSuccess={handleSignupSuccess as any} />
+          <Register onSignupSuccess={handleSignupSuccess} />
         )}
       </div>
 
       {/* OTP MODAL */}
-      {showOtp && pendingOtpEmail && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 style={{ zIndex: 9999 }}">
-          <div className="bg-white rounded-xl p-6 shadow-lg w-[350px] relative">
+      {showOtp && pendingOtp && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 style={{ zIndex: 9999 }}">
+          <div className="bg-white rounded-xl p-6 shadow-lg w-full max-w-[350px] relative">
             <button
               onClick={handleCloseOtp}
               className="absolute top-3 right-3 text-gray-600 text-2xl"
@@ -112,14 +114,14 @@ const Account = () => {
               ×
             </button>
 
-            <h2 className="text-xl font-semibold text-center mb-2">
+            <h2 className="text-xl text-black font-semibold text-center mb-2">
               Enter OTP
             </h2>
             <p className="text-sm text-gray-600 text-center mb-5">
-              We sent a 4-digit OTP to your email
+              We sent a 4-digit OTP to {describeOtpTarget(pendingOtp)}
             </p>
 
-            <Otp1 email={pendingOtpEmail} onOtpVerified={handleOtpVerified} />
+            <Otp1 pending={pendingOtp} onOtpVerified={handleOtpVerified} />
           </div>
         </div>
       )}

@@ -7,14 +7,26 @@ import { useUserStore } from "@/hooks/useUserStore";
 import { useWishlistStore } from "@/store/useWishlistStore";
 import { useCartStore } from "@/store/useCartStore";
 
-interface Otp1Props {
-  email: string;
-  onOtpVerified?: () => void;
+/**
+ * Where an otp was sent, exactly as the api reported it (otp_target /
+ * otp_channel). The code has to be verified against this, not against what
+ * the customer typed: signing in with an email can send the code to the
+ * account's phone.
+ */
+export interface PendingOtp {
+  target: string;
+  channel: "phone" | "email";
 }
 
-interface VerifyOtpPayload {
-  otp: string;
-  email: string;
+/** "your phone ••••••3210" / "your email name@example.com" */
+export const describeOtpTarget = ({ target, channel }: PendingOtp) =>
+  channel === "phone"
+    ? `your phone ••••••${target.slice(-4)}`
+    : `your email ${target}`;
+
+interface Otp1Props {
+  pending: PendingOtp;
+  onOtpVerified?: () => void;
 }
 
 interface OtpResponse {
@@ -24,7 +36,7 @@ interface OtpResponse {
     refreshToken: string;
     user: {
       name: string;
-      email: string;
+      email: string | null;
       [key: string]: any;
     };
   };
@@ -38,11 +50,11 @@ interface ErrorResponse {
   };
 }
 
-const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
+const Otp1: FC<Otp1Props> = ({ pending, onOtpVerified }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setUser = useUserStore((state) => state.setUser);
-  
+
   const [otp, setOtp] = useState<string[]>(Array(4).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -54,12 +66,12 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
       }),
     onSuccess: async (data: OtpResponse) => {
       toast.success("OTP Verified Successfully!");
-      
+
       if (data.data?.refreshToken) {
         setUser({
           token: data.data.refreshToken,
           name: data.data.user?.name,
-          email: data.data.user?.email,
+          email: data.data.user?.email ?? undefined,
         });
 
         // the guest wishlist and cart saved in this browser are handed over
@@ -68,12 +80,26 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
       }
 
       if (onOtpVerified) onOtpVerified();
-      
+
       const redirectUrl = searchParams.get("redirect") || "/";
       router.push(redirectUrl);
     },
     onError: (err: ErrorResponse) => {
       toast.error(err?.response?.data?.message || "Invalid OTP, try again!");
+    },
+  });
+
+  const { mutate: resendOtp, isPending: isResending } = useMutation({
+    mutationFn: () =>
+      postRequest({
+        url: "/api/v1/users/send-otp",
+        body: { identifier: pending.target },
+      }),
+    onSuccess: () => {
+      toast.success("A new OTP has been sent!");
+    },
+    onError: (err: ErrorResponse) => {
+      toast.error(err?.response?.data?.message || "Could not resend OTP!");
     },
   });
 
@@ -84,7 +110,7 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
       toast.error("Please enter 4 digit OTP");
       return;
     }
-    verifyOtp({ otp: otpValue, email } as any);
+    verifyOtp({ otp: otpValue, identifier: pending.target } as any);
   };
 
   const handleInput = (e: ChangeEvent<HTMLInputElement>) => {
@@ -117,9 +143,9 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
             ref={(el) => {
               inputRefs.current[idx] = el;
             }}
-            className="shadow-xs w-[60px] text-center text-2xl border rounded-lg py-2"
+            className="shadow-xs w-12 sm:w-[60px] text-center text-2xl border rounded-lg py-2"
             inputMode="numeric"
-            autoComplete="off"
+            autoComplete={idx === 0 ? "one-time-code" : "off"}
           />
         ))}
       </div>
@@ -131,6 +157,15 @@ const Otp1: FC<Otp1Props> = ({ email, onOtpVerified }) => {
         ${isPending && "opacity-60 cursor-not-allowed"}`}
       >
         {isPending ? "Verifying OTP..." : "Submit OTP"}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => resendOtp()}
+        disabled={isResending}
+        className="text-sm text-amber-600 hover:underline disabled:opacity-60"
+      >
+        {isResending ? "Sending..." : "Didn't get the code? Resend OTP"}
       </button>
     </form>
   );
