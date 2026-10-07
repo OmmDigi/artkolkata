@@ -11,6 +11,7 @@ import Footer from "@/Component1/layout/Footer";
 import MobileBottomNav from "@/Component1/layout/MobileBottomNav";
 import FloatingWhatsApp from "@/Component1/FloatingWhatsApp";
 import OrderCompletionWatcher from "./Component/OrderCompletionWatcher";
+import ScreenshotGuard from "./Component/ScreenshotGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -96,6 +97,7 @@ export default function RootLayout({
           <MobileBottomNav />
           {/* <Footer /> */}
           <FloatingWhatsApp />
+          <ScreenshotGuard />
         </QueryClientWrapper>
       </body>
     </html>

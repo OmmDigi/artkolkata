@@ -121,3 +121,15 @@ body {
   scrollbar-width: none;
   /* Firefox */
 }
+/* Deter saving artwork: no drag/select/long-press menu on images, nothing printed */
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+@media print {
+  body {
+    display: none !important;
+  }
+}
