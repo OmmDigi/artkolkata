@@ -33,7 +33,7 @@ export const parseIdentifier = (raw: string): LoginIdentifier => {
  * still match. Must stay identical to the expression in the
  * uq_users_registered_phone index, or lookups stop using it.
  */
-const PHONE_KEY_SQL = `right(regexp_replace(users.phone_no, '\\D', '', 'g'), 10)`;
+export const PHONE_KEY_SQL = `right(regexp_replace(users.phone_no, '\\D', '', 'g'), 10)`;
 
 /**
  * WHERE fragment that finds the account an identifier belongs to.
@@ -76,6 +76,47 @@ export const insertOtpToDatabase = async (
          created_at = CURRENT_TIMESTAMP`,
     [target, otp]
   );
+};
+
+/**
+ * Checks a code against the one stored for target, throwing when it is wrong
+ * or stale, and deletes it on success so it cannot be replayed. Meant to run
+ * inside the caller's transaction: if anything after it throws, the delete is
+ * rolled back with the rest and the code still works for a retry.
+ */
+export const consumeOtp = async (
+  client: PoolClient,
+  target: string,
+  otp: string,
+) => {
+  /**
+   * created_at is a timestamp without time zone written in the session's
+   * zone (NOW() / CURRENT_TIMESTAMP), so it is compared with LOCALTIMESTAMP,
+   * which is in that same zone. Naming a zone here — 'Asia/Kolkata' — would
+   * be off by the difference whenever the database is not running in IST.
+   */
+  const { rows, rowCount } = await client.query(
+    `
+    SELECT
+      otp,
+      created_at <= LOCALTIMESTAMP - make_interval(mins => $3) AS expired
+    FROM otps
+    WHERE email = $1
+      AND otp = $2
+    `,
+    [target, otp, OTP_EXPIRY_MINUTES],
+  );
+
+  if (rowCount === 0 || rows[0].otp != otp)
+    throw new ErrorHandler(400, "Invalid otp");
+
+  if (rows[0].expired)
+    throw new ErrorHandler(400, "This OTP has expired. Please request a new one.");
+
+  await client.query("DELETE FROM otps WHERE email = $1 AND otp = $2", [
+    target,
+    otp,
+  ]);
 };
 
 /**

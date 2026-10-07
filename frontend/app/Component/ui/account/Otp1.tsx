@@ -72,6 +72,7 @@ const Otp1: FC<Otp1Props> = ({ pending, onOtpVerified }) => {
           token: data.data.refreshToken,
           name: data.data.user?.name,
           email: data.data.user?.email ?? undefined,
+          phone: data.data.user?.phone_no || undefined,
         });
 
         // the guest wishlist and cart saved in this browser are handed over

@@ -56,21 +56,22 @@ export default function ManageUserForm({ userid, userData, role }: IProps) {
           name="email"
           label="Email"
           defaultValue={userData?.email}
-          required
+          required={role == "Employee"}
         />
         <LabelInput
           name="phone_no"
           label="Phone Number"
           defaultValue={userData?.phone_no}
-          required
+          required={role == "Employee"}
         />
       </div>
       <LabelInput
         name="password"
-        label="User Password"
+        // customers who sign in by otp have no password; blank keeps the current one
+        label={role == "User" ? "User Password (optional)" : "User Password"}
         defaultValue={userData?.password}
         passwordInput
-        required
+        required={role == "Employee"}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">

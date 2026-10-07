@@ -276,7 +276,8 @@ export interface PaymentResponse {
 
 export interface IShippingAddress {
   fullName: string;
-  email: string;
+  // optional at checkout: the phone is what every order is reached on
+  email?: string;
   phone: string;
   address: string;
   city: string;

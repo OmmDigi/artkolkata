@@ -6,6 +6,9 @@ import {
   getUserList,
   getUserOrdersList,
   login,
+  otpLoginComplete,
+  otpLoginSend,
+  otpLoginVerify,
   loginWithGoogle,
   saveUserAddress,
   saveUserInfo,
@@ -91,6 +94,16 @@ userRoute
   .post("/login", rateLimits.loginIp, rateLimits.login, login)
   .post("/verify-otp", rateLimits.otpVerify, verifyOtp)
   .post("/send-otp", rateLimits.otpSendIp, rateLimits.otpSend, sendOtp)
+
+  // passwordless storefront login/signup — see otpLoginSend in the controller
+  .post(
+    "/otp-login/send",
+    rateLimits.otpSendIp,
+    rateLimits.otpSend,
+    otpLoginSend,
+  )
+  .post("/otp-login/verify", rateLimits.otpVerify, otpLoginVerify)
+  .post("/otp-login/complete", rateLimits.signup, otpLoginComplete)
   .get("/", rateLimits.adminRead, isAuthorizedV2(["1-11"]), getUserList)
   .get("/employee", rateLimits.adminRead, isAuthorizedV2(["1-12"]), getUserList)
 

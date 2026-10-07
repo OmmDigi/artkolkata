@@ -94,6 +94,7 @@ const SignIn: FC<SignInProps> = ({
         token: res.data.refreshToken,
         name: res.data.user?.name,
         email: res.data.user?.email ?? undefined,
+        phone: res.data.user?.phone_no || undefined,
       });
       await useWishlistStore.getState().mergeGuestWishlist();
       await useCartStore.getState().mergeGuestCart();

@@ -1,10 +1,12 @@
 import React, { FC } from "react";
+import Image from "next/image";
 
 export interface CountryCode {
   iso: string;
   name: string;
   /** dialling code without the + */
   dial: string;
+  /** flag image path in /public — emoji flags don't render on every browser (e.g. Windows) */
   flag: string;
   /** digits in a local mobile number, used to cap the input */
   length: number;
@@ -17,7 +19,7 @@ export interface CountryCode {
  * (and the api accepts its numbers — see normalizeIndianPhone).
  */
 export const COUNTRY_CODES: CountryCode[] = [
-  { iso: "IN", name: "India", dial: "91", flag: "🇮🇳", length: 10 },
+  { iso: "IN", name: "India", dial: "91", flag: "/flag-in.png", length: 10 },
 ];
 
 export const DEFAULT_COUNTRY = COUNTRY_CODES[0];
@@ -58,22 +60,27 @@ const CountryCodeSelect: FC<CountryCodeSelectProps> = ({
   onChange,
   className = "",
 }) => (
-  <select
-    aria-label="Country code"
-    value={value.iso}
-    onChange={(e) =>
-      onChange(
-        COUNTRY_CODES.find((c) => c.iso === e.target.value) ?? DEFAULT_COUNTRY,
-      )
-    }
-    className={`shrink-0 bg-gray-50 pl-3 pr-1 text-sm text-gray-800 border-r border-gray-300 rounded-l-lg outline-none cursor-pointer ${className}`}
-  >
-    {COUNTRY_CODES.map((c) => (
-      <option key={c.iso} value={c.iso}>
-        {c.flag} +{c.dial}
-      </option>
-    ))}
-  </select>
+  <div className="flex shrink-0 items-center gap-1.5 bg-gray-50 pl-3 border-r border-gray-300 rounded-l-lg">
+    {/* <option> can't hold an image, so the picked country's flag sits beside the select */}
+    <Image src={value.flag} alt={value.name} width={20} height={13} />
+    <select
+      aria-label="Country code"
+      value={value.iso}
+      onChange={(e) =>
+        onChange(
+          COUNTRY_CODES.find((c) => c.iso === e.target.value) ??
+            DEFAULT_COUNTRY,
+        )
+      }
+      className={`bg-transparent pr-1 text-sm text-gray-800 outline-none cursor-pointer ${className}`}
+    >
+      {COUNTRY_CODES.map((c) => (
+        <option key={c.iso} value={c.iso}>
+          +{c.dial}
+        </option>
+      ))}
+    </select>
+  </div>
 );
 
 export default CountryCodeSelect;

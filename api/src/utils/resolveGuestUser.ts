@@ -1,10 +1,14 @@
 import { pool } from "..";
 import { IShippingAddress } from "../types";
 import { ErrorHandler } from "./ErrorHandler";
+import { normalizeIndianPhone } from "../services/sms";
+import { PHONE_KEY_SQL } from "../services/users.service";
+import { doTransition } from "./doTransition";
 
 export interface IResolvedGuest {
   id: number;
-  email: string;
+  /** null for a guest who gave only a phone number */
+  email: string | null;
   /** false when an existing guest row was reused rather than created here */
   created: boolean;
 }
@@ -39,9 +43,11 @@ export const resolveGuestUser = async (
   // Stored lowercase so a guest typing Bob@x.com and then bob@x.com is one
   // person, and — more importantly — so neither spelling slips past the
   // existing-account check below.
-  const email = shipping.email.trim().toLowerCase();
+  const email = shipping.email?.trim().toLowerCase() ?? "";
   const name = shipping.fullName.trim().slice(0, 255);
-  const phone = shipping.phone.trim().slice(0, 20);
+  const phone = (shipping.phone ?? "").trim().slice(0, 20);
+
+  if (!email) return resolvePhoneOnlyGuest(name, phone);
 
   const existing = await findByEmail(email);
 
@@ -139,3 +145,76 @@ function assertClaimable(user: GuestCandidate) {
     );
   }
 }
+
+/**
+ * A guest who left the email blank. The row is keyed on the phone instead:
+ * the newest email-less guest row with this number is reused, otherwise a new
+ * one is made with email NULL (which UNIQUE(email) lets any number of rows
+ * share).
+ *
+ * There is no ACCOUNT_EXISTS check here, and none is needed. The email check
+ * exists because a guest row and an account cannot share an email, so the
+ * order would land in the account. Guest rows are left out of the unique phone
+ * index, so this order always gets a row of its own — and OTP login on that
+ * number later claims it, orders included.
+ */
+const resolvePhoneOnlyGuest = async (
+  name: string,
+  rawPhone: string,
+): Promise<IResolvedGuest> => {
+  const phone = normalizeIndianPhone(rawPhone);
+  if (!phone)
+    throw new ErrorHandler(
+      400,
+      "Enter a valid 10-digit phone number or an email address",
+    );
+
+  let resolved: IResolvedGuest | null = null;
+
+  // Committed on its own, like the email path, for the same reason. The lock
+  // makes a double submit wait for the first to make its row and then reuse
+  // it, so both land on one user id and the idempotency key catches the second.
+  await doTransition(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      `guest-phone:${phone}`,
+    ]);
+
+    const { rows } = await client.query<{ id: number; is_active: boolean | null }>(
+      `SELECT id, is_active
+         FROM users
+        WHERE ${PHONE_KEY_SQL} = $1
+          AND users.is_guest = true
+          AND users.password IS NULL
+          AND users.email IS NULL
+        ORDER BY id DESC
+        LIMIT 1`,
+      [phone],
+    );
+
+    if (rows[0]) {
+      if (rows[0].is_active === false)
+        throw new ErrorHandler(
+          400,
+          "This phone number is not able to place orders",
+          ["ACCOUNT_DISABLED"],
+        );
+
+      await client.query(
+        `UPDATE users SET name = $2, phone_no = $3 WHERE id = $1`,
+        [rows[0].id, name, phone],
+      );
+      resolved = { id: rows[0].id, email: null, created: false };
+      return;
+    }
+
+    const inserted = await client.query<{ id: number }>(
+      `INSERT INTO users (name, email, phone_no, password, is_verified, is_guest, role)
+       VALUES ($1, NULL, $2, NULL, false, true, 'User')
+       RETURNING id`,
+      [name, phone],
+    );
+    resolved = { id: inserted.rows[0].id, email: null, created: true };
+  });
+
+  return resolved!;
+};

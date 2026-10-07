@@ -1,7 +1,11 @@
+import { Response } from "express";
+import { PoolClient } from "pg";
 import asyncErrorHandler from "../middleware/asyncErrorHandler";
 import { httpResponse } from "../utils/httpResponse";
 import {
   VLogin,
+  VOtpLoginComplete,
+  VOtpLoginVerify,
   VResendOtp,
   VSaveUserAddress,
   VSaveUserInfo,
@@ -22,16 +26,22 @@ import { pool } from "..";
 import { decrypt, encrypt } from "../services/crypto";
 import { ErrorHandler } from "../utils/ErrorHandler";
 import { COOKIE_KEY } from "../constant";
-import { createToken } from "../services/jwt";
+import {
+  createSignupToken,
+  createToken,
+  verifySignupToken,
+} from "../services/jwt";
 import { sendEmail } from "../utils/sendEmail";
 import { doTransition } from "../utils/doTransition";
 import {
+  consumeOtp,
   deliverOtp,
   identifierWhereSql,
   insertOtpToDatabase,
   isPhoneTakenError,
-  OTP_EXPIRY_MINUTES,
+  LoginIdentifier,
   parseIdentifier,
+  PHONE_KEY_SQL,
   verificationTarget,
 } from "../services/users.service";
 import { normalizeIndianPhone } from "../services/sms";
@@ -261,34 +271,7 @@ export const verifyOtp = asyncErrorHandler(async (req, res) => {
   let verifiedUser: VerifiedUser | null = null;
 
   await doTransition(async (client) => {
-    /**
-     * created_at is a timestamp without time zone written in the session's
-     * zone (NOW() / CURRENT_TIMESTAMP), so it is compared with LOCALTIMESTAMP,
-     * which is in that same zone. Naming a zone here — 'Asia/Kolkata' — would
-     * be off by the difference whenever the database is not running in IST.
-     */
-    const { rows, rowCount } = await client.query(
-      `
-      SELECT
-        otp,
-        created_at <= LOCALTIMESTAMP - make_interval(mins => $3) AS expired
-      FROM otps
-      WHERE email = $1
-        AND otp = $2
-      `,
-      [identifier.value, value.otp, OTP_EXPIRY_MINUTES],
-    );
-
-    if (rowCount === 0 || rows[0].otp != value.otp)
-      throw new ErrorHandler(400, "Invalid otp");
-
-    // The row is left in place: throwing rolls this transaction back anyway,
-    // and the next code sent to this address overwrites it.
-    if (rows[0].expired)
-      throw new ErrorHandler(
-        400,
-        "This OTP has expired. Please request a new one.",
-      );
+    await consumeOtp(client, identifier.value, value.otp);
 
     if (value.password) {
       // if it comes with password than change the password
@@ -326,10 +309,6 @@ export const verifyOtp = asyncErrorHandler(async (req, res) => {
       );
       verifiedUser = userRows[0] ?? null;
     }
-    await client.query("DELETE FROM otps WHERE email = $1 AND otp = $2", [
-      identifier.value,
-      value.otp,
-    ]);
   });
 
   if (value.password) {
@@ -416,6 +395,252 @@ export const sendOtp = asyncErrorHandler(async (req, res) => {
     otp_target: identifier.value,
     otp_channel: identifier.kind,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Passwordless storefront login (Login/Signup with OTP)
+//
+//   1. otp-login/send      code goes to the phone or email typed in
+//   2. otp-login/verify    an existing account is signed in straight away; an
+//                          unknown phone/email gets a signup_token instead
+//   3. otp-login/complete  signup_token + name creates the account, signed in
+//
+// The code is the only credential, so it is limited to customer accounts:
+// staff keep signing in with their password.
+// ---------------------------------------------------------------------------
+
+type OtpLoginAccount = {
+  id: number;
+  name: string;
+  email: string | null;
+  phone_no: string;
+  role: string | null;
+  permissions: any;
+  is_active: boolean | null;
+  is_verified: boolean | null;
+  is_guest: boolean;
+};
+
+/**
+ * The account a phone or email belongs to. Unlike identifierWhereSql this
+ * also finds guest rows, so receiving the code lets a customer claim the
+ * orders they placed as a guest. A registered account always wins over a
+ * guest row, and among several guest rows with one phone (one per email used
+ * at checkout) the newest is taken.
+ */
+const findOtpLoginAccount = async (
+  db: Pick<PoolClient, "query">,
+  identifier: LoginIdentifier,
+  lock = false,
+): Promise<OtpLoginAccount | null> => {
+  const where =
+    identifier.kind === "email"
+      ? "users.email = $1"
+      : `${PHONE_KEY_SQL} = $1 AND users.phone_no <> ''`;
+
+  const { rows } = await db.query(
+    `
+    SELECT
+      users.id, users.name, users.email, users.phone_no, users.role,
+      users.is_active, users.is_verified,
+      COALESCE(users.is_guest, false) AS is_guest,
+      up.permissions
+    FROM users
+    LEFT JOIN user_permissions up ON up.user_id = users.id
+    WHERE ${where}
+    ORDER BY COALESCE(users.is_guest, false) ASC, users.id DESC
+    LIMIT 1
+    ${lock ? "FOR UPDATE OF users" : ""}
+    `,
+    [identifier.value],
+  );
+  return rows[0] ?? null;
+};
+
+const assertOtpLoginAllowed = (account: OtpLoginAccount) => {
+  if (account.is_active === false)
+    throw new ErrorHandler(400, "Your account is disabled");
+  if (account.role && account.role !== "User")
+    throw new ErrorHandler(
+      403,
+      "This account must sign in with its email and password",
+    );
+};
+
+/** the same token and body /login answers with */
+const sendSession = (
+  res: Response,
+  message: string,
+  user: Pick<
+    OtpLoginAccount,
+    "id" | "role" | "permissions" | "name" | "email" | "phone_no"
+  >,
+) => {
+  const token = createToken(
+    { id: user.id, role: user.role, permissions: user.permissions },
+    { expiresIn: "1d" },
+  );
+
+  httpResponse(res, 200, message, {
+    [COOKIE_KEY]: token,
+    user: { name: user.name, email: user.email, phone_no: user.phone_no },
+    permissions: user.permissions,
+  });
+};
+
+const sendWelcomeEmail = (user: { name: string; email: string | null }) => {
+  if (!user.email) return;
+  sendEmail(user.email, "WELCOME_EMAIL", {
+    customerName: user.name,
+    shopLink: process.env.FRONTEND_HOST_URL,
+  });
+};
+
+export const otpLoginSend = asyncErrorHandler(async (req, res) => {
+  const value = doValidate<{ identifier?: string; email?: string }>(
+    VResendOtp,
+    req.body ?? {},
+  );
+  const identifier = parseIdentifier((value.identifier ?? value.email)!);
+
+  // refused before an sms is paid for, rather than after the code is typed
+  const account = await findOtpLoginAccount(pool, identifier);
+  if (account) assertOtpLoginAllowed(account);
+
+  const OTP = createOtp();
+  await insertOtpToDatabase(identifier.value, OTP.toString());
+  await deliverOtp(identifier, OTP, account?.name ?? "there");
+
+  httpResponse(
+    res,
+    200,
+    identifier.kind === "phone"
+      ? "OTP sent to your phone"
+      : "OTP sent to your email",
+    { otp_target: identifier.value, otp_channel: identifier.kind },
+  );
+});
+
+export const otpLoginVerify = asyncErrorHandler(async (req, res) => {
+  const value = doValidate<{ identifier: string; otp: string }>(
+    VOtpLoginVerify,
+    req.body ?? {},
+  );
+  const identifier = parseIdentifier(value.identifier);
+
+  let account: OtpLoginAccount | null = null;
+
+  await doTransition(async (client) => {
+    await consumeOtp(client, identifier.value, value.otp);
+
+    account = await findOtpLoginAccount(client, identifier, true);
+    if (!account) return;
+
+    // throwing here rolls back consumeOtp too, so the code is not burnt
+    assertOtpLoginAllowed(account);
+
+    /**
+     * The code proves the phone or email, which verifies the account and is
+     * exactly the proof a guest row was missing, so a guest becomes a normal
+     * account with its orders. A phone login stores the number in canonical
+     * form. An email login on a guest keeps the guest's phone unless a
+     * registered account already holds it — uq_users_registered_phone would
+     * otherwise refuse the claim.
+     */
+    const phoneSql =
+      identifier.kind === "phone"
+        ? "$2"
+        : `CASE WHEN COALESCE(users.is_guest, false) AND EXISTS (
+             SELECT 1 FROM users other
+              WHERE other.id <> users.id
+                AND COALESCE(other.is_guest, false) = false
+                AND other.phone_no <> ''
+                AND right(regexp_replace(other.phone_no, '\\D', '', 'g'), 10)
+                  = ${PHONE_KEY_SQL}
+           ) THEN '' ELSE users.phone_no END`;
+
+    try {
+      const { rows } = await client.query(
+        `UPDATE users
+            SET is_verified = true, is_guest = false, phone_no = ${phoneSql}
+          WHERE id = $1
+          RETURNING phone_no`,
+        identifier.kind === "phone"
+          ? [account.id, identifier.value]
+          : [account.id],
+      );
+      account.phone_no = rows[0].phone_no;
+    } catch (error) {
+      if (isPhoneTakenError(error))
+        throw new ErrorHandler(
+          409,
+          "Another account already uses this phone number. Please contact support.",
+        );
+      throw error;
+    }
+  });
+
+  const user = account as OtpLoginAccount | null;
+
+  if (!user) {
+    // nothing to sign in to yet: hand back proof of the otp to finish signup with
+    return httpResponse(res, 200, "OTP verified. Tell us your name to finish.", {
+      is_new_user: true,
+      signup_token: createSignupToken(identifier),
+    });
+  }
+
+  if (!user.is_verified || user.is_guest) sendWelcomeEmail(user);
+
+  sendSession(res, "Signed in successfully", user);
+});
+
+export const otpLoginComplete = asyncErrorHandler(async (req, res) => {
+  const value = doValidate<{ signup_token: string; name: string }>(
+    VOtpLoginComplete,
+    req.body ?? {},
+  );
+
+  const verified = await verifySignupToken(value.signup_token);
+  if (!verified)
+    throw new ErrorHandler(
+      400,
+      "Your verification has expired. Please request a new OTP.",
+    );
+
+  // Email is NULL for a phone signup (UNIQUE(email) lets any number share it);
+  // phone_no is '' for an email signup, as for google signups, which keeps it
+  // out of uq_users_registered_phone. No password: the code is the credential,
+  // and "Lost your password" can add one later.
+  const email = verified.kind === "email" ? verified.value : null;
+  const phone = verified.kind === "phone" ? verified.value : "";
+
+  let rows: OtpLoginAccount[];
+  try {
+    ({ rows } = await pool.query(
+      `
+      INSERT INTO users (name, email, phone_no, password, is_verified, is_guest)
+      VALUES ($1, $2, $3, NULL, true, false)
+      ON CONFLICT (email) DO NOTHING
+      RETURNING id, name, email, phone_no, role, is_active, is_verified,
+                false AS is_guest, NULL::jsonb AS permissions
+      `,
+      [value.name, email, phone],
+    ));
+  } catch (error) {
+    if (!isPhoneTakenError(error)) throw error;
+    rows = [];
+  }
+
+  // the phone or email was taken between verify and now, e.g. a second tab
+  if (rows.length === 0)
+    throw new ErrorHandler(
+      409,
+      "An account already exists. Please request a new OTP to sign in.",
+    );
+
+  sendWelcomeEmail(rows[0]);
+  sendSession(res, "Account created successfully", rows[0]);
 });
 
 export const getUserList = asyncErrorHandler(async (req, res) => {
@@ -577,7 +802,9 @@ export const saveUserInfo = asyncErrorHandler(
   async (req: CustomRequest, res) => {
     const value = doValidate<SaveUserInfo>(VSaveUserInfo, req.body ?? {});
 
-    const encodedPassword = encrypt(value.password);
+    // NULL when left blank: an update keeps the current password, a new
+    // customer signs in by otp until they set one
+    const encodedPassword = value.password ? encrypt(value.password) : null;
 
     // blank stored as NULL so it never collides with another blank under UNIQUE(email)
     const email = value.email?.trim() || null;
@@ -609,7 +836,7 @@ export const saveUserInfo = asyncErrorHandler(
           name = $1, 
           phone_no = $2,
           email = $3, 
-          password = $4, 
+          password = COALESCE($4, password), 
           is_verified = $5, 
           is_active = $6,
           is_guest = $7
@@ -639,6 +866,10 @@ export const saveUserInfo = asyncErrorHandler(
     } else if (req.path == "/employee/save") {
       roleToStore = "Employee";
     }
+
+    // staff cannot use otp login, so without a password they could never sign in
+    if (roleToStore == "Employee" && !encodedPassword)
+      throw new ErrorHandler(400, "Password is required for an employee");
 
     const { rowCount } = await pool.query(
       `

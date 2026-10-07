@@ -21,3 +21,28 @@ export const verifyToken = <D, E = jwt.VerifyErrors | null>(token: string) => {
     });
   });
 };
+
+/**
+ * Passwordless signup: proof that the bearer received the otp for a phone or
+ * email that has no account yet, held while they type their name. Signed with
+ * its own key, not JWT_PASSWORD, so it can never be presented as a login
+ * session to isAuthenticated.
+ */
+const signupSecret = () => `${process.env.JWT_PASSWORD || ""}:otp-signup`;
+
+export interface SignupTokenData {
+  kind: "phone" | "email";
+  value: string;
+}
+
+export const createSignupToken = (data: SignupTokenData) =>
+  jwt.sign(data, signupSecret(), { expiresIn: "15m" });
+
+export const verifySignupToken = (token: string) =>
+  new Promise<SignupTokenData | null>((resolve) => {
+    jwt.verify(token, signupSecret(), (err, decoded) => {
+      if (err || !decoded || typeof decoded === "string") return resolve(null);
+      const { kind, value } = decoded as SignupTokenData;
+      resolve((kind === "phone" || kind === "email") && value ? { kind, value } : null);
+    });
+  });

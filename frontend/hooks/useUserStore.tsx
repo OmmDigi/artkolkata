@@ -8,6 +8,8 @@ export interface User {
   id?: string;
   name?: string;
   email?: string;
+  /** the account's mobile number, prefilled at checkout */
+  phone?: string;
   token?: string;
   role?: string;
 }

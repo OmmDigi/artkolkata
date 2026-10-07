@@ -263,7 +263,9 @@ export const createOrder = asyncErrorHandler(
         const shippingAddressSnapshot = {
           name: value.shippingDetails.fullName,
           phone: value.shippingDetails.phone,
-          email: value.shippingDetails.email,
+          // left off when blank, so readers fall back to the account's email
+          // (shipping.email ?? account_email) instead of stopping at ""
+          email: value.shippingDetails.email?.trim() || undefined,
           address_line1: value.shippingDetails.address,
           city: value.shippingDetails.city,
           state: value.shippingDetails.state,
@@ -474,7 +476,7 @@ export const createOrder = asyncErrorHandler(
         ? createGuestOrderToken({
             order_id: createdOrderId,
             order_number: createdOrderNumber,
-            email: value.shippingDetails.email.trim().toLowerCase(),
+            email: value.shippingDetails.email?.trim().toLowerCase() ?? "",
             user_id: customerId,
           })
         : null;

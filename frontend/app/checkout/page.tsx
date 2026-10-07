@@ -21,10 +21,16 @@ import {
   resetCheckoutIdempotencyKey,
 } from "@/lib/idempotency";
 import { setPendingOrder } from "@/lib/pendingOrder";
-import { useIsLoggedIn } from "@/hooks/useUserStore";
+import { useIsLoggedIn, useUserStore } from "@/hooks/useUserStore";
 import { useIsHydrated } from "@/hooks/useIsHydrated";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
+
+/** "+91 98765 43210" → "9876543210", the 10 digits the phone field takes */
+const toLocalPhone = (raw?: string | null) => {
+  const digits = (raw ?? "").replace(/\D/g, "");
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+};
 
 const CheckoutPage = () => {
   const { data: siteInfo } = useSiteInfo();
@@ -105,7 +111,11 @@ const CheckoutPage = () => {
 
       const parsed = JSON.parse(draft);
       if (parsed && typeof parsed === "object") {
-        setShippingDetails((prev) => ({ ...prev, ...parsed }));
+        // blanks are skipped so they do not wipe the account's prefilled contact
+        const filled = Object.fromEntries(
+          Object.entries(parsed).filter(([, v]) => v !== ""),
+        );
+        setShippingDetails((prev) => ({ ...prev, ...filled }));
         setSelectedAddressId("new");
       }
     } catch {
@@ -141,13 +151,47 @@ const CheckoutPage = () => {
   });
   const savedAddresses = profileData?.data?.user_address || [];
 
+  /**
+   * The phone and email the customer logged in with, prefilled into the form
+   * and free to change. From the user store, which the login fills; the
+   * profile covers a session that started before the store held a phone.
+   * Read only once hydrated: the store comes from localStorage, which the
+   * server render does not have.
+   */
+  const accountUser = useUserStore((state) => state.user);
+  const accountContact =
+    isHydrated && isLoggedIn
+      ? {
+          phone: toLocalPhone(accountUser?.phone || profileData?.data?.phone_no),
+          email: accountUser?.email || profileData?.data?.email || "",
+        }
+      : null;
+
+  // Fills the empty contact fields once per change of account details —
+  // adjusted during render rather than in an effect, so there is no flash of
+  // an empty form. A field the customer has typed in is never overwritten.
+  const prefillKey = accountContact
+    ? `${accountContact.phone}|${accountContact.email}`
+    : "";
+  const [prefilledKey, setPrefilledKey] = useState("");
+  if (prefillKey !== prefilledKey) {
+    setPrefilledKey(prefillKey);
+    if (accountContact) {
+      setShippingDetails((prev) => ({
+        ...prev,
+        phone: prev.phone || accountContact.phone,
+        email: prev.email || accountContact.email,
+      }));
+    }
+  }
+
   const handleAddressSelect = (id: number | "new") => {
     setSelectedAddressId(id);
     if (id === "new") {
       setShippingDetails({
         fullName: "",
-        email: "",
-        phone: "",
+        email: accountContact?.email ?? "",
+        phone: accountContact?.phone ?? "",
         address: "",
         city: "",
         state: "",
@@ -159,8 +203,8 @@ const CheckoutPage = () => {
       if (addr) {
         setShippingDetails({
           fullName: addr.name || "",
-          email: addr.email || "",
-          phone: addr.phone || "",
+          email: addr.email || accountContact?.email || "",
+          phone: addr.phone || accountContact?.phone || "",
           address: addr.address_line1 || "",
           city: addr.city || "",
           state: addr.state || "",
@@ -680,7 +724,13 @@ const CheckoutPage = () => {
                       >
                         <label className="text-sm font-semibold text-gray-900 mb-2 block capitalize">
                           {name.replace(/([A-Z])/g, " $1")}{" "}
-                          <span className="text-red-500">*</span>
+                          {name === "email" ? (
+                            <span className="font-normal normal-case text-gray-500">
+                              (optional)
+                            </span>
+                          ) : (
+                            <span className="text-red-500">*</span>
+                          )}
                         </label>
                         <input
                           name={name}
@@ -694,7 +744,13 @@ const CheckoutPage = () => {
                                 ? "Email Address"
                                 : "Phone Number"
                           }
-                          type={name === "phone" ? "tel" : "text"}
+                          type={
+                            name === "phone"
+                              ? "tel"
+                              : name === "email"
+                                ? "email"
+                                : "text"
+                          }
                           inputMode={name === "phone" ? "numeric" : undefined}
                           pattern={name === "phone" ? "\\d{10}" : undefined}
                           maxLength={name === "phone" ? 10 : undefined}

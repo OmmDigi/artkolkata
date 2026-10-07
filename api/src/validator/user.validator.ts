@@ -33,14 +33,28 @@ export const VValidateOtp = Joi.object({
 
 export const VResendOtp = Joi.object(identifierFields).or("identifier", "email");
 
+// Passwordless storefront login: one code proves the phone or email, and
+// signs in or (with a name, in a second step) creates the account.
+export const VOtpLoginVerify = Joi.object({
+  identifier: Joi.string().trim().required().label("Email or phone number"),
+  otp: Joi.string().trim().required().label("OTP"),
+});
+
+export const VOtpLoginComplete = Joi.object({
+  signup_token: Joi.string().required(),
+  name: Joi.string().trim().min(2).max(100).required().label("Full name"),
+});
+
 // CMS create/edit. Email is optional here too, or a customer who signed up by
 // phone could not be edited. Not a concat of VSignUp: this one does not insist
 // on an email-shaped string, as it never has.
 export const VSaveUserInfo = Joi.object({
   name: Joi.string().required().label("Full name"),
   email: Joi.string().trim().allow("", null).optional().label("Email"),
-  phone_no: Joi.string().required().label("Phone number"),
-  password: Joi.string().required().label("Password"),
+  // blank for a customer who signed up with their email
+  phone_no: Joi.string().allow("").required().label("Phone number"),
+  // blank keeps the current one: customers who sign in by otp have none
+  password: Joi.string().allow("", null).optional().label("Password"),
   user_id: Joi.number().optional(),
   is_verified: Joi.bool().required(),
   is_active: Joi.bool().required(),
