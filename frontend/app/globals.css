@@ -78,26 +78,33 @@ h6 {
 body {
   top: 0 !important;
 }
+
 .skiptranslate iframe {
   display: none !important;
 }
+
 .goog-te-banner-frame {
   display: none !important;
 }
+
 .goog-te-menu-value {
   display: none !important;
 }
+
 .goog-tooltip {
   display: none !important;
 }
+
 .goog-tooltip:hover {
   display: none !important;
 }
+
 .goog-text-highlight {
   background-color: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
+
 #google_translate_element {
   display: none !important;
 }
@@ -106,8 +113,11 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
 /* Hide scrollbar for IE, Edge and Firefox */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }
