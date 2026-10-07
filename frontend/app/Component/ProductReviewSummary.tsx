@@ -172,7 +172,7 @@ export default function ProductReviewSummary({
       {/* Main Content: Two Columns on Desktop */}
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
         {/* Left Column: Review Summary */}
-        <div className="w-full lg:w-1/4  flex flex-col gap-2">
+        <div className="w-full lg:w-1/3 xl:w-1/4 lg:shrink-0 flex flex-col gap-2">
           {/* Score */}
           <div className="flex flex-col items-center border-b lg:border-b-0 lg:border-b border-gray-100 pb-8 lg:pb-0">
             <div className="text-[40px] font-bold text-orange-500 leading-none mb-4">
@@ -248,7 +248,7 @@ export default function ProductReviewSummary({
         </div>
 
         {/* Right Column: Reviews List Area */}
-        <div className="w-full lg:w-3/4 md:px-10">
+        <div className="w-full lg:flex-1 lg:min-w-0 md:px-10">
           <div className="flex flex-col md:flex-row justify-between items-center mb-6">
             <h3 className="text-xl font-bold text-gray-800 uppercase tracking-wider mb-4 md:mb-0">
               Reviews ({totalReviews})

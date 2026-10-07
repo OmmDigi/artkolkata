@@ -421,17 +421,17 @@ const ProductPage = () => {
         {/* Product Grid */}
         <div className=" gap-12 mb-12">
           {/* Images Section */}
-          <div className=" md:flex md:gap-20">
+          <div className="md:grid md:grid-cols-2 md:gap-8 lg:gap-12 xl:gap-20">
             {/* LEFT - Images */}
-            <div className="w-full md:w-1/2 md:px-2 md:sticky md:top-2 md:h-fit z-10">
+            <div className="w-full md:px-2 md:sticky md:top-2 md:h-fit md:self-start z-10">
               {/* Desktop View */}
-              <div className="hidden md:flex gap-4 bg-white p-4 mb-4 sticky top-8 relative">
+              <div className="hidden md:flex flex-col-reverse lg:flex-row gap-4 bg-white p-4 mb-4 sticky top-8 relative">
                 {/* Thumbnails */}
-                <div className="relative flex flex-col items-center w-14 flex-shrink-0">
+                <div className="relative flex flex-col items-center w-full lg:w-14 flex-shrink-0">
                   {currentImages.length > 7 && (
                     <button
                       onClick={() => scrollThumbnails("up")}
-                      className="mb-1 p-1 bg-gray-200 rounded-full hover:bg-gray-300 z-10"
+                      className="hidden lg:block mb-1 p-1 bg-gray-200 rounded-full hover:bg-gray-300 z-10"
                     >
                       <ChevronDown
                         className="rotate-180 text-gray-700"
@@ -441,7 +441,7 @@ const ProductPage = () => {
                   )}
                   <div
                     ref={thumbnailRef}
-                    className="flex flex-col gap-1 w-full overflow-y-auto [&::-webkit-scrollbar]:hidden"
+                    className="flex lg:flex-col gap-1 w-full overflow-x-auto lg:overflow-x-hidden lg:overflow-y-auto [&::-webkit-scrollbar]:hidden"
                     style={{
                       maxHeight: "450px",
                       scrollbarWidth: "none",
@@ -452,7 +452,7 @@ const ProductPage = () => {
                       <button
                         key={index}
                         onMouseEnter={() => setMainImage(img)}
-                        className={`w-full aspect-square overflow-hidden border-2 transition-all relative ${
+                        className={`w-14 lg:w-full shrink-0 aspect-square overflow-hidden border-2 transition-all relative ${
                           mainImage?.image === img.image
                             ? "border-[#000000]"
                             : "border-gray-200 opacity-100 hover:opacity-100"
@@ -476,7 +476,7 @@ const ProductPage = () => {
                   {currentImages.length > 8 && (
                     <button
                       onClick={() => scrollThumbnails("down")}
-                      className="mt-1 p-1 bg-gray-200 rounded-full hover:bg-gray-300 z-10"
+                      className="hidden lg:block mt-1 p-1 bg-gray-200 rounded-full hover:bg-gray-300 z-10"
                     >
                       <ChevronDown className="text-gray-700" size={16} />
                     </button>
@@ -486,8 +486,7 @@ const ProductPage = () => {
                 {/* Main Image with Magnifier */}
                 <div
                   ref={imageRef}
-                  className={`relative bg-gray-100 overflow-hidden ${mainImage?.type === "video" ? "cursor-pointer" : "cursor-none"}`}
-                  style={{ width: "450px", height: "450px" }}
+                  className={`relative w-full max-w-[450px] aspect-square lg:flex-1 lg:min-w-0 bg-gray-100 overflow-hidden ${mainImage?.type === "video" ? "cursor-pointer" : "cursor-none"}`}
                   onMouseEnter={() =>
                     mainImage?.type !== "video" && setShowLens(true)
                   }
@@ -555,7 +554,7 @@ const ProductPage = () => {
 
                     return (
                       <div
-                        className="absolute top-0 shadow-2xl bg-white border border-gray-200 z-999 pointer-events-none overflow-hidden hidden md:block"
+                        className="absolute top-0 shadow-2xl bg-white border border-gray-200 z-999 pointer-events-none overflow-hidden hidden lg:block"
                         style={{
                           left: "100%",
                           marginLeft: "1rem", // gap between image and portal
@@ -691,7 +690,7 @@ const ProductPage = () => {
             </div>
 
             {/* RIGHT - Product Info */}
-            <div className="md:w-1/2 space-y-6 text-gray-800 relative mt-4 md:mt-0">
+            <div className="min-w-0 space-y-6 text-gray-800 relative mt-4 md:mt-0">
               <button
                 onClick={() => {
                   if (navigator.share) {

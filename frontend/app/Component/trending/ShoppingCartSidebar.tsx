@@ -270,7 +270,7 @@ const ShoppingCartSidebar = ({
                 {totalItems}
               </span>
             </div>
-            <span className="hidden md:block font-bold mt-3 ml-1 text-sm">
+            <span className="hidden lg:block font-bold mt-3 ml-1 text-sm">
               Cart
             </span>
           </div>

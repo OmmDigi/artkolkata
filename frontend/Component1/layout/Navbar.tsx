@@ -67,6 +67,10 @@ export default function Navbar() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState("");
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  // the account menu opens on hover with a mouse; touch screens (tablets)
+  // have no hover, so a tap toggles it through this instead
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   // const lastScrollY = useRef(0);
 
@@ -127,6 +131,13 @@ export default function Navbar() {
         setIsLocationModalOpen(false);
       }
       if (
+        isAccountOpen &&
+        accountRef.current &&
+        !accountRef.current.contains(target)
+      ) {
+        setIsAccountOpen(false);
+      }
+      if (
         searchContainerRef.current &&
         !searchContainerRef.current.contains(target) &&
         (!mobileSearchContainerRef.current ||
@@ -139,7 +150,7 @@ export default function Navbar() {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isDropdownOpen, isLocationModalOpen]);
+  }, [isDropdownOpen, isLocationModalOpen, isAccountOpen]);
 
   const {
     data: categoryData,
@@ -298,7 +309,7 @@ export default function Navbar() {
             </div> */}
 
             {/* Logo */}
-            <div className="flex items-center justify-center absolute inset-0 pointer-events-none md:static md:inset-auto md:justify-start md:pointer-events-auto md:gap-2">
+            <div className="flex items-center justify-center absolute inset-0 pointer-events-none md:static md:inset-auto md:justify-start md:pointer-events-auto md:gap-2 md:shrink-0">
               <Link
                 href="/"
                 className="text-2xl font-bold text-gray-900 transition pointer-events-auto"
@@ -308,7 +319,7 @@ export default function Navbar() {
                     siteInfo?.site_logo ?? "/Art-Kolkata-Logo.png",
                   )}
                   alt={siteInfo?.site_logo_alt || "Art Kolkata Logo"}
-                  className="h-12 md:h-16 object-contain"
+                  className="h-12 xl:h-16 object-contain"
                 />
               </Link>
               <div
@@ -341,7 +352,7 @@ export default function Navbar() {
 
             {/* Search Bar with Category Dropdown */}
             <div
-              className="hidden md:flex items-center flex-1 mx-4"
+              className="hidden md:flex items-center flex-1 min-w-0 mx-2 lg:mx-4"
               ref={searchContainerRef}
             >
               <div className="relative w-full">
@@ -426,7 +437,7 @@ export default function Navbar() {
                     placeholder={placeholderText}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 px-4 py-2 outline-none text-sm text-black"
+                    className="flex-1 min-w-0 px-3 lg:px-4 py-2 outline-none text-sm text-black"
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         onSearchButtonClick()
@@ -484,7 +495,7 @@ export default function Navbar() {
                 )}
               </div>
             </div>
-            <div className="ml-4 flex-shrink-0">
+            <div className="ml-1 lg:ml-4 flex-shrink-0">
               <LanguageSelector />
             </div>
 
@@ -492,15 +503,31 @@ export default function Navbar() {
             <nav className="hidden lg:flex items-center space-x-8"></nav>
 
             {/* Right Icons */}
-            <div className="hidden md:flex items-center space-x-6 text-gray-700">
+            <div className="hidden md:flex shrink-0 items-center space-x-4 lg:space-x-6 text-gray-700">
               {/* Account Dropdown */}
-              <div className="relative transition hover:text-gray-900 cursor-pointer group">
-                <div className="flex flex-col text-sm leading-tight">
+              <div
+                ref={accountRef}
+                className="relative transition hover:text-gray-900 cursor-pointer group"
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-haspopup="menu"
+                  aria-expanded={isAccountOpen}
+                  onClick={() => setIsAccountOpen((open) => !open)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsAccountOpen((open) => !open);
+                    }
+                  }}
+                  className="flex flex-col text-sm leading-tight"
+                >
                   <span className="text-[11px] text-gray-500 font-medium">
                     Hello, {isAuthenticated ? user?.name || "User" : "sign in"}
                   </span>
-                  <span className="font-bold flex items-center text-[13px]">
-                    Account & Lists
+                  <span className="font-bold flex items-center whitespace-nowrap text-[13px]">
+                    Account<span className="hidden xl:inline">&nbsp;& Lists</span>
                     <svg
                       className="w-4 h-4 ml-0.5 text-gray-500"
                       fill="none"
@@ -518,8 +545,13 @@ export default function Navbar() {
                 </div>
 
                 {/* Dropdown Menu */}
-                <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                  <div className="py-2 flex flex-col">
+                <div
+                  onClick={() => setIsAccountOpen(false)}
+                  className={`absolute top-full right-0 pt-2 w-56 group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 ${
+                    isAccountOpen ? "opacity-100 visible" : "opacity-0 invisible"
+                  }`}
+                >
+                  <div className="py-2 flex flex-col bg-white border border-gray-200 rounded-md shadow-lg">
                     <div className="px-4 py-2 text-sm font-bold border-b border-gray-100">
                       Your Account
                     </div>

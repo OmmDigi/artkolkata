@@ -376,9 +376,9 @@ const ProductsPage = () => {
       </div>
 
       {/* <div className="max-w-7xl mx-auto px-4"> */}
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 lg:gap-8">
         {/* Sidebar Filters */}
-        <aside className="w-full lg:w-1/8 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scrollbar-hide">
+        <aside className="w-full md:w-44 lg:w-52 md:shrink-0 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto scrollbar-hide">
           {/* Clear All Button */}
           <button
             onClick={handleClearAll}
@@ -396,9 +396,9 @@ const ProductsPage = () => {
         </aside>
 
         {/* Products Grid */}
-        <div className="flex-1 pb-6">
+        <div className="flex-1 min-w-0 pb-6">
           {/* Results Header */}
-          <div className="md:flex items-end justify-between mb-6">
+          <div className="md:flex md:flex-wrap items-end justify-between gap-3 mb-6">
             <p className="text-sm text-gray-600">
               Showing {sortedProducts?.length ?? 0} of{" "}
               {(products as any)?.total ?? (products as any)?.data?.length ?? 0}{" "}
@@ -460,7 +460,7 @@ const ProductsPage = () => {
           <div
             className={`grid gap-4 md:gap-3 ${
               viewMode === "grid"
-                ? "grid-cols-2 md:grid-cols-2 lg:grid-cols-4"
+                ? "grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
                 : "grid-cols-1"
             }`}
           >
