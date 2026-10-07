@@ -122,13 +122,16 @@ export const rateLimits = {
   /**
    * Sending an otp costs an email and, more importantly, is the lever an
    * attacker pulls to mail-bomb someone else's inbox. Counted per address so
-   * one victim cannot be targeted from many sources.
+   * one victim cannot be targeted from many sources — the caller's ip is
+   * left out of the key, or rotating addresses would reset the count. The
+   * per-number cooldown and daily cap in insertOtpToDatabase back this up for
+   * the routes (signup, unverified login) that send a code without it.
    */
   otpSend: rateLimit({
     name: "otp-send",
     limit: 5,
     windowSeconds: 900,
-    identity: "ip",
+    identity: "none",
     scope: accountScope,
     message:
       "Too many code requests. Please wait a few minutes before asking for another.",
@@ -146,13 +149,15 @@ export const rateLimits = {
    * Verifying an otp is a guess at a short numeric secret, so it gets the
    * tightest budget in the file. Ten tries per account per fifteen minutes
    * leaves an honest user room to fat-finger it and leaves an attacker
-   * nowhere near the search space.
+   * nowhere near the search space. Per account only, not per ip — the codes
+   * are four digits, so a per-ip budget lets a pool of addresses walk the
+   * whole space inside one code's lifetime.
    */
   otpVerify: rateLimit({
     name: "otp-verify",
     limit: 10,
     windowSeconds: 900,
-    identity: "ip",
+    identity: "none",
     scope: accountScope,
     message:
       "Too many incorrect codes. Please request a new one in a few minutes.",

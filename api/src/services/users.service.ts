@@ -4,6 +4,7 @@ import { ErrorHandler } from "../utils/ErrorHandler";
 import { sendEmail } from "../utils/sendEmail";
 import logger from "../utils/logger";
 import { normalizeIndianPhone, sendOtpSms } from "./sms";
+import { enforceRateLimit } from "../middleware/rateLimit";
 
 export const OTP_EXPIRY_MINUTES = 5;
 
@@ -64,6 +65,30 @@ export const insertOtpToDatabase = async (
   otp: string,
   client?: PoolClient
 ) => {
+  /**
+   * Every route that sends a code comes through here, so the per-number limit
+   * lives here rather than on any one route: signup, unverified login, resend
+   * and otp login would otherwise each bring their own budget for the same
+   * phone. Keyed by the number alone so no ip rotation gets around it. The
+   * cooldown matches the storefront's resend timer. Inside signup's
+   * transaction a throw rolls the new account back too, which is what we want.
+   */
+  await enforceRateLimit({
+    name: "otp-target-cooldown",
+    target,
+    limit: 1,
+    windowSeconds: 30,
+    message: "Please wait {seconds}s before requesting another code.",
+  });
+  await enforceRateLimit({
+    name: "otp-target-day",
+    target,
+    limit: 10,
+    windowSeconds: 86400,
+    message:
+      "Too many codes have been sent to this number today. Please try again later.",
+  });
+
   const pgClient = client ? client : pool;
   //store otp to the db with expire date 5 minit
   await pgClient.query(

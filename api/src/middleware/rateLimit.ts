@@ -49,8 +49,10 @@ export interface IRateLimitOptions {
    * "auto" buckets a logged-in caller by user id and everyone else by ip.
    * "ip" forces ip even for logged-in callers, for limits that exist to stop
    * one machine hammering a shared resource.
+   * "none" leaves the caller out of the key entirely, so with a scope the
+   * bucket is per target alone — rotating ip addresses buys no extra budget.
    */
-  identity?: "auto" | "ip";
+  identity?: "auto" | "ip" | "none";
   /**
    * Extra scope mixed into the key, so one bucket can be kept per target
    * rather than per caller — the account being logged into, for instance.
@@ -92,16 +94,54 @@ const digest = (value: string) =>
     .slice(0, 20);
 
 const buildKey = (req: CustomRequest, options: IRateLimitOptions) => {
+  const scope = options.scope?.(req);
+
+  if (options.identity === "none" && scope)
+    return `rl:${options.name}:s:${digest(scope)}`;
+
   const identity =
     options.identity !== "ip" && req.token_info?.id
       ? `u:${req.token_info.id}`
       : `ip:${resolveIp(req)}`;
 
-  const scope = options.scope?.(req);
-
   return scope
     ? `rl:${options.name}:${identity}:s:${digest(scope)}`
     : `rl:${options.name}:${identity}`;
+};
+
+/**
+ * The same counter as the middleware, for limits that belong to a target
+ * rather than a route — throws the 429 itself. Used where several routes do
+ * the same costly thing (send an otp) and must share one budget for it.
+ */
+export const enforceRateLimit = async (
+  options: Omit<IRateLimitOptions, "identity" | "scope" | "skip"> & {
+    target: string;
+  },
+) => {
+  if (DISABLED) return;
+
+  const limit = Math.max(1, Math.round(options.limit * FACTOR));
+  const result = await consumeRateLimit(
+    `rl:${options.name}:s:${digest(options.target)}`,
+    options.windowSeconds,
+  );
+
+  // Could not count it. Serve it.
+  if (!result || result.count <= limit) return;
+
+  logger.warn({
+    message: "Rate limit exceeded",
+    limiter: options.name,
+    count: result.count,
+    limit,
+  });
+
+  throw new ErrorHandler(
+    429,
+    (options.message ?? "Too many requests. Please try again in {seconds}s.")
+      .replace("{seconds}", String(result.resetSeconds)),
+  );
 };
 
 export const rateLimit = (options: IRateLimitOptions) => {
