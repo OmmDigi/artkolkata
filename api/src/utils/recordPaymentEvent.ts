@@ -4,6 +4,7 @@ import { doTransition } from "./doTransition";
 import logger from "./logger";
 import { PaymentEvent, PaymentStatus } from "../services/payment/payment.gateway";
 import { notifyOrderReceived } from "./orderEmails";
+import { sendOrderSms } from "./orderSms";
 import { ensurePaymentSlip } from "../services/documents/generatePaymentSlip";
 
 /**
@@ -119,9 +120,11 @@ export const recordPaymentEvent = async (
   //
   // The receipt belongs to the same moment for the same reason: money has
   // arrived, so there is now something to give a receipt for. Both are fire and
-  // forget and both run after the commit — see ensurePaymentSlip.
+  // forget and both run after the commit — see ensurePaymentSlip. So is the
+  // payment SMS, which order_email_log keeps to one per order as well.
   if (result.updated && result.orderId && event.status === "PAID") {
     notifyOrderReceived(result.orderId);
+    sendOrderSms(result.orderId, "PAYMENT_RECEIVED");
     ensurePaymentSlip(result.orderId);
   }
 

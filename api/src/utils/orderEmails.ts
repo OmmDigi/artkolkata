@@ -9,6 +9,8 @@ import {
 } from "../constant";
 import logger from "./logger";
 import { EmailType, sendEmail } from "./sendEmail";
+import { sendOrderSms } from "./orderSms";
+import { OrderSmsType } from "../services/sms";
 
 /**
  * The customer-facing emails an order sends as it moves along, and the guard
@@ -27,6 +29,12 @@ const STATUS_EMAILS: Record<string, EmailType> = {
   [ORDER_SHIPPED]: "ORDER_SHIPPED_EMAIL",
   [OUT_FOR_DELIVERY]: "ORDER_OUT_FOR_DELIVERY_EMAIL",
   [ORDER_DELIVERED]: "ORDER_DELIVERED_EMAIL",
+};
+
+/** Which status also earns an SMS. */
+const STATUS_SMS: Record<string, OrderSmsType> = {
+  [ORDER_CONFIRMED]: "ORDER_CONFIRMED",
+  [ORDER_SHIPPED]: "ORDER_SHIPPED",
 };
 
 /**
@@ -213,14 +221,17 @@ export const sendOrderEmail = async (orderId: number, type: EmailType) => {
  * The one entry point for "this order just moved, tell the customer".
  *
  * Every place that writes order_status calls this straight after its commit,
- * and a status with no email attached quietly does nothing.
+ * and a status with no email or SMS attached quietly does nothing. The two
+ * are sent side by side: neither throws, and neither should wait on the other.
  */
 export const notifyOrderStatus = async (orderId: number, status: string) => {
-  const type = STATUS_EMAILS[status];
+  const emailType = STATUS_EMAILS[status];
+  const smsType = STATUS_SMS[status];
 
-  if (!type) return;
-
-  await sendOrderEmail(orderId, type);
+  await Promise.all([
+    emailType && sendOrderEmail(orderId, emailType),
+    smsType && sendOrderSms(orderId, smsType),
+  ]);
 };
 
 /** "We have your order." Placement for COD, payment success for prepaid. */

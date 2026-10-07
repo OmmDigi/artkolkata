@@ -30,6 +30,20 @@ interface SmsGatewayResponse {
 }
 
 /**
+ * Whether the SMS credentials are set. Lets a caller that records a send as
+ * done before making it (the order SMS) skip cleanly instead of burning that
+ * record on a send that was always going to fail.
+ */
+export function isSmsConfigured(): boolean {
+  try {
+    getCredentials();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Read at call time rather than import time, so the module can be imported
  * before dotenv has run.
  */
@@ -192,3 +206,38 @@ export async function sendOtpSms(
     message: `Your OTP for mobile number verification is ${otp}. This OTP is valid for ${expiryMinutes} minutes. Please do not share this OTP with anyone. - Thank you, ART Kolkata.`,
   });
 }
+
+export type OrderSmsType = "PAYMENT_RECEIVED" | "ORDER_CONFIRMED" | "ORDER_SHIPPED";
+
+export interface OrderSmsData {
+  customerName: string;
+  orderNumber: string;
+  /** already formatted for the message, e.g. "1499" or "1499.50" */
+  amount: string;
+}
+
+/**
+ * Registered DLT templates for order updates. As with the OTP, each message is
+ * the registered text word for word with only its variables filled — spacing
+ * and punctuation included ("shipped .Thank you" is how it was registered).
+ */
+export const ORDER_SMS_TEMPLATES: Record<
+  OrderSmsType,
+  { templateId: string; message: (data: OrderSmsData) => string }
+> = {
+  PAYMENT_RECEIVED: {
+    templateId: "1777179128090020162",
+    message: ({ amount, orderNumber }) =>
+      `Dear Customer, your payment of ₹${amount} for Order ID ${orderNumber} has been successfully received. - Thank you, ART Kolkata.`,
+  },
+  ORDER_CONFIRMED: {
+    templateId: "1777179128005702495",
+    message: ({ orderNumber }) =>
+      `Dear Customer, your order ${orderNumber} has been successfully confirmed. Thank you for shopping with ART Kolkata. We will notify you once your order is shipped. - Thank you, ART Kolkata.`,
+  },
+  ORDER_SHIPPED: {
+    templateId: "1777179128024086135",
+    message: ({ customerName, orderNumber, amount }) =>
+      `Dear ${customerName}, your order ${orderNumber} for ₹${amount} has been successfully shipped .Thank you for shopping with us. - Thank you, ART Kolkata.`,
+  },
+};
