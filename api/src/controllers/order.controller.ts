@@ -44,6 +44,7 @@ import {
 import { manageStock } from "../utils/manageStock";
 import { notifyStaffNewOrder } from "../utils/notifyStaffNewOrder";
 import { notifyOrderReceived, notifyOrderStatus } from "../utils/orderEmails";
+import { sendOrderSms } from "../utils/orderSms";
 import { parsePagination } from "../utils/parsePagination";
 import { buildOrderListFilter } from "../utils/buildOrderListFilter";
 import { streamOrderExport } from "../services/orderExport.service";
@@ -1067,8 +1068,14 @@ export const updateOrderStatus = asyncErrorHandler(async (req, res) => {
   //
   // Only for whole-order changes. A single item moving to SHIPPED is not the
   // order shipping, and an email saying it is would be a lie to the customer.
-  if (value.order_id && !value.order_item_id)
+  if (value.order_id && !value.order_item_id) {
     notifyOrderStatus(value.order_id, value.status);
+
+    // Not in notifyOrderStatus's map, which the courier webhooks share — they
+    // write CANCELLED for an RTO too. An admin cancelling is the real thing.
+    if (value.status === ORDER_CANCELLED)
+      sendOrderSms(value.order_id, "ORDER_CANCELLED");
+  }
 
   // Cancelling in the CMS has to reach the courier too, or the parcel is still
   // collected and delivered against an order our side calls cancelled. Runs
@@ -1378,6 +1385,10 @@ export const doReturn = asyncErrorHandler(async (req: CustomRequest, res) => {
     });
   }
 
+  // A Return is a refund on its way. Nothing to say for a Replace, which
+  // refunds nothing.
+  if (value.type === "Return") sendOrderSms(dbOrderId, "REFUND_INITIATED");
+
   // The customer is told their return is accepted either way; the pickup flag
   // is what the CMS uses to show support that a courier still has to be booked.
   httpResponse(res, 200, "Return Successfully Initiated", {
@@ -1495,6 +1506,7 @@ export const bookReplacementShipment = asyncErrorHandler(async (req, res) => {
  * them touch — so neither route can widen it by passing the wrong thing.
  */
 const cancelCustomerOrder = async (orderNumber: string, userId: number) => {
+  let dbOrderId = 0;
   let shipmentWaybill: string | null = null;
   let partnerOrderId: string | null = null;
 
@@ -1523,7 +1535,7 @@ const cancelCustomerOrder = async (orderNumber: string, userId: number) => {
         "This order can no longer be cancelled. Only orders that are still pending can be cancelled.",
       );
 
-    const dbOrderId = rows[0].order_id;
+    dbOrderId = rows[0].order_id;
     shipmentWaybill = rows[0].waybill ?? null;
     partnerOrderId = rows[0].partner_order_id ?? null;
 
@@ -1540,6 +1552,9 @@ const cancelCustomerOrder = async (orderNumber: string, userId: number) => {
       client,
     });
   });
+
+  // after the commit, like every order SMS, and never awaited
+  sendOrderSms(dbOrderId, "ORDER_CANCELLED");
 
   // Cancel with the shipping partner if the shipment was already created. The
   // order is already cancelled in our DB at this point, so a courier-side

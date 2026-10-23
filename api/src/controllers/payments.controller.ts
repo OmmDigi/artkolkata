@@ -18,6 +18,7 @@ import {
 } from "../validator/payment.validator";
 import { CustomRequest } from "../types";
 import { ensurePaymentSlip } from "../services/documents/generatePaymentSlip";
+import { sendOrderSms } from "../utils/orderSms";
 
 /**
  * The order behind a gateway payment: which row it is, and whether it was
@@ -359,6 +360,8 @@ export const refundPayment = asyncErrorHandler(async (req: CustomRequest, res) =
       settle: true,
     });
 
+    sendOrderSms(payment.order_id, "REFUND_COMPLETED");
+
     return httpResponse(res, 200, "Refund recorded without calling the gateway", {
       order_id: value.orderid,
       amount: value.amount,
@@ -406,6 +409,12 @@ export const refundPayment = asyncErrorHandler(async (req: CustomRequest, res) =
   });
 
   const settled = await getRefundableOrder(value.orderid);
+
+  // Settled on the spot (Razorpay "processed") — sent here rather than from
+  // markPaymentRefunded so the amount above is already on the row. A refund
+  // that settles later sends it from recordPaymentEvent's webhook path.
+  if (settled?.payment.status === "REFUNDED")
+    sendOrderSms(payment.order_id, "REFUND_COMPLETED");
 
   httpResponse(res, 200, `${gateway.label} accepted the refund`, {
     order_id: value.orderid,

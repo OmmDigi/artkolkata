@@ -128,6 +128,12 @@ export const recordPaymentEvent = async (
     ensurePaymentSlip(result.orderId);
   }
 
+  // The gateway confirming a refund that was still pending when the admin
+  // submitted it. One that settled at once was already sent its SMS by
+  // refundPayment, and order_email_log stops this one repeating it.
+  if (result.updated && result.orderId && event.status === "REFUNDED")
+    sendOrderSms(result.orderId, "REFUND_COMPLETED");
+
   return result;
 };
 

@@ -207,37 +207,82 @@ export async function sendOtpSms(
   });
 }
 
-export type OrderSmsType = "PAYMENT_RECEIVED" | "ORDER_CONFIRMED" | "ORDER_SHIPPED";
+export type OrderSmsType =
+  | "PAYMENT_RECEIVED"
+  | "ORDER_CONFIRMED"
+  | "ORDER_DISPATCHED"
+  | "ORDER_SHIPPED"
+  | "OUT_FOR_DELIVERY"
+  | "ORDER_DELIVERED"
+  | "ORDER_CANCELLED"
+  | "REFUND_INITIATED"
+  | "REFUND_COMPLETED";
 
 export interface OrderSmsData {
   customerName: string;
   orderNumber: string;
   /** already formatted for the message, e.g. "1499" or "1499.50" */
   amount: string;
+  /** what has been refunded on the order so far, formatted like amount */
+  refundAmount: string;
+  /** where the customer follows the order, for the shipped SMS */
+  trackingUrl: string;
 }
 
 /**
  * Registered DLT templates for order updates. As with the OTP, each message is
  * the registered text word for word with only its variables filled — spacing
- * and punctuation included ("shipped .Thank you" is how it was registered).
+ * and punctuation included ("shipped .Thank you", "₹ " with a space in the
+ * refund one, and the en dash in "– ART Kolkata" are how they were registered).
  */
 export const ORDER_SMS_TEMPLATES: Record<
   OrderSmsType,
   { templateId: string; message: (data: OrderSmsData) => string }
 > = {
   PAYMENT_RECEIVED: {
-    templateId: "1777179128090020162",
+    templateId: "1777179145719265188",
     message: ({ amount, orderNumber }) =>
       `Dear Customer, your payment of ₹${amount} for Order ID ${orderNumber} has been successfully received. - Thank you, ART Kolkata.`,
   },
   ORDER_CONFIRMED: {
-    templateId: "1777179128005702495",
+    templateId: "1777179145710203131",
     message: ({ orderNumber }) =>
       `Dear Customer, your order ${orderNumber} has been successfully confirmed. Thank you for shopping with ART Kolkata. We will notify you once your order is shipped. - Thank you, ART Kolkata.`,
   },
+  // Registered, but no status sends it yet — see STATUS_SMS in orderEmails.
+  ORDER_DISPATCHED: {
+    templateId: "1777179197643773146",
+    message: ({ customerName, orderNumber }) =>
+      `Dear ${customerName}, your order ${orderNumber} has been dispatched and is on its way! Thank you for shopping with us. --ART Kolkata.`,
+  },
   ORDER_SHIPPED: {
-    templateId: "1777179128024086135",
-    message: ({ customerName, orderNumber, amount }) =>
-      `Dear ${customerName}, your order ${orderNumber} for ₹${amount} has been successfully shipped .Thank you for shopping with us. - Thank you, ART Kolkata.`,
+    templateId: "1777179196127805783",
+    message: ({ customerName, orderNumber, amount, trackingUrl }) =>
+      `Dear ${customerName}, your order ${orderNumber} for ₹${amount} has been successfully shipped .Thank you for shopping with us. - Thank you, ART Kolkata.\n\nTrack your order ${trackingUrl}`,
+  },
+  OUT_FOR_DELIVERY: {
+    templateId: "1777179197653063255",
+    message: ({ customerName, orderNumber }) =>
+      `Dear ${customerName}, your order ${orderNumber} is out for delivery and will reach you soon. Please keep your phone available for delivery updates. Thank you for shopping with us! --ART Kolkata.`,
+  },
+  ORDER_DELIVERED: {
+    templateId: "1777179197660845155",
+    message: ({ customerName, orderNumber }) =>
+      `Dear ${customerName}, your order ${orderNumber} has been successfully delivered. Thank you for shopping with us! We hope you enjoy your purchase. --ART Kolkata.`,
+  },
+  ORDER_CANCELLED: {
+    templateId: "1777179197717439045",
+    message: ({ customerName, orderNumber }) =>
+      `Dear ${customerName}, your order ${orderNumber} has been cancelled successfully. If you have any questions, please contact our customer support team. Thank you for your understanding. --ART Kolkata.`,
+  },
+  REFUND_INITIATED: {
+    templateId: "1777179197726405129",
+    message: ({ customerName, orderNumber }) =>
+      `Dear ${customerName}, your refund for Order ${orderNumber} has been initiated successfully. The amount will be credited to your original payment method within 7 days. Thank you for your patience. – ART Kolkata.`,
+  },
+  REFUND_COMPLETED: {
+    templateId: "1777179197747750266",
+    message: ({ customerName, refundAmount, orderNumber }) =>
+      `Dear ${customerName}, your refund of ₹ ${refundAmount} for Order ${orderNumber} has been processed successfully. Please check your original payment method for the credited amount. Thank you for shopping with us! --ART Kolkata.`,
   },
 };
