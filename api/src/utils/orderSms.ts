@@ -1,5 +1,4 @@
 import { pool } from "..";
-import { ONLINE_PAYMENT } from "../constant";
 import {
   isSmsConfigured,
   normalizeIndianPhone,
@@ -19,15 +18,38 @@ import logger from "./logger";
  * SMS_-prefixed type, which can never collide with an email's.
  */
 
+const smsLogType = (type: OrderSmsType) => `SMS_${type}`;
+
 const claimSms = async (orderId: number, type: OrderSmsType) => {
   const { rowCount } = await pool.query(
     `INSERT INTO order_email_log (order_id, email_type)
      VALUES ($1, $2)
      ON CONFLICT (order_id, email_type) DO NOTHING`,
-    [orderId, `SMS_${type}`],
+    [orderId, smsLogType(type)],
   );
 
   return rowCount === 1;
+};
+
+/** Hands a claimed send back, so a send the gateway refused can be retried. */
+const releaseSms = async (orderId: number, type: OrderSmsType) => {
+  await pool.query(
+    "DELETE FROM order_email_log WHERE order_id = $1 AND email_type = $2",
+    [orderId, smsLogType(type)],
+  );
+};
+
+/** When this order's SMS of this type went out, or null if it has not. */
+export const getOrderSmsSentAt = async (
+  orderId: number,
+  type: OrderSmsType,
+): Promise<Date | null> => {
+  const { rows } = await pool.query(
+    "SELECT sent_at FROM order_email_log WHERE order_id = $1 AND email_type = $2",
+    [orderId, smsLogType(type)],
+  );
+
+  return rows[0]?.sent_at ?? null;
 };
 
 /**
@@ -45,7 +67,6 @@ const getOrderSmsData = async (orderId: number) => {
     SELECT
       o.order_number,
       o.total_amount,
-      o.payment_method,
       COALESCE(o.is_draft, false) AS is_draft,
       o.shipping_address->>'phone' AS shipping_phone,
       o.shipping_address->>'name' AS shipping_name,
@@ -53,11 +74,7 @@ const getOrderSmsData = async (orderId: number) => {
       u.name AS account_name,
       -- the running total refunded, falling back to what was charged for a
       -- refund the gateway settled before the admin's amount was written
-      COALESCE(NULLIF(p.refunded_amount, 0), p.amount, o.total_amount) AS refund_amount,
-      EXISTS (
-        SELECT 1 FROM order_returns r
-        WHERE r.order_id = o.order_id AND r.type = 'Replace'
-      ) AS is_replacement
+      COALESCE(NULLIF(p.refunded_amount, 0), p.amount, o.total_amount) AS refund_amount
     FROM orders o
     LEFT JOIN users u
     ON u.id = o.user_id
@@ -77,13 +94,42 @@ const getOrderSmsData = async (orderId: number) => {
 };
 
 /**
+ * What became of one send. The automatic callers ignore it; the CMS's manual
+ * send reports it back to the admin.
+ */
+export type OrderSmsResult =
+  | { status: "sent" }
+  | { status: "already_sent" }
+  | {
+      status: "skipped";
+      reason: "not_configured" | "no_order" | "draft" | "no_phone";
+    }
+  | { status: "failed"; error: string };
+
+export interface SendOrderSmsOptions {
+  /**
+   * Hand the claim back when the gateway refuses, so the same send can be
+   * tried again. For a send an admin asks for and is watching; the automatic
+   * ones keep the claim, since nothing would retry them and a webhook racing
+   * a retry could double-send.
+   */
+  releaseOnFailure?: boolean;
+}
+
+/**
  * Sends one of the order SMS, at most once per order.
  *
  * Fire and forget like sendOrderEmail: nothing is thrown out of here, so a
  * gateway outage cannot fail a payment webhook or an admin's status change.
  * Call it after the commit.
  */
-export const sendOrderSms = async (orderId: number, type: OrderSmsType) => {
+export const sendOrderSms = async (
+  orderId: number,
+  type: OrderSmsType,
+  { releaseOnFailure = false }: SendOrderSmsOptions = {},
+): Promise<OrderSmsResult> => {
+  let claimed = false;
+
   try {
     // Checked before the claim — claiming a send that cannot happen would use
     // up this order's SMS for good.
@@ -93,7 +139,7 @@ export const sendOrderSms = async (orderId: number, type: OrderSmsType) => {
         order_id: orderId,
         sms_type: type,
       });
-      return;
+      return { status: "skipped", reason: "not_configured" };
     }
 
     const order = await getOrderSmsData(orderId);
@@ -104,22 +150,12 @@ export const sendOrderSms = async (orderId: number, type: OrderSmsType) => {
         order_id: orderId,
         sms_type: type,
       });
-      return;
+      return { status: "skipped", reason: "no_order" };
     }
 
     // a parked order tells the customer nothing, and stays unclaimed so it is
     // still owed its SMS once restored — same rule as the emails
-    if (order.is_draft) return;
-
-    // "Credited to your original payment method" is only true of a prepaid
-    // Return. A COD order has no such method, and a Replace refunds nothing —
-    // though a courier's reverse-pickup scan can still move one to RETURN
-    // INITIATED. Unclaimed, like a draft.
-    if (
-      type === "REFUND_INITIATED" &&
-      (order.payment_method !== ONLINE_PAYMENT || order.is_replacement)
-    )
-      return;
+    if (order.is_draft) return { status: "skipped", reason: "draft" };
 
     // The number given for this order first, then the account's.
     const phone =
@@ -132,10 +168,11 @@ export const sendOrderSms = async (orderId: number, type: OrderSmsType) => {
         order_id: orderId,
         sms_type: type,
       });
-      return;
+      return { status: "skipped", reason: "no_phone" };
     }
 
-    if (!(await claimSms(orderId, type))) return;
+    if (!(await claimSms(orderId, type))) return { status: "already_sent" };
+    claimed = true;
 
     const template = ORDER_SMS_TEMPLATES[type];
 
@@ -153,14 +190,31 @@ export const sendOrderSms = async (orderId: number, type: OrderSmsType) => {
         trackingUrl: `${process.env.FRONTEND_HOST_URL}/account?tab=orders`,
       }),
     });
+
+    return { status: "sent" };
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+
     // Usually the gateway refusing, after the claim — so a lost SMS, not a
-    // repeated one. sendSms has already logged the gateway's own answer.
+    // repeated one, unless the caller asked for the claim back. sendSms has
+    // already logged the gateway's own answer.
     logger.error({
       message: "Error while sending customer order SMS",
       order_id: orderId,
       sms_type: type,
-      detail: error instanceof Error ? error.message : String(error),
+      detail,
     });
+
+    if (claimed && releaseOnFailure)
+      await releaseSms(orderId, type).catch((releaseError) =>
+        logger.error({
+          message: "Could not release a failed order SMS claim",
+          order_id: orderId,
+          sms_type: type,
+          detail: String(releaseError),
+        }),
+      );
+
+    return { status: "failed", error: detail };
   }
 };

@@ -351,6 +351,8 @@ export interface OrderInfo {
   invoice_number: string | null;
   invoice_generated_at: string | null;
   packing_slip_generated_at: string | null;
+  // when the refund initiated SMS went out, sent by hand from Payment Info
+  refund_initiated_sms_sent_at: string | null;
 }
 
 export interface OrderGstDetails {

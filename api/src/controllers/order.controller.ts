@@ -716,7 +716,13 @@ export const getSingleOrderInfo = asyncErrorHandler(async (req, res) => {
         (packing_slip_url IS NOT NULL AND packing_slip_url <> '') AS has_packing_slip,
         invoice_number,
         TO_CHAR(invoice_generated_at, 'DD Mon YYYY') AS invoice_generated_at,
-        TO_CHAR(packing_slip_generated_at, 'DD Mon YYYY') AS packing_slip_generated_at
+        TO_CHAR(packing_slip_generated_at, 'DD Mon YYYY') AS packing_slip_generated_at,
+        -- sent by hand from Payment Info, once per order; null until it is
+        (
+          SELECT l.sent_at FROM order_email_log l
+          WHERE l.order_id = orders.order_id
+            AND l.email_type = 'SMS_REFUND_INITIATED'
+        ) AS refund_initiated_sms_sent_at
        FROM orders
 
        WHERE order_id = $1
@@ -1384,10 +1390,6 @@ export const doReturn = asyncErrorHandler(async (req: CustomRequest, res) => {
       error: reverse.error,
     });
   }
-
-  // A Return is a refund on its way. Nothing to say for a Replace, which
-  // refunds nothing.
-  if (value.type === "Return") sendOrderSms(dbOrderId, "REFUND_INITIATED");
 
   // The customer is told their return is accepted either way; the pickup flag
   // is what the CMS uses to show support that a courier still has to be booked.

@@ -5,6 +5,7 @@ import {
   paymentResultPage,
   reconcilePaymentStatus,
   refundPayment,
+  sendRefundInitiatedSms,
   updatePaymentStatus,
   verifyPayment,
 } from "../controllers/payments.controller";
@@ -35,6 +36,12 @@ paymentRoute
     rateLimits.adminWrite,
     isAuthorizedV2(["1-5"]),
     refundPayment,
+  )
+  .post(
+    "/refund-initiated-sms/:orderid",
+    rateLimits.adminWrite,
+    isAuthorizedV2(["1-5"]),
+    sendRefundInitiatedSms,
   )
   .patch(
     "/:orderid",

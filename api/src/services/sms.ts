@@ -3,6 +3,18 @@ import logger from "../utils/logger";
 
 const SMS_BULK_API = "http://sms.ommdigitalsolution.com/api/SmsApi/SendBulkApi";
 
+// Same parameters, for text outside plain ASCII — the gateway refuses "₹" or
+// "–" on the plain endpoint ("SMS text has unicode characters!").
+const SMS_BULK_UNICODE_API =
+  "http://sms.ommdigitalsolution.com/api/SmsApi/SendBulkUnicodeApi";
+
+/**
+ * Whether the text needs the Unicode endpoint. Anything past ASCII is sent as
+ * Unicode, which is also how the gateway judges it. Unicode SMS fit 70
+ * characters a part rather than 160, so plain text stays on the plain endpoint.
+ */
+const needsUnicode = (text: string) => /[^\x00-\x7F]/.test(text);
+
 // The bulk endpoint refuses more than this in one request, so larger lists are
 // split into several calls.
 const MAX_NUMBERS_PER_REQUEST = 5000;
@@ -125,6 +137,7 @@ export async function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
   if (!numbers.length) throw new Error("No phone numbers to send SMS to");
 
   const messages: string[] = [];
+  const endpoint = needsUnicode(input.message) ? SMS_BULK_UNICODE_API : SMS_BULK_API;
 
   for (const batch of chunk(numbers, MAX_NUMBERS_PER_REQUEST)) {
     // URLSearchParams does the URL-encoding the gateway asks for on Password,
@@ -144,7 +157,7 @@ export async function sendSms(input: SendSmsInput): Promise<SendSmsResult> {
     let data: SmsGatewayResponse;
 
     try {
-      ({ data } = await axios.post<SmsGatewayResponse>(SMS_BULK_API, body, {
+      ({ data } = await axios.post<SmsGatewayResponse>(endpoint, body, {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         timeout: 15000,
       }));

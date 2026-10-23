@@ -18,7 +18,7 @@ import {
 } from "../validator/payment.validator";
 import { CustomRequest } from "../types";
 import { ensurePaymentSlip } from "../services/documents/generatePaymentSlip";
-import { sendOrderSms } from "../utils/orderSms";
+import { getOrderSmsSentAt, sendOrderSms } from "../utils/orderSms";
 
 /**
  * The order behind a gateway payment: which row it is, and whether it was
@@ -422,4 +422,53 @@ export const refundPayment = asyncErrorHandler(async (req: CustomRequest, res) =
     via_gateway: true,
     status: settled?.payment.status ?? payment.status,
   });
+});
+
+/**
+ * Tells the customer their refund is under way, when staff say so.
+ *
+ * Deliberately a button and not a status: a return request is not a refund —
+ * the goods may never come back — and COD money goes back by hand on no
+ * schedule the api can see. Only the admin knows when it has really started.
+ *
+ * Once per order like every order SMS, so a second click cannot text the
+ * customer twice. A send the gateway refused is handed back, so the admin can
+ * simply try again.
+ */
+export const sendRefundInitiatedSms = asyncErrorHandler(async (req, res) => {
+  const orderId = parseInt(String(req.params.orderid ?? ""), 10);
+  if (!orderId) throw new ErrorHandler(400, "Invalid order id");
+
+  const result = await sendOrderSms(orderId, "REFUND_INITIATED", {
+    releaseOnFailure: true,
+  });
+
+  switch (result.status) {
+    case "sent":
+      return httpResponse(res, 200, "Refund initiated SMS sent to the customer", {
+        sent_at: await getOrderSmsSentAt(orderId, "REFUND_INITIATED"),
+      });
+
+    case "already_sent": {
+      const sentAt = await getOrderSmsSentAt(orderId, "REFUND_INITIATED");
+      throw new ErrorHandler(
+        409,
+        `The refund initiated SMS was already sent${sentAt ? ` on ${sentAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}` : ""}`,
+      );
+    }
+
+    case "skipped":
+      throw new ErrorHandler(
+        result.reason === "no_order" ? 404 : 400,
+        {
+          not_configured: "SMS is not configured on the server",
+          no_order: "Order not found",
+          draft: "This order is a draft. Restore it before messaging the customer",
+          no_phone: "This order has no valid Indian mobile number to send to",
+        }[result.reason],
+      );
+
+    case "failed":
+      throw new ErrorHandler(502, `SMS was not sent. ${result.error}`);
+  }
 });

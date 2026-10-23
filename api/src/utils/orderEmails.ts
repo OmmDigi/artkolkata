@@ -3,7 +3,6 @@ import { pool } from "..";
 import {
   ORDER_CONFIRMED,
   ORDER_DELIVERED,
-  ORDER_RETURN_INITIATED,
   ORDER_SHIPPED,
   OUT_FOR_DELIVERY,
   RETURN_WINDOW_DAYS,
@@ -38,6 +37,8 @@ const STATUS_EMAILS: Record<string, EmailType> = {
  * CANCELLED is missing on purpose: the courier maps RTO scans to it, and
  * "cancelled successfully" is the wrong thing to tell a customer whose parcel
  * failed delivery. The admin's and the customer's own cancel send it directly.
+ * REFUND_INITIATED is missing too: a return request is not a refund, so staff
+ * send it by hand from the order's Payment Info once one is really under way.
  * ORDER_DISPATCHED is registered but not tied to a status yet.
  */
 const STATUS_SMS: Record<string, OrderSmsType> = {
@@ -45,8 +46,6 @@ const STATUS_SMS: Record<string, OrderSmsType> = {
   [ORDER_SHIPPED]: "ORDER_SHIPPED",
   [OUT_FOR_DELIVERY]: "OUT_FOR_DELIVERY",
   [ORDER_DELIVERED]: "ORDER_DELIVERED",
-  // sendOrderSms drops it for COD and replacement orders
-  [ORDER_RETURN_INITIATED]: "REFUND_INITIATED",
 };
 
 /**

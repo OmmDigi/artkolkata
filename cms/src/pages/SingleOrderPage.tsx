@@ -28,7 +28,7 @@ import type { IError, IResponse, OrderResponse } from "@/types";
 import { api } from "@/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
-import { Calendar, MoveLeft, Undo2 } from "lucide-react";
+import { Calendar, MessageSquare, MoveLeft, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -455,6 +455,47 @@ export default function SingleOrderPage() {
                     )}
                   </div>
                 ) : null}
+
+                {/* A return request is not a refund, so nothing sends this on
+                    its own: staff send it once the money is really on its way
+                    back, COD included. Once per order — the api refuses a
+                    second send, so the button only offers it while unsent. */}
+                <div className="space-y-2 border-t border-gray-200 pt-4">
+                  {orderInfo?.refund_initiated_sms_sent_at ? (
+                    <p className="text-sm text-gray-500">
+                      Refund initiated SMS sent on{" "}
+                      {new Date(
+                        orderInfo.refund_initiated_sms_sent_at,
+                      ).toLocaleString("en-IN")}
+                    </p>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isLoading || !!orderInfo?.is_draft}
+                      onClick={() => {
+                        if (
+                          !confirm(
+                            "Text the customer that their refund has been initiated and will reach their original payment method within 7 days? This can only be sent once.",
+                          )
+                        )
+                          return;
+
+                        mutate({
+                          apiPath: `/api/v1/payments/refund-initiated-sms/${params.id}`,
+                          method: "post",
+                          formData: {},
+                          onSuccess() {
+                            refetch();
+                          },
+                        });
+                      }}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      Send Refund Initiated SMS
+                    </Button>
+                  )}
+                </div>
               </Section>
             </div>
             <div className="space-y-7">
