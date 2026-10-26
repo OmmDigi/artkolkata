@@ -12,10 +12,22 @@ import EditorJsDescription from "@/app/Component/EditorJsDescription";
 
 const getYoutubeId = (url: string) => {
   if (!url) return null;
-  const regExp =
-    /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-  const match = url.match(regExp);
-  return match && match[2].length === 11 ? match[2] : null;
+  const cleanUrl = url.trim();
+  // If it's already just an 11-character video ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(cleanUrl)) {
+    return cleanUrl;
+  }
+  const match = cleanUrl.match(
+    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/,
+  );
+  return match ? match[1] : null;
+};
+
+const getYoutubeThumbnail = (url: string) => {
+  const videoId = getYoutubeId(url);
+  if (!videoId) return "";
+  // hqdefault.jpg is guaranteed to exist for all YouTube videos (maxresdefault often returns 404)
+  return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 };
 
 // const renderEditorJsBlocks = (blocks: any[]) => {
@@ -208,7 +220,7 @@ export default function SingleBlogPage() {
                     playingVideoId === item.id ? (
                       <iframe
                         className="w-full h-full"
-                        src={`https://www.youtube.com/embed/${item.image.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1]}?autoplay=1`}
+                        src={`https://www.youtube.com/embed/${getYoutubeId(item.image)}?autoplay=1`}
                         title="YouTube video player"
                         frameBorder="0"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -220,7 +232,8 @@ export default function SingleBlogPage() {
                         onClick={() => setPlayingVideoId(item.id)}
                       >
                         <CustomImage
-                          src={`https://img.youtube.com/vi/${getYoutubeId(item.image)}/maxresdefault.jpg`}
+                          src={getYoutubeThumbnail(item.image)}
+                          fallbackSrc={`https://img.youtube.com/vi/${getYoutubeId(item.image)}/0.jpg`}
                           alt="Video Thumbnail"
                           className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
                         />
