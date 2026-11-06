@@ -171,7 +171,7 @@ export const ORDER_STATUS = [
     value: ORDER_SHIPPED,
   },
   {
-    text: "Our For Delivery",
+    text: "Out For Delivery",
     value: OUT_FOR_DELIVERY,
   },
   {
