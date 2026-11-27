@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getRequest } from "@/lib/fetcher";
@@ -17,6 +18,11 @@ interface ApiCategory {
 }
 
 export default function CategoryBar() {
+  const pathname = usePathname() ?? "/";
+  const normalizedPath =
+    pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+  const shouldShow = normalizedPath === "/" || normalizedPath === "/product";
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const dragState = useRef({
     isDown: false,
@@ -36,6 +42,7 @@ export default function CategoryBar() {
     queryKey: ["all-categories"],
     queryFn: () =>
       getRequest<{ data: ApiCategory[] }>("/api/v1/products/category?limit=-1"),
+    enabled: shouldShow,
   });
 
   const categories = categoryData?.data?.filter(Boolean) ?? [];
@@ -49,10 +56,11 @@ export default function CategoryBar() {
   }, []);
 
   useEffect(() => {
+    if (!shouldShow) return;
     updateScrollButtons();
     window.addEventListener("resize", updateScrollButtons);
     return () => window.removeEventListener("resize", updateScrollButtons);
-  }, [categories.length, updateScrollButtons]);
+  }, [shouldShow, categories.length, updateScrollButtons]);
 
   const handleSlide = (direction: "left" | "right") => {
     const el = scrollRef.current;
@@ -100,7 +108,7 @@ export default function CategoryBar() {
     }
   };
 
-  if (isError || (!isLoading && categories.length === 0)) {
+  if (!shouldShow || isError || (!isLoading && categories.length === 0)) {
     return null;
   }
 

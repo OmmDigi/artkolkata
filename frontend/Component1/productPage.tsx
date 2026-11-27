@@ -67,6 +67,7 @@ const ProductsPage = () => {
 
   const { toggleWishlist } = useWishlistStore();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const mobileDropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -150,6 +151,36 @@ const ProductsPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        mobileDropdownRef.current &&
+        !mobileDropdownRef.current.contains(e.target as Node)
+      ) {
+        setShowMobileSortMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Lock background scroll and auto-close filter drawer when switching to desktop
+  useEffect(() => {
+    if (!isMobileFilterOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileFilterOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isMobileFilterOpen]);
+
   // Loading / Error UI
   if (isLoading && isLoadingCategory) {
     return <div className="bg-white">Loading...</div>;
@@ -191,38 +222,6 @@ const ProductsPage = () => {
       </div>
     );
   };
-
-  const mobileDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        mobileDropdownRef.current &&
-        !mobileDropdownRef.current.contains(e.target as Node)
-      ) {
-        setShowMobileSortMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Lock background scroll and auto-close filter drawer when switching to desktop
-  useEffect(() => {
-    if (!isMobileFilterOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const handleResize = () => {
-      if (window.innerWidth >= 768) {
-        setIsMobileFilterOpen(false);
-      }
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [isMobileFilterOpen]);
 
   // Helpers to extract slug or name from category object
   const getOptionKey = (opt: any) => opt?.slug ?? opt?.name ?? opt?.id;
