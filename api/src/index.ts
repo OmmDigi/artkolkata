@@ -24,6 +24,7 @@ import { pageRoutes } from "./routes/page.routes";
 import { wishlistRoutes } from "./routes/wishlist.routes";
 import { cartRoutes } from "./routes/cart.routes";
 import { analyticsRoutes } from "./routes/analytics.routes";
+import { videoRoutes } from "./routes/video.routes";
 import { initEmailProvider, supportEmail } from "./services/email";
 import { rateLimits } from "./middleware/rateLimits";
 import { initPaymentGateway } from "./services/payment";
@@ -185,6 +186,7 @@ app.use(`${API_PREFIX}/pages`, pageRoutes);
 app.use(`${API_PREFIX}/wishlist`, wishlistRoutes);
 app.use(`${API_PREFIX}/cart`, cartRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
+app.use(`${API_PREFIX}/videos`, videoRoutes);
 
 app.get("/", (_, res) => {
   res.send("Api Server is running!");

@@ -77,6 +77,11 @@ export const SIDEBAR_OPTIONS = {
           url: "/blogs",
         },
         {
+          id: "1-16",
+          title: "Videos",
+          url: "/videos",
+        },
+        {
           id: "1-13",
           title: "Settings",
           url: "/settings",

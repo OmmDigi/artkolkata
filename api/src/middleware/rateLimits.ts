@@ -313,6 +313,15 @@ export const rateLimits = {
     message: "You have sent several enquiries already. Please try again later.",
   }),
 
+  /** product enquiry form : same spam exposure as the contact form, its own budget */
+  productEnquiry: rateLimit({
+    name: "product-enquiry",
+    limit: 5,
+    windowSeconds: 3600,
+    identity: "ip",
+    message: "You have sent several enquiries already. Please try again later.",
+  }),
+
   /** review submission : logged in, but still a spam and vote-stuffing target */
   reviewCreate: rateLimit({
     name: "review-create",

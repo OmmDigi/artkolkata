@@ -1,7 +1,8 @@
 import { Request } from "express";
 import { PaymentDetail } from "@phonepe-pg/pg-sdk-node";
 
-export type RoteIds = `1-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14}`;
+// 1-16 is the CMS Videos tab
+export type RoteIds = `1-${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 16}`;
 
 export interface SignupType {
   name: string;

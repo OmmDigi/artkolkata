@@ -817,3 +817,59 @@ export interface ISitePage {
   updated_at: string;
   updated_at_label: string | null;
 }
+
+/** "upload" is a file on the upload server, "youtube" a YouTube link */
+export type TVideoSource = "upload" | "youtube";
+
+export interface IVideo {
+  id: number;
+  title: string;
+  description: string | null;
+  source_type: TVideoSource;
+  /** the uploaded file's path, or the canonical YouTube watch link */
+  video_url: string;
+  youtube_id: string | null;
+  thumbnail_url: string | null;
+  is_primary: boolean;
+  is_active: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** what the create and update endpoints take */
+export type TVideoInput = Pick<
+  IVideo,
+  | "title"
+  | "description"
+  | "source_type"
+  | "video_url"
+  | "thumbnail_url"
+  | "is_primary"
+  | "is_active"
+>;
+
+/** staff workflow for a product enquiry */
+export type TProductEnquiryStatus = "new" | "contacted" | "closed";
+
+/** what the customer wants */
+export type TProductEnquiryType = "bulk_order" | "custom_frp_mould";
+
+export interface IProductEnquiry {
+  id: number;
+  name: string;
+  /** bare 10-digit Indian mobile number */
+  phone: string;
+  enquiry_type: TProductEnquiryType;
+  /** null once the category has been deleted */
+  category_id: number | null;
+  /** the category's current name, or its name at the time once deleted */
+  category_name: string;
+  quantity: string | null;
+  message: string | null;
+  status: TProductEnquiryStatus;
+  created_at: string;
+  updated_at: string;
+  /** e.g. "26 Nov 2026, 02:15 PM", India time */
+  received_at: string;
+}

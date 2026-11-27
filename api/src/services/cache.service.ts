@@ -15,6 +15,7 @@ export const CACHE_TAGS = {
   RECIPIENTS: "recipients",
   REVIEWS: "reviews",
   BLOGS: "blogs",
+  VIDEOS: "videos",
   SITE_INFO: "site-info",
   SITE_PAGES: "site-pages",
   BANNERS: "banners",

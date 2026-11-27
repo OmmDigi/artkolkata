@@ -1408,3 +1408,89 @@ ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_registered_phone
   ON users ((right(regexp_replace(phone_no, '\D', '', 'g'), 10)))
   WHERE COALESCE(is_guest, false) = false AND phone_no <> '';
+
+-- ============================================================
+-- VIDEOS
+--
+-- The CMS Videos tab. A video is either a file uploaded to the upload server
+-- or a YouTube link:
+--   source_type 'upload'  : video_url is the uploaded file, youtube_id is NULL
+--   source_type 'youtube' : video_url is the canonical watch link and
+--                           youtube_id is the 11 character id parsed from it,
+--                           so the storefront can embed it without parsing
+--
+-- thumbnail_url is editable for both. For YouTube it starts as the thumbnail
+-- YouTube serves for that id; for an upload the CMS grabs a frame from the
+-- video and uploads it.
+--
+-- position is the drag and drop order from the CMS. is_primary marks the one
+-- featured video: the partial unique index below allows a single TRUE row, so
+-- marking a new primary has to clear the old one first (the controller does
+-- both in one transaction).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS videos (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    source_type TEXT NOT NULL CHECK (source_type IN ('upload', 'youtube')),
+    video_url TEXT NOT NULL,
+    youtube_id TEXT,
+    thumbnail_url TEXT,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_videos_single_primary
+  ON videos (is_primary) WHERE is_primary;
+
+CREATE INDEX IF NOT EXISTS idx_videos_position ON videos (position, id);
+
+-- The Videos tab is permission "1-16". Admins created before it existed do not
+-- have it, so without this the tab would stay hidden from them. Staff still
+-- get it the usual way, from the permission list on their profile.
+UPDATE user_permissions up
+SET permissions = up.permissions || '{"1-16": "r-w"}'::jsonb
+FROM users u
+WHERE u.id = up.user_id
+  AND u.role = 'Admin'
+  AND NOT (up.permissions ? '1-16');
+
+-- ============================================================
+-- PRODUCT ENQUIRIES
+--
+-- The storefront's "enquire about a product" form, kept apart from
+-- enquiry_form (the general contact form): it carries a product category and
+-- a free text quantity ("50 pieces", "2 cartons") instead of an email.
+--
+-- category_name is a snapshot of the category's name when the enquiry came in.
+-- The list shows the category's current name while it exists and falls back to
+-- the snapshot once it is deleted (category_id is then set to NULL), so an old
+-- enquiry never loses what it was about.
+--
+-- phone is stored as the bare 10-digit Indian mobile number. status is the
+-- staff workflow in the CMS: new -> contacted -> closed.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_enquiries (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone VARCHAR(10) NOT NULL,
+    category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+    category_name TEXT NOT NULL,
+    quantity TEXT,
+    message TEXT,
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'contacted', 'closed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- what the customer wants: 'bulk_order' or 'custom_frp_mould'. Added as its own
+-- statement so databases that already created the table get it too; enquiries
+-- saved before it existed were all bulk orders, hence the default.
+ALTER TABLE product_enquiries ADD COLUMN IF NOT EXISTS enquiry_type TEXT NOT NULL DEFAULT 'bulk_order'
+    CHECK (enquiry_type IN ('bulk_order', 'custom_frp_mould'));
+
+CREATE INDEX IF NOT EXISTS idx_product_enquiries_status ON product_enquiries (status, id DESC);
+CREATE INDEX IF NOT EXISTS idx_product_enquiries_category ON product_enquiries (category_id);
