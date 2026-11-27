@@ -29,6 +29,7 @@ import SubCategoryPage from "./pages/SubCategoryPage.tsx";
 import SettingsPage from "./pages/SettingsPage.tsx";
 import BlogsPage from "./pages/BlogsPage.tsx";
 import SingleBlogPage from "./pages/SingleBlogPage.tsx";
+import VideosPage from "./pages/VideosPage.tsx";
 
 const router = createBrowserRouter([
   {
@@ -144,6 +145,11 @@ const router = createBrowserRouter([
         id: "1-19",
         path: "blogs/:id",
         element: <SingleBlogPage />,
+      },
+      {
+        id: "1-20",
+        path: "videos",
+        element: <VideosPage />,
       },
     ],
   },

@@ -19,6 +19,7 @@ export type EmailType =
   | "SEND_GUEST_EMAIL_PASSWORD"
   | "ORDER_CONFIRMED_EMAIL"
   | "INQUIRY-FORM"
+  | "PRODUCT-ENQUIRY"
   | "NEW_ORDER_STAFF_ALERT";
 
 interface EmailDefinition {
@@ -90,6 +91,13 @@ const EMAILS: Record<EmailType, EmailDefinition> = {
     template: "inquiry-form.html",
     fromName: () => `Inquiry From ${process.env.COMPANY_NAME} Website`,
     subject: () => `Inquiry From ${process.env.COMPANY_NAME} Website`,
+  },
+  "PRODUCT-ENQUIRY": {
+    template: "product-enquiry.html",
+    fromName: () => `Product Enquiry ${process.env.COMPANY_NAME} Website`,
+    // e.g. "Bulk Order enquiry - Terracotta Pots"
+    subject: (templateData) =>
+      `${templateData?.enquiry?.type ?? "Product"} enquiry${templateData?.enquiry?.category ? ` - ${templateData.enquiry.category}` : ""}`,
   },
   NEW_ORDER_STAFF_ALERT: {
     template: "new-order-staff.html",
