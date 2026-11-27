@@ -2,8 +2,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Heart, User, Search, Menu, X, MapPin } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Heart, User, Search, Menu, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "../../store/useWishlistStore";
@@ -11,6 +11,7 @@ import { useUserStore, useIsLoggedIn } from "../../store/useUserStore";
 import { useCartStore } from "../../store/useCartStore";
 import ShoppingCartSidebar from "@/Component1/trending/ShoppingCartSidebar";
 import LanguageSelector from "@/Component1/LanguageSelector";
+import MobileMenu from "@/Component1/layout/MobileMenu";
 import { useSiteInfo } from "@/hooks/useSiteSettings";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
@@ -25,7 +26,6 @@ interface ApiCategory {
   sub_categories?: any[];
 }
 export default function Navbar() {
-  // const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -260,13 +260,13 @@ export default function Navbar() {
   const [mounted, setMounted] = useState(false);
 
   const onSearchButtonClick = () => {
-    if(searchQuery == "") {
-      toast.warning("Type something in search bar")
+    if (searchQuery == "") {
+      toast.warning("Type something in search bar");
       return;
     }
     router.push(`/product?search=${searchQuery}`);
-    setSearchQuery("")
-  }
+    setSearchQuery("");
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -439,14 +439,17 @@ export default function Navbar() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="flex-1 min-w-0 px-3 lg:px-4 py-2 outline-none text-sm text-black"
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        onSearchButtonClick()
+                      if (event.key === "Enter") {
+                        onSearchButtonClick();
                       }
                     }}
                   />
 
                   {/* Search Button */}
-                  <button onClick={onSearchButtonClick} className="px-4 py-2 bg-orange-500 hover:bg-orange-600 transition text-white border-l border-gray-300 rounded-r-md">
+                  <button
+                    onClick={onSearchButtonClick}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 transition text-white border-l border-gray-300 rounded-r-md"
+                  >
                     <Search size={18} />
                   </button>
                 </div>
@@ -472,7 +475,9 @@ export default function Navbar() {
                           className="flex items-center gap-3 w-full text-left p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                         >
                           <CustomImage
-                            src={processImageUrl(item?.images?.[0]?.image || item?.image1)}
+                            src={processImageUrl(
+                              item?.images?.[0]?.image || item?.image1,
+                            )}
                             className="w-12 h-12 object-cover rounded border"
                             alt={item.name}
                           />
@@ -527,7 +532,8 @@ export default function Navbar() {
                     Hello, {isAuthenticated ? user?.name || "User" : "sign in"}
                   </span>
                   <span className="font-bold flex items-center whitespace-nowrap text-[13px]">
-                    Account<span className="hidden xl:inline">&nbsp;& Lists</span>
+                    Account
+                    <span className="hidden xl:inline">&nbsp;& Lists</span>
                     <svg
                       className="w-4 h-4 ml-0.5 text-gray-500"
                       fill="none"
@@ -548,7 +554,9 @@ export default function Navbar() {
                 <div
                   onClick={() => setIsAccountOpen(false)}
                   className={`absolute top-full right-0 pt-2 w-56 group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 ${
-                    isAccountOpen ? "opacity-100 visible" : "opacity-0 invisible"
+                    isAccountOpen
+                      ? "opacity-100 visible"
+                      : "opacity-0 invisible"
                   }`}
                 >
                   <div className="py-2 flex flex-col bg-white border border-gray-200 rounded-md shadow-lg">
@@ -651,7 +659,9 @@ export default function Navbar() {
                       className="flex items-center gap-3 w-full text-left p-2 hover:bg-gray-50 rounded transition cursor-pointer border-b border-gray-100 last:border-0"
                     >
                       <CustomImage
-                        src={processImageUrl(item?.images?.[0]?.image || item?.image1)}
+                        src={processImageUrl(
+                          item?.images?.[0]?.image || item?.image1,
+                        )}
                         className="w-12 h-12 object-cover rounded border"
                         alt={item.name}
                       />
@@ -674,111 +684,16 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* Mobile Menu Overlay */}
-      {isMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-[55] md:hidden"
-          onClick={() => setIsMenuOpen(false)}
-        />
-      )}
-
-      {/* Mobile Menu Sidebar */}
-      <div
-        className={`bg-white fixed top-0 left-0 h-full w-[70%] max-w-sm  z-[60] shadow-2xl transform transition-transform duration-300 ease-in-out md:hidden ${isMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <div className="flex text-black justify-between items-center p-4 border-b border-gray-200">
-          <span className="font-bold text-lg">Menu</span>
-          <button onClick={() => setIsMenuOpen(false)}>
-            <X size={24} />
-          </button>
-        </div>
-        <nav className="flex flex-col p-4 space-y-4 overflow-y-auto">
-          <Link
-            href="/"
-            onClick={() => setIsMenuOpen(false)}
-            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
-          >
-            Home
-          </Link>
-          <Link
-            href="/product"
-            onClick={() => setIsMenuOpen(false)}
-            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
-          >
-            Product
-          </Link>
-          <Link
-            href="/blog"
-            onClick={() => setIsMenuOpen(false)}
-            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
-          >
-            Blog
-          </Link>
-          <Link
-            href="/about"
-            onClick={() => setIsMenuOpen(false)}
-            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
-          >
-            About Us
-          </Link>
-          <Link
-            href="/contact"
-            onClick={() => setIsMenuOpen(false)}
-            className="text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
-          >
-            Contact Us
-          </Link>
-
-          <div className="pt-4 mt-2">
-            <Link
-              href={isAuthenticated ? "/account" : "/account"}
-              onClick={() => setIsMenuOpen(false)}
-              className="flex items-center text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2 mb-4"
-            >
-              <User size={20} className="mr-3" /> My Account
-            </Link>
-            {isAuthenticated && (
-              <button
-                onClick={() => {
-                  logout();
-                  setIsMenuOpen(false);
-                }}
-                className="flex items-center w-full text-left text-red-500 hover:text-red-600 font-medium text-lg border-b pb-2 mb-4"
-              >
-                <User size={20} className="mr-3 text-red-600" /> Logout
-              </button>
-            )}
-            <Link
-              href="/wishlist"
-              onClick={() => setIsMenuOpen(false)}
-              className="flex items-center text-gray-700 hover:text-gray-900 font-medium text-lg border-b pb-2"
-            >
-              <Heart size={20} className="mr-3" />
-              Wishlist
-              <span className="ml-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                {wishlist.length}
-              </span>
-            </Link>
-
-            <div className="flex flex-col space-y-3 mt-6">
-              <Link
-                href={isAuthenticated ? "/account?tab=orders" : "/account"}
-                onClick={() => setIsMenuOpen(false)}
-                className="w-max px-5 py-2 rounded-lg bg-[#5A5A0A] text-[#E0E847] font-medium text-lg"
-              >
-                Your order
-              </Link>
-              <Link
-                href="/product"
-                onClick={() => setIsMenuOpen(false)}
-                className="w-max px-5 py-2 rounded-lg bg-[#00574B] text-[#2DD4BF] font-medium text-lg"
-              >
-                Keep shopping
-              </Link>
-            </div>
-          </div>
-        </nav>
-      </div>
+      {/* Separate Mobile Menu Drawer (hidden on desktop) */}
+      <MobileMenu
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        categories={categoryData?.data ?? []}
+        isLoadingCategories={isLoadingCategories}
+        isErrorCategories={isErrorCategories}
+        siteLogo={siteInfo?.site_logo}
+        siteLogoAlt={siteInfo?.site_logo_alt}
+      />
 
       {isLocationModalOpen && (
         <div className="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-black/40 p-4">
