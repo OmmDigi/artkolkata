@@ -245,7 +245,7 @@ const ProductCard = ({
         </button>
 
         <button
-          className="w-full py-1 gap-2 sm:py-2 rounded-md font-medium text-[11px] sm:text-sm bg-green-600 hover:bg-green-700 text-white transition-colors flex items-center justify-center"
+          className="w-full py-1 gap-2 sm:py-2 rounded-md font-semibold text-[11px] sm:text-sm bg-gradient-to-b from-yellow-300 to-yellow-600 hover:brightness-95 text-gray-900 transition-all flex items-center justify-center cursor-pointer"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

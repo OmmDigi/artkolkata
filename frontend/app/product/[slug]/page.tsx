@@ -1126,10 +1126,10 @@ const ProductPage = () => {
                       !allOptionsSelected || isBuyingNow || isAddingToCart
                     }
                     onClick={handleBuyNow}
-                    className={`w-full py-3 rounded-lg text-white font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed ${
+                    className={`w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed ${
                       !allOptionsSelected
-                        ? "bg-gray-300"
-                        : "bg-green-600 hover:bg-green-700"
+                        ? "bg-gray-300 text-white"
+                        : "bg-gradient-to-b from-yellow-300 to-yellow-600 hover:brightness-95 text-gray-900"
                     } ${isBuyingNow ? "opacity-85" : ""}`}
                   >
                     {isBuyingNow ? (
@@ -1149,7 +1149,7 @@ const ProductPage = () => {
 
               {/* Product Highlights */}
               <div className="border-t border-gray-200 pt-4 mt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-2 gap-x-2 md:gap-x-8 gap-y-3">
                   {[
                     "Premium FRP Material",
                     "Indoor & Outdoor Use",
@@ -1160,7 +1160,7 @@ const ProductPage = () => {
                       <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
                         <Check className="w-3 h-3 text-white" strokeWidth={3} />
                       </span>
-                      <span className="text-sm text-gray-800 font-medium">
+                      <span className="text-xs md:text-sm  text-gray-800 font-medium  ">
                         {label}
                       </span>
                     </div>

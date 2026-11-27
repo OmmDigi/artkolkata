@@ -204,10 +204,10 @@ export default function CategoryShowcase() {
           setIsPaused(false);
         }}
       >
-        <div className="max-w-[1440px] mx-auto">
+        <div className="max-w-9xl mx-auto">
           <div className="text-center mb-8">
             <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 tracking-tight">
-              Shop Mould Categories
+              Discover by category
             </h2>
             <div className="mt-3 flex items-center justify-center">
               <div className="h-[1px] w-20 bg-gray-300" />

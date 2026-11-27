@@ -19,8 +19,7 @@ interface ApiCategory {
 
 export default function CategoryBar() {
   const pathname = usePathname() ?? "/";
-  const normalizedPath =
-    pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+  const normalizedPath = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
   const shouldShow = normalizedPath === "/" || normalizedPath === "/product";
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -117,20 +116,20 @@ export default function CategoryBar() {
       aria-label="Browse categories"
       className="w-full bg-white border-b border-gray-200 relative z-30"
     >
-      <div className="max-w-9xl mx-auto px-9 sm:px-11 lg:px-14 py-2.5 md:py-3 relative">
+      <div className="max-w-9xl mx-auto   py-2.5 md:py-3 relative">
         {/* Left Arrow */}
         <button
           type="button"
           onClick={() => handleSlide("left")}
           disabled={!canScrollLeft}
           aria-label="Scroll categories left"
-          className={`flex items-center justify-center absolute left-1.5 sm:left-3 top-[38px] sm:top-[44px] md:top-[47px] -translate-y-1/2 z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-200 shadow-md text-gray-700 transition ${
+          className={`hidden md:flex items-center justify-center absolute left-2 lg:left-3 top-[47px] border-gray-900 border-2   -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-transparent text-gray-700 bg-transparent transition ${
             canScrollLeft
-              ? "hover:bg-gray-50 hover:text-black cursor-pointer opacity-100"
-              : "opacity-35 cursor-not-allowed"
+              ? "hover:text-black cursor-pointer opacity-100"
+              : "opacity-30 cursor-not-allowed"
           }`}
         >
-          <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+          <ChevronLeft className="w-5 h-5" />
         </button>
 
         {/* Scrollable Circular Categories */}
@@ -141,7 +140,7 @@ export default function CategoryBar() {
           onMouseMove={handleMouseMove}
           onMouseUp={stopDragging}
           onMouseLeave={stopDragging}
-          className="flex items-start gap-4 sm:gap-6 md:gap-7 overflow-x-auto scrollbar-hide select-none cursor-grab active:cursor-grabbing"
+          className="flex items-start gap-1 sm:gap-6 md:gap-7 overflow-x-auto scrollbar-hide select-none cursor-grab active:cursor-grabbing"
         >
           {isLoading
             ? Array.from({ length: 10 }).map((_, idx) => (
@@ -166,7 +165,7 @@ export default function CategoryBar() {
                     href={`/product?category=${encodeURIComponent(categorySlug)}`}
                     onClick={handleLinkClick}
                     draggable={false}
-                    className="group flex flex-col items-center shrink-0 w-20 sm:w-24 md:w-28"
+                    className="group flex flex-col items-center shrink-0 w-16 sm:w-24 md:w-28"
                   >
                     <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-[70px] md:h-[70px] rounded-full overflow-hidden bg-white border border-gray-200 shadow-xs flex items-center justify-center transition-all duration-200 group-hover:border-[#e6640d] group-hover:shadow-md">
                       {category.image ? (
@@ -195,13 +194,13 @@ export default function CategoryBar() {
           onClick={() => handleSlide("right")}
           disabled={!canScrollRight}
           aria-label="Scroll categories right"
-          className={`flex items-center justify-center absolute right-1.5 sm:right-3 top-[38px] sm:top-[44px] md:top-[47px] -translate-y-1/2 z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-200 shadow-md text-gray-700 transition ${
+          className={`hidden md:flex items-center justify-center absolute right-2 lg:right-3 top-[47px] -translate-y-1/2 z-10 w-8 h-8 border-gray-900 border-2 rounded-full bg-transparent text-gray-700 transition ${
             canScrollRight
-              ? "hover:bg-gray-50 hover:text-black cursor-pointer opacity-100"
-              : "opacity-35 cursor-not-allowed"
+              ? "hover:text-black cursor-pointer opacity-100"
+              : "opacity-30 cursor-not-allowed"
           }`}
         >
-          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+          <ChevronRight className="w-5 h-5" />
         </button>
       </div>
     </section>
