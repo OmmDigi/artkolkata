@@ -10,7 +10,7 @@ import {
   ShoppingCart,
   X,
 } from "lucide-react";
-import ShoppingCartSidebar from "@/app/Component/trending/ShoppingCartSidebar";
+import ShoppingCartSidebar from "@/Component1/trending/ShoppingCartSidebar";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
 import { useWishlistStore } from "@/store/useWishlistStore";

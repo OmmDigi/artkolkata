@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ArrowRight } from "lucide-react";
+import { FaComment } from "react-icons/fa";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
 
@@ -83,18 +84,18 @@ export default function SubNav() {
       className={`hidden md:block sticky top-15 shadow-2xl bg-gray-800 border-t border-gray-700 transition-all duration-300 z-40`}
       aria-label="Sub navigation"
     >
-      <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+      <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 flex items-center justify-between gap-4 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center">
         {/* Hamburger Icon */}
         <button
           onClick={() => setIsSubNavMenuOpen(true)}
           onMouseEnter={() => setIsSubNavMenuOpen(true)}
-          className=" cursor-pointer absolute left-4 sm:left-6 lg:left-8 top-1/2 -translate-y-1/2 text-gray-300 hover:text-white transition flex items-center gap-2"
+          className="cursor-pointer justify-self-start text-gray-300 hover:text-white transition flex items-center gap-2 shrink-0"
         >
           <Menu size={20} />
           <span className="text-sm font-medium hidden lg:block">ALL</span>
         </button>
 
-        <ul className="flex justify-center gap-8 py-1">
+        <ul className="flex justify-center gap-5 lg:gap-8">
           {navItems.map((item) => {
             const isActive = item.href === activeHref;
             return (
@@ -115,6 +116,18 @@ export default function SubNav() {
             );
           })}
         </ul>
+
+        <a
+          href="https://wa.me/918621803898?text=Hello!%20I%20have%20an%20enquiry."
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Enquire on WhatsApp"
+          className="justify-self-end inline-flex items-center gap-2 rounded-full bg-[#e6640d] hover:bg-[#d45708] px-3.5 lg:px-4 py-1.5 text-[11px] lg:text-xs font-bold uppercase tracking-wider text-white shadow-[0_0_12px_rgba(230,100,13,0.45)] transition-all duration-200 hover:scale-[1.02] whitespace-nowrap shrink-0"
+        >
+          <FaComment className="w-3.5 h-3.5 shrink-0" />
+          <span>ENQUIRE ON WHATSAPP</span>
+          <ArrowRight className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+        </a>
       </div>
 
       {/* Sidebar Overlay */}

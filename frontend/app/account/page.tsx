@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { ArrowLeft, Mail } from "lucide-react";
-import SignIn from "../Component/ui/account/signIn";
-import Register from "../Component/ui/account/register";
-import OtpLogin from "../Component/ui/account/OtpLogin";
+import SignIn from "@/Component1/UI/account/signIn";
+import Register from "@/Component1/UI/account/register";
+import OtpLogin from "@/Component1/UI/account/OtpLogin";
 import Otp1, {
   PendingOtp,
   describeOtpTarget,
-} from "../Component/ui/account/Otp1";
-import Profile from "../Component/ui/account/Profile";
+} from "@/Component1/UI/account/Otp1";
+import Profile from "@/Component1/UI/account/Profile";
 import { useIsLoggedIn } from "@/store/useUserStore";
 import { useIsHydrated } from "@/hooks/useIsHydrated";
 

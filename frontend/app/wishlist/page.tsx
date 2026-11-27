@@ -3,7 +3,7 @@ import React from "react";
 import { Heart } from "lucide-react";
 import Link from "next/link";
 import { useWishlistStore } from "@/store/useWishlistStore";
-import ProductCard from "@/app/Component/trending/ProductCard";
+import ProductCard from "@/Component1/trending/ProductCard";
 
 // The stored product shape varies (a guest save keeps whatever the card was
 // handed, the API read returns the product row), so every field falls back

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
-import EditorJsDescription from "@/app/Component/EditorJsDescription";
+import EditorJsDescription from "@/Component1/EditorJsDescription";
 
 const getYoutubeId = (url: string) => {
   if (!url) return null;

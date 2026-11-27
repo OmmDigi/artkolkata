@@ -2,16 +2,17 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono, Montserrat, Ubuntu_Mono } from "next/font/google";
 import "./globals.css";
-import { QueryClientWrapper } from "./Component/QueryClientWrapper";
+import { QueryClientWrapper } from "@/Component1/QueryClientWrapper";
 import { ToastContainer } from "react-toastify";
 import Navbar from "@/Component1/layout/Navbar";
 import SubNav from "@/Component1/layout/SubNav";
-import MainWrapper from "./Component/MainWrapper";
+import CategoryBar from "@/Component1/layout/CategoryBar";
+import MainWrapper from "@/Component1/MainWrapper";
 import Footer from "@/Component1/layout/Footer";
 import MobileBottomNav from "@/Component1/layout/MobileBottomNav";
 import FloatingWhatsApp from "@/Component1/FloatingWhatsApp";
-import OrderCompletionWatcher from "./Component/OrderCompletionWatcher";
-import ScreenshotGuard from "./Component/ScreenshotGuard";
+import OrderCompletionWatcher from "@/Component1/OrderCompletionWatcher";
+import ScreenshotGuard from "@/Component1/ScreenshotGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -91,13 +92,14 @@ export default function RootLayout({
           {/* <Marquee /> */}
           <Navbar />
           <SubNav />
+          <CategoryBar />
           {/* <Header /> */}
           <MainWrapper>{children}</MainWrapper>
           <Footer />
           <MobileBottomNav />
           {/* <Footer /> */}
           <FloatingWhatsApp />
-          <ScreenshotGuard />
+          {/* <ScreenshotGuard /> */}
         </QueryClientWrapper>
       </body>
     </html>

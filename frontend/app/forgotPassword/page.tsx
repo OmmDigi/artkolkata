@@ -5,13 +5,13 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import Link from "next/link";
 import { postRequest } from "@/lib/fetcher";
-import ResetOtpModal from "../Component/ui/account/resetOtpModal";
-import { PendingOtp, describeOtpTarget } from "../Component/ui/account/Otp1";
+import ResetOtpModal from "@/Component1/UI/account/resetOtpModal";
+import { PendingOtp, describeOtpTarget } from "@/Component1/UI/account/Otp1";
 import CountryCodeSelect, {
   DEFAULT_COUNTRY,
   looksLikePhone,
   toInternationalPhone,
-} from "../Component/ui/account/CountryCodeSelect";
+} from "@/Component1/UI/account/CountryCodeSelect";
 
 const ForgotPassword = () => {
   // an email address or a mobile number

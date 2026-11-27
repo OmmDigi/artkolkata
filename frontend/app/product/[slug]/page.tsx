@@ -11,6 +11,9 @@ import {
   ChevronRight,
   Play,
   Star,
+  Check,
+  Zap,
+  Trash2,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -25,17 +28,21 @@ import {
   ApiProduct,
 } from "@/Component1/ShopSection";
 
-import { CollapsibleDescription } from "@/app/Component/CollapsibleDescription";
-import EditorJsDescription from "@/app/Component/EditorJsDescription";
-import ProductReviewSummary from "@/app/Component/ProductReviewSummary";
+import { CollapsibleDescription } from "@/Component1/CollapsibleDescription";
+import EditorJsDescription from "@/Component1/EditorJsDescription";
+import ProductReviewSummary from "@/Component1/ProductReviewSummary";
 import CustomImage from "@/Component1/CustomImage";
 import { processImageUrl } from "@/lib/utils";
+import VideoSection from "@/Component1/VideoSection";
+import { getPrimaryVideo } from "@/lib/videos";
 
 const ProductPage = () => {
   const [mainImage, setMainImage] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [zoomMedia, setZoomMedia] = useState<any>(null);
   const [loadingWishlist, setLoadingWishlist] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isBuyingNow, setIsBuyingNow] = useState(false);
 
   const [selectedOptions, setSelectedOptions] = useState<any>({});
   const [selectedVariant, setSelectedVariant] = useState<any>(null);
@@ -201,6 +208,10 @@ const ProductPage = () => {
         `/api/v1/products?tag=${encodeURI("Best Seller")}&variants=true&limit=-1`,
       ),
   });
+  const { data: primaryVideo = null } = useQuery({
+    queryKey: ["primary-video"],
+    queryFn: getPrimaryVideo,
+  });
 
   const relatedProducts = relatedData?.data || [];
   const relatedMapped = relatedProducts
@@ -312,7 +323,23 @@ const ProductPage = () => {
     }));
   };
 
+  const buildCartItem = (variantId: number | null) => ({
+    ...fullProduct,
+    sku: selectedVariant?.sku,
+    variant_id: variantId,
+    price: selectedVariant?.price || fullProduct.price,
+    compare_at_price:
+      selectedVariant?.compareAtPrice || fullProduct.compare_at_price,
+    stock: selectedVariant?.quantity || fullProduct.available_quantity,
+    images:
+      selectedVariant?.images?.length > 0
+        ? selectedVariant.images
+        : fullProduct.images,
+    options: selectedOptions,
+  });
+
   const handleAddToCart = () => {
+    if (isAddingToCart || isBuyingNow) return;
     const variantId = selectedVariant?.id || null;
 
     // 🛑 Requires selecting all options when variants exist
@@ -321,59 +348,35 @@ const ProductPage = () => {
       return;
     }
 
-    // Check if item with same variant already exists
-    const alreadyAdded = isInCart(fullProduct.id, variantId);
-
-    if (alreadyAdded) {
-      removeFromCart(fullProduct.id, variantId);
-      return;
-    }
-
-    // 🔥 Build the final cart item with variant data
-    const itemToAdd = {
-      ...fullProduct,
-      sku: selectedVariant?.sku,
-      variant_id: variantId,
-      price: selectedVariant?.price || fullProduct.price,
-      compare_at_price:
-        selectedVariant?.compareAtPrice || fullProduct.compare_at_price,
-      stock: selectedVariant?.quantity || fullProduct.available_quantity,
-      images:
-        selectedVariant?.images?.length > 0
-          ? selectedVariant.images
-          : fullProduct.images,
-      options: selectedOptions,
-    };
-    addToCart(itemToAdd, variantId, localQuantity);
+    setIsAddingToCart(true);
+    setTimeout(() => {
+      const alreadyAdded = isInCart(fullProduct.id, variantId);
+      if (alreadyAdded) {
+        removeFromCart(fullProduct.id, variantId);
+      } else {
+        addToCart(buildCartItem(variantId), variantId, localQuantity);
+      }
+      setIsAddingToCart(false);
+    }, 250);
   };
 
   const handleBuyNow = () => {
+    if (isAddingToCart || isBuyingNow) return;
     if (fullProduct.options?.length > 0 && !allOptionsSelected) {
       alert("Select all options first!");
       return;
     }
 
+    setIsBuyingNow(true);
     const variantId = selectedVariant?.id || null;
     const alreadyAdded = isInCart(fullProduct.id, variantId);
 
     if (!alreadyAdded) {
-      const itemToAdd = {
-        ...fullProduct,
-        sku: selectedVariant?.sku,
-        variant_id: variantId,
-        price: selectedVariant?.price || fullProduct.price,
-        compare_at_price:
-          selectedVariant?.compareAtPrice || fullProduct.compare_at_price,
-        stock: selectedVariant?.quantity || fullProduct.available_quantity,
-        images:
-          selectedVariant?.images?.length > 0
-            ? selectedVariant.images
-            : fullProduct.images,
-        options: selectedOptions,
-      };
-      addToCart(itemToAdd, variantId, localQuantity);
+      addToCart(buildCartItem(variantId), variantId, localQuantity);
     }
-    router.push("/checkout");
+    setTimeout(() => {
+      router.push("/checkout");
+    }, 200);
   };
 
   const openModal = (media: any) => {
@@ -414,7 +417,10 @@ const ProductPage = () => {
     (img, index, self) =>
       index === self.findIndex((t) => t.image === img.image),
   );
-
+  // const [primaryVideo, videos] = await Promise.all([
+  //   getPrimaryVideo(),
+  //   getVideos(),
+  // ]);
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="w-full max-w-[1600px] mx-auto px-4 py-2 md:py-8">
@@ -732,6 +738,18 @@ const ProductPage = () => {
                         )
                       : 0;
 
+                  const weightKg = parseFloat(fullProduct?.weight_kg ?? "0");
+                  const lengthCm = parseFloat(fullProduct?.length_cm ?? "0");
+                  const breadthCm = parseFloat(fullProduct?.breadth_cm ?? "0");
+                  const heightCm = parseFloat(fullProduct?.height_cm ?? "0");
+
+                  const dimensionParts = [
+                    lengthCm > 0 ? `L:${lengthCm} cm` : null,
+                    breadthCm > 0 ? `B:${breadthCm} cm` : null,
+                    heightCm > 0 ? `H:${heightCm} cm` : null,
+                  ].filter(Boolean);
+                  const weightLabel = weightKg > 0 ? `${weightKg} kg` : null;
+
                   return (
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
@@ -760,6 +778,34 @@ const ProductPage = () => {
                       <div className="text-sm text-gray-800 font-medium">
                         Inclusive of all taxes
                       </div>
+
+                      {weightLabel && (
+                        <div className="text-sm text-gray-700 mt-2">
+                          Weight:{" "}
+                          <span className="font-bold text-gray-900">
+                            {weightLabel}
+                          </span>
+                        </div>
+                      )}
+
+                      {dimensionParts.length > 0 && (
+                        <div className="mt-2 mb-1">
+                          <div className="text-sm font-bold text-gray-900 mb-1.5">
+                            Size
+                          </div>
+                          <div className="rounded-xl bg-[#363636] text-white px-4 py-2.5 w-fit min-w-[210px]">
+                            <div className="text-sm font-bold text-white">
+                              {dimensionParts.join(", ")}
+                            </div>
+                            {weightLabel && (
+                              <div className="text-xs text-gray-300 mt-0.5">
+                                {weightLabel}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="text-sm text-green-700 font-semibold mt-1 bg-green-50 w-fit px-2 py-1 rounded">
                         5% additional discount for above 1 lakh
                       </div>
@@ -1030,21 +1076,38 @@ const ProductPage = () => {
                   </div>
                   {!fullProduct?.quantity || selectedVariant?.quantity > 0 ? (
                     <button
-                      disabled={!allOptionsSelected}
+                      disabled={
+                        !allOptionsSelected || isAddingToCart || isBuyingNow
+                      }
                       onClick={handleAddToCart}
-                      className={`flex-grow py-3 rounded-lg text-white font-semibold transition-colors ${
+                      className={`flex-grow py-3 rounded-lg font-semibold flex items-center justify-center gap-2 border border-gray-700 transition-colors cursor-pointer disabled:cursor-not-allowed ${
                         !allOptionsSelected
                           ? "bg-gray-300"
                           : itemAlreadyInCart
-                            ? "bg-gray-500 hover:bg-gray-600"
-                            : "bg-orange-500 hover:bg-orange-600"
-                      }`}
+                            ? "bg-[#e6640e] hover:bg-orange-500"
+                            : "hover:text-white hover:bg-gray-600"
+                      } ${isAddingToCart ? "opacity-80" : ""}`}
                     >
-                      {itemAlreadyInCart
-                        ? "Remove from Cart"
-                        : !allOptionsSelected
-                          ? "Select a variant"
-                          : "Add to Cart"}
+                      {isAddingToCart ? (
+                        <>
+                          <span className="w-[18px] h-[18px] border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          <span>
+                            {itemAlreadyInCart ? "Removing..." : "Adding..."}
+                          </span>
+                        </>
+                      ) : itemAlreadyInCart ? (
+                        <>
+                          <Trash2 size={18} />
+                          <span>Remove from Cart</span>
+                        </>
+                      ) : !allOptionsSelected ? (
+                        <span>Select a variant</span>
+                      ) : (
+                        <>
+                          <ShoppingCart size={18} />
+                          <span>Add to Cart</span>
+                        </>
+                      )}
                     </button>
                   ) : (
                     <button
@@ -1059,20 +1122,53 @@ const ProductPage = () => {
                 {/* BUY NOW Button */}
                 {!fullProduct?.quantity || selectedVariant?.quantity > 0 ? (
                   <button
-                    disabled={!allOptionsSelected}
+                    disabled={
+                      !allOptionsSelected || isBuyingNow || isAddingToCart
+                    }
                     onClick={handleBuyNow}
-                    className={`w-full py-3 rounded-lg text-white font-semibold transition-colors ${
+                    className={`w-full py-3 rounded-lg text-white font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed ${
                       !allOptionsSelected
                         ? "bg-gray-300"
                         : "bg-green-600 hover:bg-green-700"
-                    }`}
+                    } ${isBuyingNow ? "opacity-85" : ""}`}
                   >
-                    BUY NOW
+                    {isBuyingNow ? (
+                      <>
+                        <span className="w-[18px] h-[18px] border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={18} className="fill-current" />
+                        <span>BUY NOW</span>
+                      </>
+                    )}
                   </button>
                 ) : null}
               </div>
+
+              {/* Product Highlights */}
+              <div className="border-t border-gray-200 pt-4 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+                  {[
+                    "Premium FRP Material",
+                    "Indoor & Outdoor Use",
+                    "Clean Demould Finish",
+                    "Long-Lasting Pattern",
+                  ].map((label) => (
+                    <div key={label} className="flex items-center gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                      </span>
+                      <span className="text-sm text-gray-800 font-medium">
+                        {label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div>
-                <h1 className="text-2xl font-bold mb-4">Description</h1>
+                {/* <h1 className="text-2xl font-bold mb-4">Description</h1> */}
                 {fullProduct?.description_json ? (
                   <EditorJsDescription data={fullProduct.description_json} />
                 ) : (
@@ -1159,7 +1255,7 @@ const ProductPage = () => {
 
       {/* Related Products Section */}
       {relatedMapped.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 py-2 relative">
+        <div className="max-w-9xl mx-auto px-4 py-2 relative">
           <h2 className="text-2xl font-bold text-black mb-6">
             Related Products
           </h2>
@@ -1172,12 +1268,12 @@ const ProductPage = () => {
             </button>
             <div
               ref={relatedScrollRef}
-              className="flex overflow-x-auto gap-4 md:gap-6 pb-4 snap-x snap-mandatory scrollbar-hide"
+              className="flex overflow-x-auto gap-2 md:gap-2 pb-4 snap-x snap-mandatory scrollbar-hide"
             >
               {relatedMapped.map((prod) => (
                 <div
                   key={prod.id}
-                  className="min-w-[50vw] sm:min-w-[30vw] md:min-w-[25vw] lg:min-w-[20vw] snap-start flex-shrink-0"
+                  className="min-w-[40vw] sm:min-w-[25vw] md:min-w-[20vw] lg:min-w-[15vw] snap-start flex-shrink-0"
                 >
                   <ProductCard product={prod} />
                 </div>
@@ -1192,9 +1288,9 @@ const ProductPage = () => {
           </div>
         </div>
       )}
-
+      {/* Most Popular Products  */}
       {mostPopularMapped.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 py-2 relative">
+        <div className="max-w-9xl mx-auto px-4 py-2 relative">
           <h2 className="text-2xl font-bold text-black mb-6">
             Most Popular Products
           </h2>
@@ -1207,12 +1303,12 @@ const ProductPage = () => {
             </button>
             <div
               ref={mostPopularScrollRef}
-              className="flex overflow-x-auto gap-4 md:gap-6 pb-4 snap-x snap-mandatory scrollbar-hide"
+              className="flex overflow-x-auto gap-2 md:gap-2 pb-4 snap-x snap-mandatory scrollbar-hide"
             >
               {mostPopularMapped.map((prod) => (
                 <div
                   key={prod.id}
-                  className="min-w-[50vw] sm:min-w-[30vw] md:min-w-[25vw] lg:min-w-[20vw] snap-start flex-shrink-0"
+                  className="min-w-[40vw] sm:min-w-[25vw] md:min-w-[20vw] lg:min-w-[15vw] snap-start flex-shrink-0"
                 >
                   <ProductCard product={prod} />
                 </div>
@@ -1227,6 +1323,8 @@ const ProductPage = () => {
           </div>
         </div>
       )}
+
+      {primaryVideo && <VideoSection video={primaryVideo} />}
 
       <div id="reviews">
         <ProductReviewSummary fullProduct={fullProduct} />

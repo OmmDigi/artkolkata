@@ -1,15 +1,30 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useRef } from "react";
 import { Pause, Play } from "lucide-react";
-import ScrollingText from "./UI/ScrollingText";
+import { processImageUrl } from "@/lib/utils";
+import type { Video } from "@/lib/videos";
 
-export default function VideoSection() {
+export default function VideoSection({ video }: { video: Video | null }) {
   const [isPlaying, setIsPlaying] = useState(true);
+  const [youtubeStarted, setYoutubeStarted] = useState(false);
+  const [hasVideoError, setHasVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  if (!video) {
+    return null;
+  }
+
+  const poster = processImageUrl(video.thumbnail_url) || undefined;
+  const isUpload = video.source_type === "upload";
+
   const handlePlayPause = () => {
+    if (!isUpload) {
+      if (video.youtube_id) {
+        setYoutubeStarted(true);
+      }
+      return;
+    }
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
@@ -21,90 +36,86 @@ export default function VideoSection() {
   };
 
   return (
-    <section className="relative w-full min-h-80  bg-black overflow-hidden flex items-center justify-center">
-      {/* Video Background */}
-      <div className="absolute inset-0 w-full h-full">
-        <video
-          ref={videoRef}
-          src="https://framerusercontent.com/assets/tZkQWQqHkaDjOS2aRu06UvSAiY.mp4"
-          poster="https://framerusercontent.com/images/UK7WDlVvUzol044n909Euv7v8.png?width=1024&height=1024"
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full h-full object-cover"
-        />
-      </div>
-
-      {/* Dark Overlay */}
-      <div className="absolute inset-0 bg-black/30"></div>
-
-      {/* Content */}
-      <div className="relative z-10 container mx-auto px-6 md:px-12 py-2 md:py-4">
-        <div className="max-w-2xl mx-auto text-center">
-          {/* Tag */}
-          <div className="inline-flex items-center gap-3 bg-white/15 backdrop-blur-[5px] rounded-full px-4 py-2 mb-8 border border-white/20">
-            <div className="px-4 py-1.5 bg-white rounded-full">
-              <p className="text-xs md:text-sm font-medium text-black">
-                Wearix
-              </p>
-            </div>
-            <p className="text-sm md:text-base font-medium text-white/80">
-              Since 2014
-            </p>
-          </div>
-
-          {/* Heading */}
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-            Defining modern style
-          </h2>
-
-          {/* Description */}
-          <p className="text-base md:text-lg text-white/80 mb-10 max-w-xl mx-auto leading-relaxed">
-            A decade ago, we set out to redefine the modern silhouette. Today,
-            we merge urban utility with high-end aesthetics in a resilient,
-            beautiful collection.
-          </p>
-
-          {/* Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <Link
-              href="/about"
-              className="px-8 py-3 bg-white text-black rounded-full font-medium text-sm"
-            >
-              <ScrollingText
-                text="More about us"
-                className="text-lg font-bold"
+    <section className="w-full bg-white py-6 md:py-10 px-4 sm:px-8 lg:px-12">
+      <div className="max-w-7xl mx-auto">
+        <div className="relative w-full aspect-video max-h-[540px] rounded-xl md:rounded-2xl bg-[#2f2f2f] overflow-hidden shadow-md flex items-center justify-center">
+          {/* Video / Poster / YouTube Embed */}
+          <div className="w-full h-full flex items-center justify-center">
+            {isUpload && !hasVideoError ? (
+              <video
+                ref={videoRef}
+                src={processImageUrl(video.video_url)}
+                poster={poster}
+                autoPlay
+                loop
+                muted
+                playsInline
+                onError={() => setHasVideoError(true)}
+                className="w-full h-full object-contain"
               />
-            </Link>
-            <Link
-              href="/contact"
-              className="px-8 py-3 bg-white/15 backdrop-blur-[5px] text-white rounded-full font-medium text-sm "
-            >
-              <ScrollingText text="Contact us" className="text-lg font-bold" />
-            </Link>
+            ) : !isUpload && youtubeStarted && video.youtube_id ? (
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${video.youtube_id}?autoplay=1&rel=0`}
+                title={video.title}
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+                className="w-full h-full"
+              />
+            ) : poster ? (
+              <img
+                src={poster}
+                alt={video.title}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="w-full h-full bg-[#2f2f2f]" />
+            )}
           </div>
+
+          {/* Bottom Gradient & Copy Overlay */}
+          {(!youtubeStarted || isUpload) && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-6 pt-16 pb-5 md:pb-7 text-center">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow">
+                  {video.title}
+                </h2>
+                {video.description && (
+                  <p className="mt-1.5 text-xs sm:text-sm md:text-base text-white/90 max-w-2xl mx-auto drop-shadow">
+                    {video.description}
+                  </p>
+                )}
+              </div>
+
+              {((isUpload && !hasVideoError) || (!isUpload && video.youtube_id)) && (
+                <button
+                  type="button"
+                  onClick={handlePlayPause}
+                  className="absolute bottom-4 right-4 md:bottom-6 md:right-6 z-20 bg-white/90 hover:bg-white rounded-full p-2.5 md:p-3.5 transition-all duration-300 flex items-center justify-center group cursor-pointer shadow-lg"
+                  aria-label={
+                    isUpload
+                      ? isPlaying
+                        ? "Pause video"
+                        : "Play video"
+                      : `Play ${video.title}`
+                  }
+                >
+                  {isUpload && isPlaying ? (
+                    <Pause
+                      size={20}
+                      className="fill-black text-black group-hover:scale-110 transition-transform"
+                    />
+                  ) : (
+                    <Play
+                      size={20}
+                      className="fill-black text-black translate-x-0.5 group-hover:scale-110 transition-transform"
+                    />
+                  )}
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
-
-      {/* Play Button */}
-      <button
-        onClick={handlePlayPause}
-        className="absolute bottom-8 right-8 z-20 bg-white rounded-full p-4 hover:bg-white/90 transition-all duration-300 flex items-center justify-center group"
-        aria-label="Play/Pause video"
-      >
-        {isPlaying ? (
-          <Pause
-            size={24}
-            className="fill-black text-black group-hover:scale-110 transition-transform"
-          />
-        ) : (
-          <Play
-            size={24}
-            className="fill-black text-black group-hover:scale-110 transition-transform"
-          />
-        )}
-      </button>
     </section>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
 import CustomImage from "@/Component1/CustomImage";
 
 /**
@@ -411,35 +411,33 @@ function AccordionItem({
   hideToggle?: boolean;
 }) {
   return (
-    <div className="border-b border-gray-200">
+    <div className="rounded-xl border border-[#d9d1c5] bg-[#f1ede6] overflow-hidden transition-colors">
       <button
         type="button"
         onClick={onClick}
         disabled={hideToggle}
         aria-expanded={isOpen}
-        className={`w-full flex justify-between items-center py-4 text-left font-bold text-gray-900 focus:outline-none ${
-          hideToggle ? "cursor-default" : "cursor-pointer hover:text-black"
+        className={`w-full flex justify-between items-center px-4 sm:px-5 py-3.5 text-left font-bold uppercase tracking-wider text-[#4e4033] focus:outline-none ${
+          hideToggle ? "cursor-default" : "cursor-pointer hover:bg-[#ebe5dc]"
         }`}
       >
-        <span className="text-sm md:text-base">{heading}</span>
-        {!hideToggle && (
-          <ChevronDown
-            size={18}
-            className={`transition-transform duration-300 text-gray-500 ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        )}
+        <span className="text-xs sm:text-sm">{heading}</span>
+        {!hideToggle &&
+          (isOpen ? (
+            <Minus size={18} className="shrink-0 text-[#7a6b5b]" strokeWidth={2} />
+          ) : (
+            <Plus size={18} className="shrink-0 text-[#7a6b5b]" strokeWidth={2} />
+          ))}
       </button>
       <div
         className={`grid transition-all duration-300 ease-in-out ${
           isOpen
-            ? "grid-rows-[1fr] opacity-100 pb-4"
-            : "grid-rows-[0fr] opacity-0 pb-0"
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0"
         }`}
       >
         <div className="overflow-hidden">
-          <div className="text-sm text-gray-700 leading-relaxed [&_a]:text-blue-600 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold">
+          <div className="px-4 sm:px-5 pb-4 pt-3 border-t border-[#e2dbd0] bg-[#f7f4ef] text-sm text-gray-700 leading-relaxed [&_a]:text-blue-600 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold">
             {blocks.map((block, index) => (
               <Block key={block.id ?? index} block={block} />
             ))}
@@ -459,7 +457,7 @@ export function EditorJsDescription({
    *  document is rendered straight through, headings included. */
   headingToDropdown?: boolean;
 }) {
-  const [openSectionIndex, setOpenSectionIndex] = useState(0);
+  const [openSectionIndex, setOpenSectionIndex] = useState(-1);
 
   const blocks = useMemo(() => toDocument(data)?.blocks ?? [], [data]);
   const sections = useMemo(() => buildSections(blocks), [blocks]);
@@ -479,7 +477,7 @@ export function EditorJsDescription({
 
   if (sections.length === 1) {
     return (
-      <div className="flex flex-col border-t border-gray-200 mt-2">
+      <div className="flex flex-col gap-2.5 mt-2">
         <AccordionItem
           heading={sections[0].heading ?? "Description"}
           blocks={sections[0].blocks}
@@ -492,7 +490,7 @@ export function EditorJsDescription({
   }
 
   return (
-    <div className="flex flex-col border-t border-gray-200 mt-2">
+    <div className="flex flex-col gap-2.5 mt-2">
       {sections.map((section, index) => (
         <AccordionItem
           key={index}

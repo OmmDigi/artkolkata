@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
-import { Star, ShoppingCart, Heart } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import ScrollingText from "./UI/ScrollingText";
 import { useQuery } from "@tanstack/react-query";
 import { getRequest } from "@/lib/fetcher";
-import { useWishlistStore } from "@/store/useWishlistStore";
-import { useCartStore } from "@/store/useCartStore";
-import { processImageUrl } from "@/lib/utils";
+import ProductCard, {
+  extractFirstFourTags,
+} from "@/Component1/trending/ProductCard";
+
+export { ProductCard };
 
 export interface Product {
   id: any;
@@ -21,7 +21,8 @@ export interface Product {
   price: number;
   originalPrice: number;
   tag?: string;
-  product_variants : any[]
+  tags?: string[];
+  product_variants: any[];
 }
 
 interface ApiCategory {
@@ -37,25 +38,31 @@ export interface ApiProduct {
   slug?: string;
   name?: string;
   images?: Array<{ image?: string }>;
-  price?: number;
-  selling_price?: number;
-  original_price?: number;
-  originalPrice?: number;
+  price?: number | string;
+  selling_price?: number | string;
+  original_price?: number | string;
+  originalPrice?: number | string;
+  compare_at_price?: number | string;
   category?: any;
   category_slug?: string;
   category_id?: string | number;
   tag?: string;
-  tags?: string[];
-  variants?: any[]
+  tags?: string[] | Record<string, boolean>;
+  variants?: any[];
 }
 
 export const mapApiProduct = (item: ApiProduct): Product => {
-  const image1 =
-    item.images?.[0]?.image ?? ""
+  const image1 = item.images?.[0]?.image ?? "";
   const image2 = item.images?.[1]?.image ?? image1;
-  const price = item.selling_price ?? item.price ?? 0;
-  const originalPrice =
-    item.original_price ?? item.originalPrice ?? item.price ?? price;
+  const price = Number(item.selling_price ?? item.price ?? 0);
+  const originalPrice = Number(
+    item.original_price ??
+      item.originalPrice ??
+      item.compare_at_price ??
+      item.price ??
+      price,
+  );
+  const tags = extractFirstFourTags(item);
 
   return {
     id: item.id ?? item._id ?? item.slug ?? image1,
@@ -65,190 +72,230 @@ export const mapApiProduct = (item: ApiProduct): Product => {
     image2,
     price,
     originalPrice,
-    tag: item.tag || item.tags?.[0] || undefined,
+    tag: item.tag || tags[0] || undefined,
+    tags,
     product_variants: item.variants || [],
   };
 };
 
-export function ProductCard({ product }: { product: Product }) {
-  const router = useRouter();
-  const [hoveredImage, setHoveredImage] = useState(false);
-  const [loadingIcon, setLoadingIcon] = useState<"cart" | "wish" | null>(null);
+function CategoryProductRow({
+  category,
+  gridColsClass,
+  onEmpty,
+}: {
+  category: ApiCategory;
+  gridColsClass: string;
+  onEmpty: () => void;
+}) {
+  const reportedEmptyRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dragState = useRef({
+    isDown: false,
+    startX: 0,
+    scrollLeft: 0,
+    moved: false,
+  });
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
-  const { toggleWishlist, isInWishlist: isWishlisted } = useWishlistStore();
-  const { addToCart, removeFromCart, isInCart } = useCartStore();
+  const categorySlug =
+    category.slug || category.name?.toLowerCase().replace(/\s+/g, "-") || "";
 
-  const isInWishlist = isWishlisted(product.id);
-  const firstVariant = (product as any).product_variants?.[0] || null;
-  const inCart = isInCart(product.id, firstVariant?.id || null);
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["shop-section-category-products", categorySlug],
+    queryFn: () =>
+      getRequest<{ data: ApiProduct[] }>(
+        `/api/v1/products?category=${encodeURIComponent(categorySlug)}&limit=-1&variants=true`,
+      ),
+    enabled: Boolean(categorySlug),
+  });
 
-  const handleAction = (type: "cart" | "wish") => {
-    setLoadingIcon(type);
-    setTimeout(() => {
-      setLoadingIcon(null);
-      if (type === "wish") toggleWishlist(product);
-      if (type === "cart") {
-        if (inCart) {
-          removeFromCart(product.id, firstVariant?.id || null);
-        } else {
-          addToCart(product, firstVariant?.id || null, 1);
-        }
+  const products = data?.data ?? [];
+
+  const updateScrollButtons = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 2);
+    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    updateScrollButtons();
+    window.addEventListener("resize", updateScrollButtons);
+    return () => window.removeEventListener("resize", updateScrollButtons);
+  }, [products.length, gridColsClass, updateScrollButtons]);
+
+  useEffect(() => {
+    if (!isLoading && (isError || products.length === 0)) {
+      if (!reportedEmptyRef.current) {
+        reportedEmptyRef.current = true;
+        onEmpty();
       }
-    }, 150);
+    }
+  }, [isLoading, isError, products.length, onEmpty]);
+
+  const handleSlide = (direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const step = Math.max(el.clientWidth * 0.75, 240);
+    el.scrollBy({
+      left: direction === "left" ? -step : step,
+      behavior: "smooth",
+    });
   };
 
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    dragState.current = {
+      isDown: true,
+      startX: e.pageX - el.offsetLeft,
+      scrollLeft: el.scrollLeft,
+      moved: false,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el || !dragState.current.isDown) return;
+    const x = e.pageX - el.offsetLeft;
+    const delta = x - dragState.current.startX;
+    if (Math.abs(delta) > 5) {
+      dragState.current.moved = true;
+    }
+    if (dragState.current.moved) {
+      e.preventDefault();
+      el.scrollLeft = dragState.current.scrollLeft - delta;
+    }
+  };
+
+  const stopDragging = () => {
+    dragState.current.isDown = false;
+  };
+
+  const handleClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (dragState.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragState.current.moved = false;
+    }
+  };
+
+  if (!isLoading && (isError || products.length === 0)) {
+    return null;
+  }
+
   return (
-    <div className="group relative flex flex-col h-full border border-gray-300 p-2">
-      <div
-        className="relative overflow-hidden rounded-lg hover:scale-105 transition-transform duration-300 bg-[#ececea] 
-      aspect-[4/4] mb-4"
-        onMouseEnter={() => setHoveredImage(true)}
-        onMouseLeave={() => setHoveredImage(false)}
-      >
-        {product.tag && (
-          <div className="absolute top-2 left-2 z-20 bg-black/80 text-white px-2 py-1 text-xs font-bold rounded shadow">
-            {product.tag}
-          </div>
-        )}
-        <Link href={product.href} className="block w-full h-full relative">
-          <Image
-            src={processImageUrl(hoveredImage ? product.image2 : product.image1)}
-            alt={product.name}
-            fill
-            className="object-cover transition-opacity duration-300"
-          />
-        </Link>
-
-        {/* Buttons at bottom corners */}
-        <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center opacity-100  transition-opacity duration-300 pointer-events-none">
-          <button
-            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center ${
-              inCart
-                ? "bg-orange-500 text-white hover:bg-orange-600"
-                : "bg-white text-black hover:bg-black hover:text-white"
-            }`}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleAction("cart");
-            }}
-            aria-label="Add to cart"
-            style={{ width: "38px", height: "38px" }}
-          >
-            {loadingIcon === "cart" ? (
-              <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <ShoppingCart size={18} />
-            )}
-          </button>
-          <button
-            className={`p-2.5 rounded-full transition-colors pointer-events-auto shadow-md flex items-center justify-center 
-                 bg-white text-black hover:bg-black hover:text-white
-            `}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleAction("wish");
-            }}
-            aria-label="Add to wishlist"
-            style={{ width: "38px", height: "38px" }}
-          >
-            {loadingIcon === "wish" ? (
-              <div className="w-[18px] h-[18px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Heart
-                size={24}
-                fill={isInWishlist ? "red" : "none"}
-                color={isInWishlist ? "red" : "currentColor"}
-              />
-            )}
-          </button>
-        </div>
-      </div>
-
-      <Link href={product.href} className="block mt-auto">
-        <p className="text-sm font-medium text-black mb-2 group-hover:opacity-80 transition-opacity">
-          {product.name?.length > 30
-            ? `${product.name.slice(0, 30)}...`
-            : product.name}
-        </p>
-        <div className="flex gap-2 items-center mb-3">
+    <div className="mb-6">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="inline-flex items-center gap-2 bg-white">
+          {/* <Star size={16} className="fill-black" /> */}
           <span className="text-sm font-medium text-black">
-            {Number(product.price ?? 0).toFixed(2)}
-          </span>
-          <span className="text-sm text-black/50 line-through">
-            {Number(product.originalPrice ?? 0).toFixed(2)}
+            <ScrollingText
+              text={`${category.name}`}
+              className="text-base md:text-lg font-semibold"
+            />
           </span>
         </div>
-      </Link>
 
-      <div className="flex flex-col gap-2 mt-auto">
-        <button
-          className={`w-full py-2 rounded-md font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
-            inCart
-              ? "bg-orange-500 text-white hover:bg-orange-600"
-              : "border border-black text-black hover:bg-black hover:text-white"
-          }`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleAction("cart");
-          }}
-        >
-          {loadingIcon === "cart" ? (
-            <div className="w-[16px] h-[16px] border-2 border-[currentColor] border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <ShoppingCart size={16} />
-              {inCart ? "In Cart" : "Add to Cart"}
-            </>
-          )}
-        </button>
-
-        <button
-          className="w-full py-2 rounded-md font-medium text-sm bg-green-600 hover:bg-green-700 text-white transition-colors flex items-center justify-center"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!inCart) {
-              const productObj = {
-                id: product.id,
-                name: product.name,
-                price: Number(product.price ?? 0),
-                slug: product.href.split("/product/")[1],
-                images: [{ image: product.image1 }, { image: product.image2 }],
-                product_variants: (product as any).product_variants || [],
-              };
-              addToCart(productObj as any, firstVariant?.id || null, 1);
-            }
-            router.push("/checkout");
-          }}
-        >
-          BUY NOW
-        </button>
+        {products.length > 5 && (
+          <Link
+            href={`/product?category=${encodeURIComponent(categorySlug)}`}
+            className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full border border-black text-xs md:text-sm font-medium text-black hover:bg-black hover:text-white transition-colors shrink-0"
+          >
+            <span>View All</span>
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        )}
       </div>
+
+      {isLoading ? (
+        <div className="flex overflow-x-auto gap-2 sm:gap-4 md:gap-6 lg:gap-8 pb-4 scrollbar-hide">
+          {Array.from({ length: 5 }).map((_, idx) => (
+            <div
+              key={idx}
+              className={`w-[35vw] min-w-[35vw] sm:w-auto sm:min-w-[31vw] md:min-w-[28vw] ${gridColsClass} flex-shrink-0 border border-gray-200 p-1 sm:p-2 rounded-lg animate-pulse`}
+            >
+              <div className="aspect-[4/4] bg-gray-200 rounded-lg mb-4" />
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+              <div className="h-4 bg-gray-200 rounded w-1/2 mb-3" />
+              <div className="h-9 bg-gray-200 rounded mb-2" />
+              <div className="h-9 bg-gray-200 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="relative">
+          {/* Left Arrow */}
+          <button
+            type="button"
+            onClick={() => handleSlide("left")}
+            disabled={!canScrollLeft}
+            aria-label={`Scroll ${category.name} products left`}
+            className={`flex items-center justify-center absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/95 border border-gray-300 shadow-lg text-black transition ${
+              canScrollLeft
+                ? "hover:bg-black hover:text-white cursor-pointer opacity-100"
+                : "opacity-35 cursor-not-allowed"
+            }`}
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+
+          {/* Product Track */}
+          <div
+            ref={scrollRef}
+            onScroll={updateScrollButtons}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={stopDragging}
+            onMouseLeave={stopDragging}
+            onClickCapture={handleClickCapture}
+            className="flex overflow-x-auto gap-2 sm:gap-4 md:gap-6 lg:gap-8 pb-4 scrollbar-hide select-none cursor-grab active:cursor-grabbing"
+          >
+            {products.map((item) => (
+              <div
+                key={item.id ?? item._id ?? item.slug}
+                className={`w-[35vw] min-w-[35vw] sm:w-auto sm:min-w-[31vw] md:min-w-[28vw] ${gridColsClass} flex-shrink-0`}
+              >
+                <ProductCard
+                  product={item}
+                  ids={item.id}
+                  image={item.images?.[0]?.image}
+                  hoverImage={item.images?.[1]?.image}
+                  colors={(item as any).colors}
+                  name={item.name}
+                  price={item.selling_price ?? item.price}
+                  slug={item.slug}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Right Arrow */}
+          <button
+            type="button"
+            onClick={() => handleSlide("right")}
+            disabled={!canScrollRight}
+            aria-label={`Scroll ${category.name} products right`}
+            className={`flex items-center justify-center absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-20 w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/95 border border-gray-300 shadow-lg text-black transition ${
+              canScrollRight
+                ? "hover:bg-black hover:text-white cursor-pointer opacity-100"
+                : "opacity-35 cursor-not-allowed"
+            }`}
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function ShopSection() {
   const [gridCols, setGridCols] = useState(5);
-  // const [visibleCount, setVisibleCount] = useState(3);
-  // const loaderRef = useRef<HTMLDivElement>(null);
-
-  // useEffect(() => {
-  //   const observer = new IntersectionObserver(
-  //     (entries) => {
-  //       if (entries[0].isIntersecting) {
-  //         setVisibleCount((prev) => prev + 3);
-  //       }
-  //     },
-  //     { threshold: 0.1, rootMargin: "200px" },
-  //   );
-
-  //   if (loaderRef.current) observer.observe(loaderRef.current);
-  //   return () => observer.disconnect();
-  // }, []);
+  const [visibleCount, setVisibleCount] = useState(1);
+  const loaderRef = useRef<HTMLDivElement>(null);
 
   const {
     data: categoryData,
@@ -261,52 +308,32 @@ export default function ShopSection() {
   });
 
   const categories = categoryData?.data || [];
+  const visibleCategories = categories.slice(0, visibleCount);
+  const hasMoreCategories = visibleCount < categories.length;
 
-  const {
-    data: allProductsData,
-    isLoading: isLoadingProducts,
-    isError: isErrorProducts,
-  } = useQuery({
-    queryKey: ["all-products"],
-    queryFn: () =>
-      getRequest<{ data: ApiProduct[] }>("/api/v1/products?limit=-1&variants=true"),
-  });
+  useEffect(() => {
+    const sentinel = loaderRef.current;
+    if (!sentinel || !hasMoreCategories) return;
 
-  const allProducts = allProductsData?.data || [];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + 1, categories.length));
+        }
+      },
+      { threshold: 0.1, rootMargin: "150px" },
+    );
 
-  const productsData = categories.map((category) => {
-    const categoryProducts = allProducts.filter((product) => {
-      if (product.category_slug && category.slug) {
-        return product.category_slug === category.slug;
-      }
-      if (product.category_id && category.id) {
-        return product.category_id === category.id;
-      }
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreCategories, visibleCount, categories.length]);
 
-      const productCategory = product.category;
-      if (!productCategory) return false;
+  const handleEmptyCategory = useCallback(() => {
+    setVisibleCount((prev) => Math.min(prev + 1, categories.length));
+  }, [categories.length]);
 
-      const catId = category.id || category._id;
-
-      if (typeof productCategory === "object") {
-        return (
-          productCategory._id === catId ||
-          productCategory.id === catId ||
-          productCategory.slug === category.slug
-        );
-      }
-
-      return productCategory === catId || productCategory === category.slug;
-    });
-
-    return {
-      category,
-      products: categoryProducts.slice(0, 5).map(mapApiProduct),
-    };
-  });
-
-  const isLoading = isLoadingCategories || isLoadingProducts;
-  const isError = isErrorCategories || isErrorProducts;
+  const isLoading = isLoadingCategories;
+  const isError = isErrorCategories;
 
   const getGridColsClass = () => {
     if (gridCols === 3) return "lg:min-w-[31%]";
@@ -326,11 +353,11 @@ export default function ShopSection() {
           </p>
         </div>
 
-        <div className="mb-1 md:mb-[-60]">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-8">
+        <div className="mb-1 ">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 ">
             <div></div>
 
-            <div className="hidden lg:flex items-center gap-3 ml-auto">
+            <div className="hidden mt-[-50] lg:flex items-center gap-3 ml-auto">
               {[3, 4, 5].map((cols) => (
                 <button
                   key={cols}
@@ -365,43 +392,23 @@ export default function ShopSection() {
 
         {!isLoading && !isError && (
           <div>
-            {productsData?.map(({ category, products }) => (
-              <div key={category.id} className="mb-12">
-                <div className=" hidden md:inline-flex items-center gap-2 bg-white border border-black rounded-full px-4 py-2 mb-6">
-                  <Star size={16} className="fill-black" />
-                  <span className="text-sm font-medium text-black">
-                    <ScrollingText
-                      text={`${category.name}`}
-                      className="text-lg font-semibold"
-                    />
-                  </span>
-                </div>
-
-                <div className="flex overflow-x-auto gap-4 md:gap-6 lg:gap-8 pb-4 snap-x snap-mandatory scrollbar-hide">
-                  {products.map((product) => (
-                    <div
-                      key={product.id}
-                      className={`min-w-[50vw] sm:min-w-[35vw] md:min-w-[30vw] ${getGridColsClass()} snap-start flex-shrink-0`}
-                    >
-                      <ProductCard product={product} />
-                    </div>
-                  ))}
-                </div>
-
-                {/* Show All Products Button */}
-                <div className="mt-6 text-center">
-                  <Link
-                    href={`/product?category=${category.slug}`}
-                    className="inline-block px-6 py-3 bg-black text-white rounded-full font-medium text-sm hover:bg-black/90 transition-colors"
-                  >
-                    <ScrollingText
-                      text={`Show all ${category.name} products`}
-                      className="text-sm font-semibold"
-                    />
-                  </Link>
-                </div>
-              </div>
+            {visibleCategories.map((category, idx) => (
+              <CategoryProductRow
+                key={category.id ?? category._id ?? category.slug ?? idx}
+                category={category}
+                gridColsClass={getGridColsClass()}
+                onEmpty={handleEmptyCategory}
+              />
             ))}
+
+            {hasMoreCategories && (
+              <div
+                ref={loaderRef}
+                className="py-6 text-center text-sm text-black/60"
+              >
+                Loading more categories...
+              </div>
+            )}
           </div>
         )}
       </div>

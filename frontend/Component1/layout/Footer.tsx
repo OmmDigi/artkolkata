@@ -9,6 +9,7 @@ import {
   Facebook,
   Twitter,
   Youtube,
+  ExternalLink,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
@@ -105,16 +106,29 @@ export default function Footer() {
     });
   }
 
-  if (siteInfo?.site_addresses?.length) {
-    const primaryAddress =
-      siteInfo.site_addresses.find((a) => a.is_primary) ??
-      siteInfo.site_addresses[0];
-    if (primaryAddress)
-      contactLinks.push({
-        label: formatAddress(primaryAddress),
-        href: primaryAddress.map_url || "#",
-        icon: MapPin,
-      });
+  const primaryAddress = siteInfo?.site_addresses?.length
+    ? (siteInfo.site_addresses.find((a) => a.is_primary) ??
+      siteInfo.site_addresses[0])
+    : null;
+
+  const locationAddressText = primaryAddress
+    ? formatAddress(primaryAddress)
+    : "Duttapukur, arabinda pally, Near - Mahesh school, Pin- 743248";
+
+  const mapUrl =
+    primaryAddress?.map_url ||
+    "https://maps.app.goo.gl/rZFptT31uftFVGTP9?g_st=ac";
+
+  const mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(
+    locationAddressText,
+  )}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
+
+  if (primaryAddress) {
+    contactLinks.push({
+      label: formatAddress(primaryAddress),
+      href: mapUrl,
+      icon: MapPin,
+    });
   } else {
     contactLinks.push({
       label: (
@@ -126,7 +140,7 @@ export default function Footer() {
           Pin- 743248
         </>
       ),
-      href: "https://maps.app.goo.gl/rZFptT31uftFVGTP9?g_st=ac",
+      href: mapUrl,
       icon: MapPin,
     });
   }
@@ -225,6 +239,52 @@ export default function Footer() {
                 );
               })}
             </div>
+          </div>
+        </div>
+
+        {/* Location Map Section */}
+        <div className="border-t border-white/15 mt-8 pt-6 pb-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                <MapPin className="w-4 h-4 text-orange-500 shrink-0" />
+                <span>Location</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                {locationAddressText}
+              </p>
+            </div>
+
+            <a
+              href={mapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-400 hover:text-orange-300 transition-colors self-start sm:self-auto"
+            >
+              <span>Open in Google Maps →</span>
+            </a>
+          </div>
+
+          <div className="relative w-full h-56 sm:h-64 md:h-72 rounded-xl overflow-hidden border border-white/15 bg-neutral-900">
+            <a
+              href={mapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex items-center gap-1.5 absolute top-3 left-3 z-10 bg-white hover:bg-gray-100 text-blue-600 text-xs font-medium px-3 py-1.5 rounded shadow-md transition-colors"
+            >
+              <span>Open in Maps</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <iframe
+              src={mapEmbedUrl}
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              title="Art Kolkata Location Map"
+            />
           </div>
         </div>
 

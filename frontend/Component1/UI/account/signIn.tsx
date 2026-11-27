@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState, FC, ChangeEvent, FormEvent } from "react";
 import { toast } from "react-toastify";
-import { useCartStore } from "../../../../store/useCartStore";
-import { useWishlistStore } from "../../../../store/useWishlistStore";
-import { useUserStore } from "../../../../store/useUserStore";
+import { useCartStore } from "@/store/useCartStore";
+import { useWishlistStore } from "@/store/useWishlistStore";
+import { useUserStore } from "@/store/useUserStore";
 import { PendingOtp } from "./Otp1";
 import PasswordInput from "./PasswordInput";
 import CountryCodeSelect, {

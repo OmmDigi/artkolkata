@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import EditorJsDescription from "@/app/Component/EditorJsDescription";
+import EditorJsDescription from "@/Component1/EditorJsDescription";
 import { unstable_noStore } from "next/cache";
 
 export const revalidate = 300;

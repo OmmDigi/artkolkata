@@ -361,7 +361,7 @@ const ProductsPage = () => {
   return (
     <div className="min-h-screen bg-white px-1 md:px-6">
       {/* Breadcrumb */}
-      <div className="max-w-7xl mx-auto px-4 py-4">
+      <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1560px] mx-auto px-4 py-4">
         <nav className="text-sm text-gray-500">
           <a href="/" className="hover:text-gray-700">
             Home
@@ -376,7 +376,7 @@ const ProductsPage = () => {
       </div>
 
       {/* <div className="max-w-7xl mx-auto px-4"> */}
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-6 lg:gap-8">
+      <div className="max-w-7xl xl:max-w-[1440px] 2xl:max-w-[1560px] mx-auto flex flex-col md:flex-row gap-6 lg:gap-8">
         {/* Sidebar Filters */}
         <aside className="w-full md:w-44 lg:w-52 md:shrink-0 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto scrollbar-hide">
           {/* Clear All Button */}
@@ -460,7 +460,7 @@ const ProductsPage = () => {
           <div
             className={`grid gap-4 md:gap-3 ${
               viewMode === "grid"
-                ? "grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                ? "grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
                 : "grid-cols-1"
             }`}
           >
