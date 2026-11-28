@@ -192,17 +192,17 @@ export default function CategoryShowcase() {
       {/* Desktop View (Auto-scrolling Carousel) */}
       <section
         className="hidden md:block w-full bg-gradient-to-b from-[#f4f8fc] to-[#edf3fa] py-10 px-6 lg:px-10"
-        onMouseEnter={() => {
-          isHoveredRef.current = true;
-          setIsPaused(true);
-        }}
-        onMouseLeave={() => {
-          isHoveredRef.current = false;
-          if (desktopScrollRef.current) {
-            scrollPosRef.current = desktopScrollRef.current.scrollLeft;
-          }
-          setIsPaused(false);
-        }}
+        // onMouseEnter={() => {
+        //   isHoveredRef.current = true;
+        //   setIsPaused(true);
+        // }}
+        // onMouseLeave={() => {
+        //   isHoveredRef.current = false;
+        //   if (desktopScrollRef.current) {
+        //     scrollPosRef.current = desktopScrollRef.current.scrollLeft;
+        //   }
+        //   setIsPaused(false);
+        // }}
       >
         <div className="max-w-9xl mx-auto">
           <div className="text-center mb-8">
@@ -232,6 +232,17 @@ export default function CategoryShowcase() {
 
               {/* Auto-scrolling Carousel Track */}
               <div
+                onMouseEnter={() => {
+                  isHoveredRef.current = true;
+                  setIsPaused(true);
+                }}
+                onMouseLeave={() => {
+                  isHoveredRef.current = false;
+                  if (desktopScrollRef.current) {
+                    scrollPosRef.current = desktopScrollRef.current.scrollLeft;
+                  }
+                  setIsPaused(false);
+                }}
                 ref={desktopScrollRef}
                 className={`flex gap-5 overflow-x-auto scrollbar-hide px-6 py-2 ${
                   shouldLoop ? "" : "justify-center"
