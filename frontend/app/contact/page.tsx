@@ -1,12 +1,7 @@
 "use client";
 
 import ContactUsForm from "@/Component1/ContactUsForm";
-import {
-  Facebook,
-  Twitter,
-  Instagram,
-  Youtube,
-} from "lucide-react";
+import { Facebook, Twitter, Instagram, Youtube } from "lucide-react";
 import Link from "next/link";
 import { useSiteInfo, formatAddress } from "@/hooks/useSiteSettings";
 
@@ -32,28 +27,30 @@ export default function page() {
 
   return (
     <main className="*:font-spartan bg-gray-50 text-black">
-      <section className="w-full relative bg-gray-100  overflow-hidden">
-        {/* <Image
-          src={processImageUrl("bg-breadcrumb_1920x.jpg")}
-          alt="Banner image"
-          className="size-full"
-          height={1920}
-          width={1920}
-        /> */}
+      <section className="w-full relative h-60 md:h-72 bg-gray-900 overflow-hidden">
+        <img
+          src="/contact/Desktopview.png"
+          alt="Contact Us Banner"
+          className="hidden md:block absolute inset-0 w-full h-full object-cover"
+        />
+        <img
+          src="/contact/Mobileview.png"
+          alt="Contact Us Banner"
+          className="block md:hidden absolute inset-0 w-full h-full object-cover"
+        />
 
-        <div className=" h-60 w-full  bg-black/50 flex items-center justify-center">
+        {/* <div className="relative z-10 h-full w-full bg-black/50 flex items-center justify-center">
           <div className="container mx-auto px-4 space-y-3.5 flex items-center justify-center flex-col">
             <h3 className="text-3xl text-white font-bold font-open tracking-wide">
               Contact Us
             </h3>
-            {/* Breadcrumb */}
             <div className="mb-4 flex items-center gap-2 text-sm text-gray-300">
               <Link href={"/"}>Home</Link>
               <span>/</span>
-              <Link href={"/account"}>Contact-Us</Link>
+              <Link href={"/contact"}>Contact-Us</Link>
             </div>
           </div>
-        </div>
+        </div> */}
       </section>
 
       {/* Contact Info Section */}

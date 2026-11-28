@@ -75,7 +75,7 @@ export default function VideoSection({ video }: { video: Video | null }) {
           {/* Bottom Gradient & Copy Overlay */}
           {(!youtubeStarted || isUpload) && (
             <>
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-6 pt-16 pb-5 md:pb-7 text-center">
+              {/* <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-6 pt-16 pb-5 md:pb-7 text-center">
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white drop-shadow">
                   {video.title}
                 </h2>
@@ -84,9 +84,10 @@ export default function VideoSection({ video }: { video: Video | null }) {
                     {video.description}
                   </p>
                 )}
-              </div>
+              </div> */}
 
-              {((isUpload && !hasVideoError) || (!isUpload && video.youtube_id)) && (
+              {((isUpload && !hasVideoError) ||
+                (!isUpload && video.youtube_id)) && (
                 <button
                   type="button"
                   onClick={handlePlayPause}
